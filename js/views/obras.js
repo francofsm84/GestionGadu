@@ -227,6 +227,7 @@
         S.update('works', work.id, payload);
         UI.toast('Obra actualizada');
       } else {
+        if (G.plan && !G.plan.checkLimit('obras')) return;
         payload.code = S.nextCode('OB', 'works');
         const creada = S.add('works', payload);
         UI.toast('Obra creada');

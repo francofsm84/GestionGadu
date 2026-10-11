@@ -482,6 +482,7 @@
         UI.toast('Empleado actualizado');
         if (onSaved) onSaved(S.employeeById(e.id));
       } else {
+        if (G.plan && !G.plan.checkLimit('empleados')) return;
         const emp = S.add('employees', payload);
         UI.toast('Empleado "' + S.employeeName(emp) + '" agregado');
         if (onSaved) onSaved(emp);

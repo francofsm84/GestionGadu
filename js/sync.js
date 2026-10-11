@@ -57,7 +57,9 @@
 
   /* Descargar los datos del usuario desde la nube (null si no hay) */
   async function pull() {
-    const res = await fetchT(baseUrl() + '/app_data?select=data,updated_at&limit=1', { headers: headers() });
+    const uid = G.auth.getSession() ? G.auth.getSession().userId : null;
+    const url = baseUrl() + '/app_data?select=data,updated_at&user_id=eq.' + encodeURIComponent(uid || '') + '&limit=1';
+    const res = await fetchT(url, { headers: headers() });
     if (notAuthed(res)) {
       const r = await G.auth.refresh();
       if (r) return pull();

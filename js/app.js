@@ -422,6 +422,27 @@
     });
   }
 
+  /* ---------- Mejora de plan (límite alcanzado) ---------- */
+  function openUpgrade() {
+    const planes = G.plan.planes || [];
+    const m = UI.openModal({
+      title: 'Límite de tu plan alcanzado',
+      subtitle: 'Tu plan actual no permite seguir agregando. Mejorá a Pro o Empresa para continuar.',
+      body:
+        '<div class="stack">' +
+        (planes.map(p =>
+          '<div class="split-row">' +
+          '<div class="split-row-main"><strong>' + UI.escapeHtml(p.nombre) + '</strong>' +
+          '<span class="muted small">' + (p.limite_obras_activas >= 999 ? 'Obras ilimitadas' : p.limite_obras_activas + ' obras activas') + ' · ' + (p.limite_empleados >= 999 ? 'empleados ilimitados' : p.limite_empleados + ' empleados') + '</span></div>' +
+          '<div class="split-row-end"><b>' + (Number(p.precio_mensual) > 0 ? UI.fmtMoney(Number(p.precio_mensual)) + '/mes' : 'Gratis') + '</b></div>' +
+          '</div>').join('') || '<p class="form-hint">No hay planes disponibles.</p>') +
+        '</div>',
+      footer: '<button class="btn btn-ghost" data-cancel>Ahora no</button><a class="btn btn-primary" href="https://wa.me/5493547469000?text=' + encodeURIComponent('Hola! Quiero mejorar mi plan de GADU.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 15) + 'Mejorar por WhatsApp</a>',
+    });
+    m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+  }
+  G.upgrade = openUpgrade;
+
   async function startApp() {
     const sess = G.auth.getSession();
     if (!sess) { renderLogin('login'); return; }
@@ -435,6 +456,11 @@
     try { profile = await G.auth.getProfile(); } catch (e) { profile = null; }
     const pi = planInfo();
     if (pi.locked) { renderLock(); return; }
+
+    /* Planes, límites y rol de administrador */
+    try { await G.plan.load(); } catch (e) {}
+    const navAdmin = document.getElementById('navAdmin');
+    if (navAdmin) navAdmin.hidden = !G.plan.isAdmin();
 
     const bu = document.getElementById('btnUser');
     if (bu) {

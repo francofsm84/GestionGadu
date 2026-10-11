@@ -64,12 +64,19 @@ En el Dashboard hay un selector **"Período de análisis"** (este mes, últimos 
 
 ## SaaS: usuarios, planes y datos en la nube (Supabase)
 
-- Cada persona **crea su cuenta** (email + contraseña) desde la pantalla de inicio. Sus datos viven en **una fila propia** de la nube y **no puede ver los de otros usuarios** (seguridad RLS de Supabase por `user_id`).
-- Al registrarse arranca un **período de prueba de 14 días**; vencido, la app muestra la pantalla de activación con botón de WhatsApp. Los datos quedan guardados mientras tanto.
-- **Cobro manual (panel de administrador):** en Supabase → *Table Editor* → tabla **`profiles`** → fila del cliente → `plan = 'pro'` y `paid_until` = fecha de vencimiento. Para suspender: `plan = 'suspendido'`. La vista **`v_clientes`** lista todos los clientes con su plan y última sincronización.
+- Cada persona **crea su cuenta** desde la pantalla de inicio (Google o email). Sus datos viven en **una fila propia** de la nube y **no puede ver los de otros usuarios** (seguridad RLS de Supabase por `user_id`).
+- **Suscripciones y planes:** catálogo de planes (`Free`, `Pro`, `Empresa`) con precios mensual/anual y **límites de obras activas y empleados**. Si un usuario alcanza el límite, la app le bloquea el alta y le muestra el modal para **mejorar el plan**.
+- **Panel de Administración** (menú "Administración", visible solo para `admin`/`super_admin`):
+  - **Usuarios:** listado con búsqueda, cambiar rol/plan, extender la prueba 7 días, activar/suspender, eliminar acceso y registrar invitados.
+  - **Planes:** editar precios y límites.
+  - **Configuración:** datos del negocio (nombre, teléfono, dirección, datos fiscales, moneda).
+  - **Métricas:** MRR, usuarios por plan, obras totales y cuentas en mora.
+  - **Auditoría:** historial de acciones administrativas.
 - **Configuración inicial (una sola vez):**
-  1. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v2.sql`** → *Run* (crea `profiles`, `app_data` por usuario, seguridad RLS y alta automática de perfil).
-  2. *Authentication → Providers → Email* → desactivá **"Confirm email"** para que el registro sea inmediato.
+  1. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v2.sql`** → *Run*.
+  2. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v3.sql`** → *Run* (crea `planes`, `pagos`, `auditoria`, `negocio`, amplía `profiles` con rol/plan/cobranza y agrega la seguridad de administrador).
+  3. *Authentication → Providers → Email* → desactivá **"Confirm email"** (si usás registro por email).
+  4. Para **hacerte administrador**: SQL Editor → `update public.profiles set rol='super_admin', plan_id='pro' where email='TU-EMAIL';`
 - **Uso diario:** cada guardado puede subirse solo a la nube (activá "Sincronizar automáticamente" en *Respaldos y datos* → Mi cuenta). En otro dispositivo, al iniciar sesión la app ofrece descargar los datos de la nube. También hay botones manuales **Subir / Descargar / Probar conexión** y **Cerrar sesión**.
 - Sin conexión la app sigue funcionando con los datos locales del dispositivo.
 

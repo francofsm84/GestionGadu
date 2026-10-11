@@ -120,9 +120,10 @@
 
   /* Perfil (plan y vencimientos) del usuario actual */
   async function getProfile() {
-    const res = await fetchT(SUPABASE_URL + '/rest/v1/profiles?select=plan,trial_end,paid_until,email&limit=1', {
-      headers: headers(),
-    });
+    const uid = session ? session.userId : null;
+    const url = SUPABASE_URL + '/rest/v1/profiles?select=plan,trial_end,paid_until,email' +
+      (uid ? '&user_id=eq.' + encodeURIComponent(uid) : '') + '&limit=1';
+    const res = await fetchT(url, { headers: headers() });
     if (!res.ok) {
       if (res.status === 401) { const r = await refresh(); if (r) return getProfile(); }
       throw new Error('HTTP ' + res.status);
