@@ -1,7 +1,12 @@
 /* Smoke test de la capa de datos (se ejecuta con Node, no en el navegador) */
 'use strict';
 global.window = global;
-global.localStorage = { getItem: () => null, setItem: () => {} };
+const memStore = {};
+global.localStorage = {
+  getItem: k => (k in memStore ? memStore[k] : null),
+  setItem: (k, v) => { memStore[k] = String(v); },
+  removeItem: k => { delete memStore[k]; },
+};
 require('../js/store.js');
 const S = global.GADU.store;
 S.load();
@@ -91,6 +96,18 @@ const u2 = S.assetUsage(S.data.assets.find(x => x.id === 'a1'));
 if (u2.log.length !== u1.log.length + 1) throw new Error('moveAsset no registró en el historial');
 if (S.assetUsage(S.data.assets.find(x => x.id === 'a5')).totalDays !== 0) throw new Error('activo guardado no debe sumar días en obra');
 console.log('herramientas OK · a1: días en obra', u2.totalDays, '· movimientos', u2.log.length, '· obras con uso', u2.byWorkList.length);
+
+// Fotos: persisten en contactos y empleados (guardado + recarga)
+S.add('contacts', { type: 'cliente', name: 'Cliente Foto', phone: '', email: '', photo: 'data:image/jpeg;base64,AAAA' });
+const cf = S.data.contacts.find(c => c.name === 'Cliente Foto');
+if (!cf || cf.photo !== 'data:image/jpeg;base64,AAAA') throw new Error('foto de contacto no persiste');
+S.add('employees', { firstName: 'Foto', lastName: 'Empleado', phone: '', photo: 'data:image/jpeg;base64,BBBB' });
+const ef = S.data.employees.find(e => e.firstName === 'Foto');
+if (!ef || ef.photo !== 'data:image/jpeg;base64,BBBB') throw new Error('foto de empleado no persiste');
+const antes = JSON.stringify(S.data);
+S.reload();
+if (JSON.stringify(S.data) !== antes) throw new Error('fotos no sobreviven al guardado/carga');
+console.log('fotos OK · persisten en contacto y empleado tras guardar/cargar');
 
 // "Cobrado hasta una fecha": con fecha vieja no debe contar pagos recientes
 const esOld = S.employeeStats('e1', S.daysAgo(30));

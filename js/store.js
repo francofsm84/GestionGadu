@@ -323,6 +323,9 @@
       if (!Array.isArray(a.usages)) a.usages = [];
       if (a.location === undefined) a.location = null;
     });
+    /* Migración: foto/avatar en contactos y empleados */
+    data.contacts.forEach(c => { if (c.photo === undefined) c.photo = null; });
+    data.employees.forEach(e => { if (e.photo === undefined) e.photo = null; });
   }
   function save() {
     try { localStorage.setItem(key, JSON.stringify(data)); }

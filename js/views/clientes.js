@@ -81,7 +81,7 @@
     const activas = ws.filter(w => w.status === 'activa').length;
     return '<article class="contact-card" data-id="' + c.id + '">' +
       '<div class="contact-head">' +
-      UI.avatar(c.name, 42) +
+      UI.avatar(c.name, 42, c.photo) +
       '<div class="contact-info"><strong>' + UI.escapeHtml(c.name) + '</strong>' +
       '<span>' + UI.escapeHtml(c.company || 'Cliente') + '</span></div>' +
       (activas > 0 ? UI.chip(activas + ' obra' + (activas > 1 ? 's' : '') + ' activa' + (activas > 1 ? 's' : ''), 'success', 'hard-hat') : UI.chip(ws.length + ' obra' + (ws.length !== 1 ? 's' : ''), 'neutral', 'hard-hat')) +
@@ -116,11 +116,14 @@
   /* ---------- Modal de cliente (también se usa desde Obras y Presupuestos) ---------- */
   function openClientModal(c, onSaved) {
     const isEdit = !!c;
+    let photo = c ? (c.photo || null) : null;
     const m = UI.openModal({
       title: isEdit ? 'Editar cliente' : 'Nuevo cliente',
       subtitle: isEdit ? c.name : 'Registralo al vuelo: se guarda en el directorio y queda listo para usar.',
       body:
         '<div class="grid-form">' +
+        '<div class="field"><label>Foto</label><div id="photoSlot"></div></div>' +
+        '<div class="field"><label>Contacto</label><button type="button" class="btn btn-soft btn-sm" id="btnImportContact" style="margin-top:6px">📇 Importar desde contactos</button></div>' +
         '<div class="field span-2"><label>Nombre / Razón social *</label><input class="input" id="fName" value="' + UI.escapeHtml(c ? c.name : '') + '" placeholder="Ej.: Familia Rossi, Estudio Piemonte…"></div>' +
         '<div class="field"><label>Teléfono</label><input class="input" id="fPhone" value="' + UI.escapeHtml(c ? c.phone : '') + '" placeholder="+54 9 3547 …"></div>' +
         '<div class="field"><label>WhatsApp</label><input class="input" id="fWa" value="' + UI.escapeHtml(c ? c.whatsapp : '') + '" placeholder="Si difiere del teléfono"></div>' +
@@ -129,6 +132,24 @@
         '<div class="field span-2"><label>Notas</label><textarea class="textarea" id="fNotes" rows="2" placeholder="Referencias, condiciones de pago…">' + UI.escapeHtml(c ? c.notes : '') + '</textarea></div>' +
         '</div>',
       footer: '<button class="btn btn-ghost" data-cancel>Cancelar</button><button class="btn btn-primary" data-save>' + (isEdit ? 'Guardar cambios' : 'Agregar cliente') + '</button>',
+    });
+    const renderPhoto = () => {
+      const box = m.panel.querySelector('#photoSlot');
+      box.innerHTML = '';
+      box.appendChild(UI.photoField(photo, url => { photo = url; renderPhoto(); }));
+    };
+    renderPhoto();
+    m.panel.querySelector('#btnImportContact').addEventListener('click', async () => {
+      try {
+        const cc = await UI.pickContact();
+        if (!cc) return;
+        if (cc.name) m.panel.querySelector('#fName').value = cc.name;
+        if (cc.phone) m.panel.querySelector('#fPhone').value = cc.phone;
+        if (cc.email) m.panel.querySelector('#fEmail').value = cc.email;
+        UI.toast('Datos del contacto cargados', 'info');
+      } catch (err) {
+        UI.toast((err && err.message) || 'No se pudo importar el contacto', 'error');
+      }
     });
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
     m.panel.querySelector('[data-save]').addEventListener('click', () => {
@@ -143,6 +164,7 @@
         email: m.panel.querySelector('#fEmail').value.trim(),
         address: m.panel.querySelector('#fAddr').value.trim(),
         notes: m.panel.querySelector('#fNotes').value.trim(),
+        photo: photo || null,
       };
       if (isEdit) {
         S.update('contacts', c.id, payload);

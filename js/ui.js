@@ -116,6 +116,8 @@
     'user': '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
     'briefcase': '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>',
     'log-out': '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
+    'image': '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>',
+    'camera': '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
     'calendar-plus': '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><path d="M12 15v6"/><path d="M9 18h6"/>',
     'wallet': '<path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/>',
   };
@@ -130,13 +132,86 @@
   };
 
   /* ---------- Componentes ---------- */
-  UI.avatar = (name, size) => {
+  UI.avatar = (name, size, photo) => {
     size = size || 36;
+    if (photo) {
+      return '<span class="avatar" style="width:' + size + 'px;height:' + size + 'px"><img class="avatar-img" src="' + photo + '" alt=""></span>';
+    }
     const initials = String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
     let hash = 0;
     for (const ch of initials) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
     const hue = hash % 360;
     return '<span class="avatar" style="width:' + size + 'px;height:' + size + 'px;font-size:' + Math.round(size * 0.36) + 'px;background:hsl(' + hue + ' 42% 36%)">' + UI.escapeHtml(initials) + '</span>';
+  };
+
+  /* ---------- Fotos: cámara / galería (persisten en el registro) ---------- */
+  UI.downscaleImage = (file, cb) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const max = 320;
+          const s = Math.min(1, max / Math.max(img.width, img.height));
+          const w = Math.max(1, Math.round(img.width * s));
+          const h = Math.max(1, Math.round(img.height * s));
+          const cv = document.createElement('canvas');
+          cv.width = w; cv.height = h;
+          cv.getContext('2d').drawImage(img, 0, 0, w, h);
+          cb(cv.toDataURL('image/jpeg', 0.82));
+        } catch (e) { cb(String(reader.result)); }
+      };
+      img.onerror = () => cb(String(reader.result));
+      img.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  /* Campo de foto: preview + galería + cámara + quitar */
+  UI.photoField = (photo, onUpdate) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'photo-field';
+    wrap.innerHTML =
+      '<div class="photo-preview">' + (photo ? '<img src="' + photo + '" alt="Foto">' : UI.icon('user', 26)) + '</div>' +
+      '<div class="photo-actions">' +
+      '<button type="button" class="btn btn-soft btn-sm" data-gallery>' + UI.icon('image', 14) + ' Galería</button>' +
+      '<button type="button" class="btn btn-soft btn-sm" data-camera>' + UI.icon('camera', 14) + ' Cámara</button>' +
+      (photo ? '<button type="button" class="btn btn-ghost btn-sm" data-remove>' + UI.icon('trash', 13) + ' Quitar</button>' : '') +
+      '</div>';
+    const load = capture => {
+      const inp = document.createElement('input');
+      inp.type = 'file';
+      inp.accept = 'image/*';
+      if (capture) inp.setAttribute('capture', 'environment');
+      inp.style.display = 'none';
+      document.body.appendChild(inp);
+      inp.addEventListener('change', () => {
+        const f = inp.files && inp.files[0];
+        inp.remove();
+        if (f) UI.downscaleImage(f, url => onUpdate(url));
+      });
+      inp.click();
+    };
+    wrap.querySelector('[data-gallery]').addEventListener('click', () => load(false));
+    wrap.querySelector('[data-camera]').addEventListener('click', () => load(true));
+    const rm = wrap.querySelector('[data-remove]');
+    if (rm) rm.addEventListener('click', () => onUpdate(null));
+    return wrap;
+  };
+
+  /* ---------- Importar desde la agenda del móvil (Contact Picker API) ---------- */
+  UI.contactsSupported = () => !!(navigator.contacts && navigator.contacts.select);
+  UI.pickContact = async () => {
+    if (!UI.contactsSupported()) throw new Error('Tu navegador no permite importar contactos. Funciona en Android con Chrome.');
+    const props = ['name', 'tel', 'email'];
+    const picked = await navigator.contacts.select(props, { multiple: false });
+    const c = picked && picked[0];
+    if (!c) return null;
+    return {
+      name: (c.name && c.name.join(' ')) || '',
+      phone: (c.tel && c.tel[0]) || '',
+      email: (c.email && c.email[0]) || '',
+    };
   };
 
   UI.chip = (text, tone, iconName) => '<span class="chip chip-' + tone + '">' + (iconName ? UI.icon(iconName, 13) : '') + '<span>' + UI.escapeHtml(text) + '</span></span>';

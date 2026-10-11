@@ -51,6 +51,8 @@ En el Dashboard hay un selector **"Período de análisis"** (este mes, últimos 
 - Tablas con búsqueda rápida y filtros; estados con colores claros.
 - Gráficos dibujados en canvas sin librerías externas (funcionan sin internet).
 - **Logo propio** en la barra lateral, en la pestaña del navegador (favicon) y como ícono al **agregar la app a la pantalla de inicio del celular** (`manifest.json` + `logo-192.png`).
+- **Fotos en los registros**: Clientes, Empleados y Socios (agenda) admiten **foto/avatar** desde la **galería** o la **cámara** (`capture="environment"`). La imagen se reduce automáticamente (≤320 px) y se guarda dentro del registro, por lo que persiste en el dispositivo y se sincroniza a la nube con el resto de los datos. Los avatares se ven en Clientes, Agenda, Socios, Empleados, Obras y Dashboard.
+- **Importar desde los contactos del celular**: botón **📇 Importar desde contactos** en los formularios de Clientes, Empleados y Agenda (socios/proveedores). Usa la API nativa del navegador (Contact Picker) y autocompleta nombre, teléfono y e-mail. Disponible en Android/Chrome; en otros navegadores avisa que no está soportado.
 
 ## Datos
 

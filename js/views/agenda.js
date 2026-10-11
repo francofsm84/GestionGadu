@@ -74,7 +74,7 @@
     const pct = c.type === 'socio' && c.percent ? UI.chip(c.percent + '% participación', 'primary', 'percent') : '';
     return '<article class="contact-card" data-id="' + c.id + '">' +
       '<div class="contact-head">' +
-      UI.avatar(c.name, 42) +
+      UI.avatar(c.name, 42, c.photo) +
       '<div class="contact-info"><strong>' + UI.escapeHtml(c.name) + '</strong>' +
       '<span>' + UI.escapeHtml(c.company || '—') + '</span></div>' +
       '</div>' +
@@ -102,11 +102,14 @@
 
   function openContactModal(c) {
     const isEdit = !!c;
+    let photo = c ? (c.photo || null) : null;
     const m = UI.openModal({
       title: isEdit ? 'Editar contacto' : 'Nuevo contacto',
       size: 'wide',
       body:
         '<div class="grid-form">' +
+        '<div class="field"><label>Foto</label><div id="photoSlot"></div></div>' +
+        '<div class="field"><label>Contacto</label><button type="button" class="btn btn-soft btn-sm" id="btnImportContact" style="margin-top:6px">📇 Importar desde contactos</button></div>' +
         '<div class="field"><label>Tipo *</label><select class="select" id="fType">' +
         S.CONTACT_TYPES.map(t => '<option value="' + t + '"' + (c && c.type === t ? ' selected' : '') + '>' + TYPES[t][0] + '</option>').join('') +
         '</select></div>' +
@@ -134,6 +137,26 @@
     m.panel.querySelector('#fType').addEventListener('change', syncSocio);
     syncSocio();
 
+    const renderPhoto = () => {
+      const box = m.panel.querySelector('#photoSlot');
+      box.innerHTML = '';
+      box.appendChild(UI.photoField(photo, url => { photo = url; renderPhoto(); }));
+    };
+    renderPhoto();
+
+    m.panel.querySelector('#btnImportContact').addEventListener('click', async () => {
+      try {
+        const cc = await UI.pickContact();
+        if (!cc) return;
+        if (cc.name) m.panel.querySelector('#fName').value = cc.name;
+        if (cc.phone) m.panel.querySelector('#fPhone').value = cc.phone;
+        if (cc.email) m.panel.querySelector('#fEmail').value = cc.email;
+        UI.toast('Datos del contacto cargados', 'info');
+      } catch (err) {
+        UI.toast((err && err.message) || 'No se pudo importar el contacto', 'error');
+      }
+    });
+
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
     m.panel.querySelector('[data-save]').addEventListener('click', () => {
       const name = m.panel.querySelector('#fName').value.trim();
@@ -148,6 +171,7 @@
         email: m.panel.querySelector('#fEmail').value.trim(),
         address: m.panel.querySelector('#fAddr').value.trim(),
         notes: m.panel.querySelector('#fNotes').value.trim(),
+        photo: photo || null,
       };
       if (type === 'socio') {
         payload.percent = Math.max(0, Math.min(100, UI.readNum(m.panel.querySelector('#fPercent'))));

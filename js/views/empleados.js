@@ -118,7 +118,7 @@
         const mst = S.employeeMonth(e.id);
         const last = st.attendance.length ? st.attendance[0] : null;
         return '<tr class="clickable" data-id="' + e.id + '">' +
-          '<td><div style="display:flex;align-items:center;gap:9px">' + UI.avatar(S.employeeName(e), 30) +
+          '<td><div style="display:flex;align-items:center;gap:9px">' + UI.avatar(S.employeeName(e), 30, e.photo) +
           '<span><strong>' + UI.escapeHtml(S.employeeName(e)) + '</strong>' +
           (e.active === false ? ' ' + UI.chip('De baja', 'danger') : '') + '</span></div></td>' +
           '<td class="muted">' + UI.escapeHtml(e.phone || '—') + '</td>' +
@@ -154,7 +154,7 @@
     const st = S.employeeStats(e.id);
     return '<article class="contact-card" data-id="' + e.id + '">' +
       '<div class="contact-head">' +
-      UI.avatar(S.employeeName(e), 42) +
+      UI.avatar(S.employeeName(e), 42, e.photo) +
       '<div class="contact-info"><strong>' + UI.escapeHtml(S.employeeName(e)) + '</strong>' +
       '<span>' + UI.escapeHtml(e.phone || 'Sin teléfono') + (e.hourlyRate ? ' · $' + UI.fmtNum(e.hourlyRate) + '/h' : '') + '</span></div>' +
       (e.active === false ? UI.chip('De baja', 'danger') : UI.chip('Activo', 'success')) +
@@ -420,11 +420,14 @@
      ============================================================ */
   function openEmployeeModal(e, onSaved) {
     const isEdit = !!e;
+    let photo = e ? (e.photo || null) : null;
     const m = UI.openModal({
       title: isEdit ? 'Editar empleado' : 'Nuevo empleado',
       subtitle: isEdit ? S.employeeName(e) : 'Cargá los datos del personal.',
       body:
         '<div class="grid-form">' +
+        '<div class="field"><label>Foto</label><div id="photoSlot"></div></div>' +
+        '<div class="field"><label>Contacto</label><button type="button" class="btn btn-soft btn-sm" id="btnImportContact" style="margin-top:6px">📇 Importar desde contactos</button></div>' +
         '<div class="field"><label>Nombre *</label><input class="input" id="fFirst" value="' + UI.escapeHtml(e ? e.firstName : '') + '" placeholder="Ej.: Ramón"></div>' +
         '<div class="field"><label>Apellido *</label><input class="input" id="fLast" value="' + UI.escapeHtml(e ? e.lastName : '') + '" placeholder="Ej.: Quiroga"></div>' +
         '<div class="field"><label>Teléfono</label><input class="input" id="fPhone" value="' + UI.escapeHtml(e ? e.phone : '') + '" placeholder="+54 9 3547 …"></div>' +
@@ -437,6 +440,27 @@
         '<div class="field span-2"><label>Notas</label><textarea class="textarea" id="fNotes" rows="2" placeholder="Rol, categoría, referencias…">' + UI.escapeHtml(e ? e.notes : '') + '</textarea></div>' +
         '</div>',
       footer: '<button class="btn btn-ghost" data-cancel>Cancelar</button><button class="btn btn-primary" data-save>' + (isEdit ? 'Guardar cambios' : 'Agregar empleado') + '</button>',
+    });
+    const renderPhoto = () => {
+      const box = m.panel.querySelector('#photoSlot');
+      box.innerHTML = '';
+      box.appendChild(UI.photoField(photo, url => { photo = url; renderPhoto(); }));
+    };
+    renderPhoto();
+    m.panel.querySelector('#btnImportContact').addEventListener('click', async () => {
+      try {
+        const cc = await UI.pickContact();
+        if (!cc) return;
+        const parts = (cc.name || '').trim().split(/\s+/);
+        if (parts.length) {
+          m.panel.querySelector('#fFirst').value = parts[0] || '';
+          m.panel.querySelector('#fLast').value = parts.slice(1).join(' ') || '';
+        }
+        if (cc.phone) m.panel.querySelector('#fPhone').value = cc.phone;
+        UI.toast('Datos del contacto cargados', 'info');
+      } catch (err) {
+        UI.toast((err && err.message) || 'No se pudo importar el contacto', 'error');
+      }
     });
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
     m.panel.querySelector('[data-save]').addEventListener('click', () => {
@@ -451,6 +475,7 @@
         hourlyRate: UI.readNum(m.panel.querySelector('#fRate')),
         active: m.panel.querySelector('#fActive').value === '1',
         notes: m.panel.querySelector('#fNotes').value.trim(),
+        photo: photo || null,
       };
       if (isEdit) {
         S.update('employees', e.id, payload);

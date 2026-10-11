@@ -122,7 +122,7 @@
       (present.map(a => {
         const emp = S.employeeById(a.employeeId);
         const hrs = S.sum((a.hours || []).map(h => h.hours));
-        return emp ? '<a class="emp-chip" href="#/empleado/' + emp.id + '">' + UI.avatar(S.employeeName(emp), 24) + UI.escapeHtml(S.employeeName(emp)) + (hrs ? ' · ' + hrs + ' h' : '') + '</a>' : '';
+        return emp ? '<a class="emp-chip" href="#/empleado/' + emp.id + '">' + UI.avatar(S.employeeName(emp), 24, emp.photo) + UI.escapeHtml(S.employeeName(emp)) + (hrs ? ' · ' + hrs + ' h' : '') + '</a>' : '';
       }).join('') || '<span class="muted">Sin jornales registrados hoy</span>') +
       '</div></div>' +
       '<div class="emp-dash-stats">' +

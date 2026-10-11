@@ -54,7 +54,7 @@
       (socios.map(s => {
         const share = ds.available * (Number(s.percent) || 0) / 100;
         return '<div class="partner-row">' +
-          UI.avatar(s.name, 40) +
+          UI.avatar(s.name, 40, s.photo) +
           '<div class="partner-info"><strong>' + UI.escapeHtml(s.name) + '</strong>' +
           '<span class="muted small">' + UI.escapeHtml(s.company || '') + '</span></div>' +
           '<div class="partner-pct">' + UI.chip((s.percent || 0) + '%', 'primary', 'percent') + '</div>' +

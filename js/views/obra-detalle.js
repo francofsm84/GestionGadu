@@ -207,7 +207,7 @@
         '<thead><tr><th>Empleado</th><th class="num">Días en obra</th><th class="num">Horas</th><th class="num">Costo estimado</th><th>Última jornada</th><th></th></tr></thead>' +
         '<tbody>' +
         (workEmps.map(we => '<tr class="clickable" data-emp="' + (we.employee ? we.employee.id : '') + '">' +
-          '<td>' + UI.avatar(we.name, 30) + ' <strong>' + UI.escapeHtml(we.name || '—') + '</strong></td>' +
+          '<td>' + UI.avatar(we.name, 30, we.employee ? we.employee.photo : null) + ' <strong>' + UI.escapeHtml(we.name || '—') + '</strong></td>' +
           '<td class="num">' + we.days + '</td>' +
           '<td class="num"><b>' + UI.fmtNum(we.hours) + '</b></td>' +
           '<td class="num">' + (we.cost ? UI.fmtMoney(we.cost) : '—') + '</td>' +
