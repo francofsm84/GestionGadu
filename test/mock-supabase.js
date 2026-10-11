@@ -23,6 +23,7 @@ function newUser(email, password, extra) {
     trial_end: new Date(Date.now() + 14 * 86400000).toISOString(), paid_until: null,
     ultima_conexion: null, created_at: new Date().toISOString(),
     trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(),
+    telefono: null, direccion: null, nacionalidad: null, rubro: null, onboarding_completo: false,
   };
   Object.assign(u, extra || {});
   users.set(email, u);

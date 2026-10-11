@@ -9,8 +9,51 @@
   G.router.add('admin', 'admin', 'Administración', 'Gestión de usuarios, planes, configuración y métricas del sistema', render);
 
   const ROL_LABEL = { super_admin: 'Super Admin', admin: 'Admin', gestor_obra: 'Gestor de obra', contador: 'Contador' };
-  const STATUS_LABEL = { active: 'Activa', trialing: 'Prueba', past_due: 'En mora', canceled: 'Cancelada' };
+  const STATUS_LABEL = { active: 'Activa', trialing: 'Prueba', past_due: 'En mora', canceled: 'Cancelada', expired: 'Vencida' };
   let tab = 'usuarios';
+
+  /* ---------- Exportación de usuarios ---------- */
+  function userColumns(u, planes) {
+    return [
+      u.email || '',
+      u.empresa || '',
+      ROL_LABEL[u.rol] || u.rol || '',
+      (planes.find(p => p.id === u.plan_id) || {}).nombre || u.plan_id || '',
+      STATUS_LABEL[u.subscription_status] || u.subscription_status || '',
+      u.telefono || '',
+      u.direccion || '',
+      u.nacionalidad || '',
+      (u.created_at || '').slice(0, 10),
+    ];
+  }
+  function exportCSV(rows, planes) {
+    const headers = ['Email', 'Constructora', 'Rol', 'Plan', 'Suscripción', 'Teléfono', 'Dirección', 'Nacionalidad', 'Registro'];
+    const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    const lines = [headers.join(',')];
+    rows.forEach(u => lines.push(userColumns(u, planes).map(esc).join(',')));
+    UI.download('usuarios-gadu.csv', '\uFEFF' + lines.join('\r\n'), 'text/csv;charset=utf-8');
+    UI.toast('CSV exportado (' + rows.length + ' usuarios)');
+  }
+  function exportExcel(rows, planes) {
+    const headers = ['Email', 'Constructora', 'Rol', 'Plan', 'Suscripción', 'Teléfono', 'Dirección', 'Nacionalidad', 'Registro'];
+    const esc = v => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    let html = '<table border="1"><thead><tr>' + headers.map(h => '<th>' + h + '</th>').join('') + '</tr></thead><tbody>';
+    rows.forEach(u => { html += '<tr>' + userColumns(u, planes).map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>'; });
+    html += '</tbody></table>';
+    UI.download('usuarios-gadu.xls', '<html><head><meta charset="utf-8"></head><body>' + html + '</body></html>', 'application/vnd.ms-excel');
+    UI.toast('Excel exportado (' + rows.length + ' usuarios)');
+  }
+  function exportPDF(rows, planes) {
+    const w = window.open('', '_blank');
+    if (!w) { UI.toast('Permití las ventanas emergentes para exportar PDF', 'error'); return; }
+    let body = '<table><thead><tr>' +
+      ['Email', 'Constructora', 'Rol', 'Plan', 'Suscripción', 'Teléfono', 'Dirección', 'Nacionalidad', 'Registro'].map(h => '<th>' + h + '</th>').join('') +
+      '</tr></thead><tbody>';
+    rows.forEach(u => { body += '<tr>' + userColumns(u, planes).map(c => '<td>' + String(c == null ? '' : c) + '</td>').join('') + '</tr>'; });
+    body += '</tbody></table>';
+    w.document.write('<html><head><title>Usuarios GADU</title><style>body{font-family:Arial;padding:20px}h1{font-size:18px}table{border-collapse:collapse;width:100%;font-size:11px}th,td{border:1px solid #ccc;padding:5px;text-align:left}th{background:#f0f0f0}</style></head><body><h1>Usuarios GADU (' + rows.length + ')</h1>' + body + '<script>window.onload=function(){window.print()}<\/script></body></html>');
+    w.document.close();
+  }
 
   function render(view) {
     if (!G.plan.isAdmin()) {
@@ -53,6 +96,9 @@
       '<div class="toolbar">' +
       '<div class="search">' + UI.icon('search', 16) + '<input id="uq" class="input" placeholder="Buscar por email, empresa…"></div>' +
       '<div class="grow"></div>' +
+      '<button class="btn btn-soft btn-sm" id="btnCSV" title="Exportar CSV">' + UI.icon('download', 14) + 'CSV</button>' +
+      '<button class="btn btn-soft btn-sm" id="btnExcel" title="Exportar Excel">' + UI.icon('download', 14) + 'Excel</button>' +
+      '<button class="btn btn-soft btn-sm" id="btnPDF" title="Exportar PDF">' + UI.icon('download', 14) + 'PDF</button>' +
       '<button class="btn btn-primary" id="btnInvite">' + UI.icon('plus', 16) + 'Registrar usuario</button>' +
       '</div>' +
       '<div class="table-wrap"><table class="data-table">' +
@@ -74,6 +120,9 @@
       body.querySelectorAll('tbody tr').forEach(tr => { tr.hidden = !tr.textContent.toLowerCase().includes(q); });
     });
     body.querySelector('#btnInvite').addEventListener('click', () => inviteModal(() => tabUsuarios(body)));
+    body.querySelector('#btnCSV').addEventListener('click', () => exportCSV(rows, planes));
+    body.querySelector('#btnExcel').addEventListener('click', () => exportExcel(rows, planes));
+    body.querySelector('#btnPDF').addEventListener('click', () => exportPDF(rows, planes));
     body.querySelectorAll('[data-delinv]').forEach(b => b.addEventListener('click', async e => {
       await G.api('DELETE', '/invitaciones?email=eq.' + encodeURIComponent(b.dataset.delinv));
       await G.plan.log('invitacion_eliminada', b.dataset.delinv);

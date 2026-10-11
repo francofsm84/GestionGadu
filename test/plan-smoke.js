@@ -68,6 +68,14 @@ G.store.load();
     }
     console.log('defaults OK · nuevo usuario sin invitación = gestor_obra + plan Free + prueba');
 
+    // Onboarding obligatorio (Plan Free sin perfil)
+    if (!P.needsOnboarding()) throw new Error('usuario free sin perfil debería requerir onboarding');
+    await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent('u-sininv@test.com'), { telefono: '3547', direccion: 'Alta Gracia', nacionalidad: 'Argentina', empresa: 'Mi Empresa', rubro: 'General', onboarding_completo: true });
+    await P.load();
+    if (P.needsOnboarding()) throw new Error('onboarding completado debería liberar el acceso');
+    if (P.profile.telefono !== '3547' || P.profile.rubro !== 'General') throw new Error('datos de perfil no persistieron');
+    console.log('onboarding OK · bloquea hasta completar perfil y persiste los datos');
+
     console.log('✔ PLAN SMOKE TEST PASADO');
     process.exit(0);
   } catch (e) {

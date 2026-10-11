@@ -94,9 +94,16 @@
     return Math.max(0, Math.ceil((new Date(end).getTime() - Date.now()) / 86400000));
   }
 
+  /* ¿El usuario debe completar el onboarding? (nuevo en Plan Free sin perfil) */
+  function needsOnboarding() {
+    if (!profile) return false;
+    if (profile.plan_id !== 'free') return false;
+    return !profile.onboarding_completo;
+  }
+
   G.api = api;
   G.plan = {
-    ROLES, load, isAdmin, currentPlan, worksActive, employeesCount, limitFor, wouldExceed, checkLimit, log, trialDaysLeft,
+    ROLES, load, isAdmin, currentPlan, worksActive, employeesCount, limitFor, wouldExceed, checkLimit, log, trialDaysLeft, needsOnboarding,
     get profile() { return profile; },
     get planes() { return planes; },
   };

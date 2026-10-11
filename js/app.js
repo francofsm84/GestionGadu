@@ -386,6 +386,56 @@
     });
   }
 
+  /* ---------- Onboarding obligatorio (Plan Free) ---------- */
+  function renderOnboarding() {
+    const prof = G.plan.profile || {};
+    const opts = ['Albañilería', 'Electricidad', 'Plomería', 'Gas', 'Pintura', 'Carpintería', 'Techos', 'General', 'Otro'];
+    const overlay = document.createElement('div');
+    overlay.className = 'onboard-overlay';
+    overlay.innerHTML =
+      '<div class="onboard-card">' +
+      '<img src="logo.png" alt="GADU" class="login-logo" style="width:120px">' +
+      '<h2>Completá tu perfil</h2>' +
+      '<p class="muted" style="margin-bottom:14px">Un paso más para activar tu <b>Plan Free</b> y empezar a usar GADU.</p>' +
+      '<div class="grid-form">' +
+      '<div class="field"><label>Teléfono / Celular *</label><input class="input" id="oPhone" value="' + UI.escapeHtml(prof.telefono || '') + '" placeholder="+54 9 3547 …"></div>' +
+      '<div class="field"><label>Dirección / Ubicación *</label><input class="input" id="oDir" value="' + UI.escapeHtml(prof.direccion || '') + '" placeholder="Calle, barrio, ciudad"></div>' +
+      '<div class="field"><label>Nacionalidad / Localidad *</label><input class="input" id="oLoc" value="' + UI.escapeHtml(prof.nacionalidad || '') + '" placeholder="Ej.: Argentina · Alta Gracia"></div>' +
+      '<div class="field"><label>Empresa / Constructora *</label><input class="input" id="oEmp" value="' + UI.escapeHtml(prof.empresa || '') + '" placeholder="Nombre de tu emprendimiento"></div>' +
+      '<div class="field span-2"><label>Rubro principal *</label><select class="select" id="oRubro">' +
+      opts.map(r => '<option' + (prof.rubro === r ? ' selected' : '') + '>' + r + '</option>').join('') +
+      '</select></div>' +
+      '</div>' +
+      '<p class="form-hint" id="oMsg" style="margin-top:10px"></p>' +
+      '<button class="btn btn-primary" id="oSave" style="width:100%">Guardar y continuar</button>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    const setMsg = (m, err) => { const el = document.getElementById('oMsg'); el.textContent = m || ''; el.style.color = err ? 'var(--danger)' : 'var(--muted)'; };
+    document.getElementById('oSave').addEventListener('click', async () => {
+      const vals = {
+        telefono: document.getElementById('oPhone').value.trim(),
+        direccion: document.getElementById('oDir').value.trim(),
+        nacionalidad: document.getElementById('oLoc').value.trim(),
+        empresa: document.getElementById('oEmp').value.trim(),
+        rubro: document.getElementById('oRubro').value,
+      };
+      if (!vals.telefono || !vals.direccion || !vals.nacionalidad || !vals.empresa) {
+        setMsg('Completá todos los campos obligatorios.', true); return;
+      }
+      try {
+        const uid = G.auth.getSession().userId;
+        await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent(uid), Object.assign(vals, { onboarding_completo: true }));
+        await G.plan.load();
+        UI.toast('✅ Perfil guardado · Plan Free activado', 'success');
+        overlay.remove();
+        if (!location.hash || location.hash === '#') location.hash = '#/dashboard';
+        else renderNow();
+      } catch (err) {
+        setMsg('No se pudo guardar: ' + ((err && err.message) || err), true);
+      }
+    });
+  }
+
   function renderLogin(mode) {
     /* Fondo claro durante el login: evita el atenuado automático de pantallas
        con brillo adaptativo (notebooks que oscurecen el contenido oscuro) */
@@ -552,6 +602,9 @@
       }
     } catch (e) { /* sin conexión: la app sigue en modo local */ }
     finally { if (spin) spin.hidden = true; }
+
+    /* Onboarding obligatorio para usuarios nuevos en Plan Free */
+    if (G.plan.needsOnboarding()) { renderOnboarding(); return; }
 
     if (!location.hash || location.hash === '#') location.hash = '#/dashboard';
     else renderNow();
