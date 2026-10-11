@@ -288,6 +288,45 @@
     }));
   }
 
+  /* Bienvenida de primera vez (Capataz Digital) */
+  function addFirstWelcome() {
+    const pills = [
+      { k: 'new-empleado', e: '👷', l: 'Cargar empleado' },
+      { k: 'new-gasto', e: '💸', l: 'Cargar gasto' },
+      { k: 'new-cliente', e: '👤', l: 'Nuevo cliente' },
+      { k: 'new-obra', e: '🏗️', l: 'Nueva obra' },
+    ];
+    const bot = bubble(
+      '¡Hola! 👋 Bienvenido a GADU. No te preocupes por escribir, soy tu ayudante de obra.<br>' +
+      'Tocá el micrófono 🎙️ y decime qué querés cargar, por ejemplo: <b>"Quiero cargar un empleado"</b>.<br>' +
+      '<div class="ai-actions">' + pills.map(p => '<button class="btn btn-soft btn-sm" data-act="' + p.k + '">' + p.e + ' ' + p.l + '</button>').join('') + '</div>',
+      'bot');
+    log.appendChild(bot);
+    log.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
+      const fn = ACTION_KEYS[b.dataset.act];
+      if (fn) { fn(); setOpen(false); }
+    }));
+  }
+
+  function maybeWelcome() {
+    let k = 'gadu_ai_onboarded';
+    try { const s = G.auth.getSession(); if (s && s.userId) k += '_' + s.userId; } catch (e) {}
+    let first = false;
+    try { if (!localStorage.getItem(k)) { localStorage.setItem(k, 'true'); first = true; } } catch (e) {}
+    if (!first) return;
+    const admin = isAdminMode();
+    setTimeout(() => {
+      try {
+        log.innerHTML = '';
+        if (admin) { addGreeting(); } else { addFirstWelcome(); }
+        setOpen(true);
+        if (!admin) {
+          speak('¡Hola! Bienvenido a GADU. No te preocupes por escribir, soy tu ayudante de obra. Tocá el micrófono y decime qué querés cargar, por ejemplo: Quiero cargar un empleado.');
+        }
+      } catch (e) {}
+    }, 900);
+  }
+
   function send() {
     const msg = (input.value || '').trim();
     if (!msg || busy) return;
@@ -337,7 +376,7 @@
   }
 
   function init() {
-    try { build(); } catch (e) {}
+    try { build(); maybeWelcome(); } catch (e) {}
   }
 
   G.ai = { init, open: () => setOpen(true) };
