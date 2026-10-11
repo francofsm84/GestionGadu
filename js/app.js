@@ -392,6 +392,22 @@
     });
   }
 
+  /* ---------- Banner global / modo mantenimiento ---------- */
+  function renderGlobalBanner() {
+    const prev = document.getElementById('globalBanner');
+    if (prev) prev.remove();
+    const neg = G.config.negocio || {};
+    if (!neg.modo_mantenimiento && !neg.banner_global) return;
+    const d = document.createElement('div');
+    d.id = 'globalBanner';
+    d.style.cssText = 'padding:10px 14px;font-family:Arial,sans-serif;font-size:13px;text-align:center;color:#fff;' +
+      (neg.modo_mantenimiento ? 'background:#7f1d1d;' : 'background:#b45309;');
+    d.innerHTML = neg.modo_mantenimiento
+      ? '⚠️ <b>Modo mantenimiento activo</b>' + (neg.banner_global ? ' · ' + UI.escapeHtml(neg.banner_global) : ' · Estamos haciendo mejoras.')
+      : UI.escapeHtml(neg.banner_global);
+    document.body.insertBefore(d, document.body.firstChild);
+  }
+
   /* ---------- Onboarding obligatorio (Plan Free) ---------- */
   function renderOnboarding() {
     const prof = G.plan.profile || {};
@@ -612,6 +628,7 @@
 
     /* Planes, límites, rol y período de prueba */
     try { await G.plan.load(); } catch (e) {}
+    renderGlobalBanner();
     const pi = planInfo();
     if (pi.locked) { renderLock(); return; }
 

@@ -81,7 +81,8 @@ En el Dashboard hay un selector **"Período de análisis"** (este mes, últimos 
   6. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v7.sql`** → *Run* (columnas ampliadas de perfil con lat/lng, localidad, rubro, tipo de perfil, etc., y refresh de caché).
   7. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v8.sql`** → *Run* (blindaje absoluto del admin con trigger, prueba de **45 días** y corrección retroactiva de cuentas admin).
   8. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v9.sql`** → *Run* (métricas financieras **MRR/ARR** y distribución completa de los 4 planes).
-  9. *Authentication → Providers → Email* → desactivá **"Confirm email"** (si usás registro por email).
+  9. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v10.sql`** → *Run* (configuración dinámica: trial configurable, modo mantenimiento, banner global, credenciales de Mercado Pago y % de conversión).
+  10. *Authentication → Providers → Email* → desactivá **"Confirm email"** (si usás registro por email).
   4. Para **hacerte administrador**: SQL Editor → `update public.profiles set rol='super_admin', plan_id='pro' where email='TU-EMAIL';`
 - **Uso diario:** cada guardado puede subirse solo a la nube (activá "Sincronizar automáticamente" en *Respaldos y datos* → Mi cuenta). En otro dispositivo, al iniciar sesión la app ofrece descargar los datos de la nube. También hay botones manuales **Subir / Descargar / Probar conexión** y **Cerrar sesión**.
 - Sin conexión la app sigue funcionando con los datos locales del dispositivo.

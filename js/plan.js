@@ -51,6 +51,10 @@
     try {
       planes = (await api('GET', '/planes?select=*&activo=eq.true&order=orden.asc')) || [];
     } catch (e) { planes = []; }
+    try {
+      const neg = await api('GET', '/negocio?id=eq.1');
+      G.config.negocio = (neg && neg[0]) || {};
+    } catch (e) { G.config.negocio = {}; }
     return { profile, planes };
   }
 

@@ -208,9 +208,9 @@
     }));
     body.querySelectorAll('[data-trial]').forEach(b => b.addEventListener('click', e => {
       const uid = b.dataset.trial;
-      const nueva = new Date(Date.now() + 7 * 86400000).toISOString();
-      updateUser(uid, { trial_end: nueva });
-      UI.toast('Prueba extendida 7 días');
+      const nueva = new Date(Date.now() + 15 * 86400000).toISOString();
+      updateUser(uid, { trial_end: nueva, trial_ends_at: nueva });
+      UI.toast('Prueba extendida +15 días');
     }));
     body.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', e => {
       const uid = b.dataset.toggle;
@@ -245,7 +245,7 @@
       '<button class="icon-btn sm" data-ver="' + u.user_id + '" title="Ver datos / auditar">' + UI.icon('eye', 14) + '</button>' +
       (protegido
         ? '<span class="muted small">Acceso total</span>'
-        : '<button class="icon-btn sm" data-trial="' + u.user_id + '" title="Extender prueba 7 días">' + UI.icon('calendar-plus', 14) + '</button>' +
+        : '<button class="icon-btn sm" data-trial="' + u.user_id + '" title="Extender trial +15 días">' + UI.icon('calendar-plus', 14) + '</button>' +
           '<button class="icon-btn sm" data-toggle="' + u.user_id + '" data-estado="' + u.estado_cuenta + '" title="Activar/Suspender">' + UI.icon(u.estado_cuenta === 'activo' ? 'pause' : 'play', 14) + '</button>' +
           '<button class="icon-btn sm danger" data-del="' + u.user_id + '" title="Eliminar">' + UI.icon('trash', 14) + '</button>') +
       '</div></td></tr>';
@@ -340,16 +340,29 @@
   /* ---------- Configuración ---------- */
   async function tabConfig(body) {
     const neg = (await G.api('GET', '/negocio?id=eq.1'))[0] || {};
+    let mp = {};
+    try { mp = (await G.api('GET', '/credenciales_pago?id=eq.1'))[0] || {}; } catch (e) {}
     body.innerHTML =
-      '<div class="card" style="max-width:560px;margin:0 auto">' +
+      '<div class="card" style="max-width:620px;margin:0 auto">' +
       '<div class="grid-form">' +
       '<div class="field span-2"><label>Nombre de la empresa / plataforma</label><input class="input" id="cNombre" value="' + UI.escapeHtml(neg.nombre || '') + '"></div>' +
       '<div class="field"><label>Teléfono</label><input class="input" id="cTel" value="' + UI.escapeHtml(neg.telefono || '') + '"></div>' +
       '<div class="field"><label>Moneda</label><select class="select" id="cMon"><option' + (neg.moneda === 'ARS' ? ' selected' : '') + '>ARS</option><option' + (neg.moneda === 'USD' ? ' selected' : '') + '>USD</option></select></div>' +
       '<div class="field span-2"><label>Dirección</label><input class="input" id="cDir" value="' + UI.escapeHtml(neg.direccion || '') + '"></div>' +
       '<div class="field span-2"><label>Datos fiscales</label><textarea class="textarea" id="cFis" rows="2">' + UI.escapeHtml(neg.datos_fiscales || '') + '</textarea></div>' +
+      '<div class="field"><label>Duración del trial (días)</label><input class="input" type="number" id="cTrial" min="1" max="365" value="' + (neg.trial_dias || 45) + '"></div>' +
+      '<div class="field"><label>Modo mantenimiento</label><label class="form-hint" style="margin-top:7px"><input type="checkbox" id="cMant"' + (neg.modo_mantenimiento ? ' checked' : '') + ' style="accent-color:var(--primary)"> Activo (muestra banner en toda la app)</label></div>' +
+      '<div class="field span-2"><label>Banner / anuncio global</label><textarea class="textarea" id="cBanner" rows="2" placeholder="Ej.: Nuevas funciones disponibles…">' + UI.escapeHtml(neg.banner_global || '') + '</textarea></div>' +
       '</div>' +
       '<button class="btn btn-primary" id="cSave" style="margin-top:10px">' + UI.icon('check', 15) + 'Guardar configuración</button>' +
+      '</div>' +
+      '<div class="card" style="max-width:620px;margin:14px auto 0">' +
+      '<div class="card-head"><div><h3>Mercado Pago (cobro automático)</h3><p class="muted">Credenciales privadas · solo visibles para administradores</p></div></div>' +
+      '<div class="grid-form">' +
+      '<div class="field span-2"><label>Public Key</label><input class="input" id="mpPub" value="' + UI.escapeHtml(mp.mp_public_key || '') + '" placeholder="APP_USR-…"></div>' +
+      '<div class="field span-2"><label>Access Token</label><input class="input" type="password" id="mpTok" value="' + UI.escapeHtml(mp.mp_access_token || '') + '" placeholder="APP_USR-…"></div>' +
+      '</div>' +
+      '<button class="btn btn-soft" id="mpSave" style="margin-top:10px">' + UI.icon('check', 15) + 'Guardar credenciales</button>' +
       '</div>';
     body.querySelector('#cSave').addEventListener('click', async () => {
       await G.api('PATCH', '/negocio?id=eq.1', {
@@ -358,9 +371,20 @@
         moneda: body.querySelector('#cMon').value,
         direccion: body.querySelector('#cDir').value.trim(),
         datos_fiscales: body.querySelector('#cFis').value.trim(),
+        trial_dias: Math.max(1, Math.min(365, UI.readNum(body.querySelector('#cTrial')))),
+        modo_mantenimiento: body.querySelector('#cMant').checked,
+        banner_global: body.querySelector('#cBanner').value.trim(),
       });
-      await G.plan.log('configuracion_editada', 'negocio');
-      UI.toast('Configuración guardada');
+      await G.plan.log('configuracion_editada', 'negocio + trial/mantenimiento');
+      UI.toast('✅ Configuración guardada', 'success');
+    });
+    body.querySelector('#mpSave').addEventListener('click', async () => {
+      await G.api('PATCH', '/credenciales_pago?id=eq.1', {
+        mp_public_key: body.querySelector('#mpPub').value.trim(),
+        mp_access_token: body.querySelector('#mpTok').value.trim(),
+      });
+      await G.plan.log('credenciales_mp', 'guardadas');
+      UI.toast('✅ Credenciales de Mercado Pago guardadas', 'success');
     });
   }
 
@@ -370,11 +394,12 @@
     const porPlan = (m.por_plan && typeof m.por_plan === 'object') ? m.por_plan : {};
     const ordenPlanes = ['Free', 'Pro', 'Pyme', 'Empresa'];
     body.innerHTML =
-      '<section class="kpi-grid kpi-4">' +
+      '<section class="kpi-grid kpi-5">' +
       kpi('wallet', 'success', 'MRR (mensual)', UI.fmtMoney(m.mrr || 0), 'Ingresos recurrentes mensuales') +
       kpi('trending-up', 'violet', 'ARR (anual)', UI.fmtMoney(m.arr || 0), 'Ingresos recurrentes anuales') +
       kpi('users', 'info', 'Usuarios', String(m.usuarios || 0), (m.activos || 0) + ' activos') +
       kpi('hard-hat', 'warning', 'Obras totales', String(m.obras || 0), 'En todo el sistema') +
+      kpi('check-circle', 'success', 'Conversión a pago', (m.conversion != null ? m.conversion : 0) + '%', 'De prueba a plan pago') +
       '</section>' +
       '<div class="card">' +
       '<div class="card-head"><div><h3>Distribución de planes activos</h3><p class="muted">Free · Pro · Pyme · Empresa</p></div></div>' +
@@ -390,11 +415,28 @@
 
   /* ---------- Auditoría ---------- */
   async function tabAuditoria(body) {
-    const rows = await G.api('GET', '/auditoria?select=*&order=fecha.desc&limit=100');
+    const rows = await G.api('GET', '/auditoria?select=*&order=fecha.desc&limit=200');
+    const acciones = [...new Set(rows.map(a => a.accion).filter(Boolean))].sort();
     body.innerHTML =
+      '<div class="toolbar">' +
+      '<div class="search">' + UI.icon('search', 16) + '<input id="aq" class="input" placeholder="Buscar por email / evento / detalle…"></div>' +
+      '<select id="aTipo" class="select" style="max-width:220px"><option value="">Tipo de acción: todos</option>' + acciones.map(a => '<option value="' + UI.escapeHtml(a) + '">' + UI.escapeHtml(a) + '</option>').join('') + '</select>' +
+      '<div class="grow"></div>' +
+      '</div>' +
       '<div class="table-wrap"><table class="data-table">' +
       '<thead><tr><th>Fecha</th><th>Acción</th><th>Detalle</th></tr></thead>' +
-      '<tbody>' + (rows.map(a => '<tr><td class="muted">' + UI.fmtDate(a.fecha) + '</td><td>' + UI.chip(UI.escapeHtml(a.accion), 'info') + '</td><td class="muted">' + UI.escapeHtml(a.detalle || '') + '</td></tr>').join('') || '<tr><td colspan="3" class="muted">Sin registros.</td></tr>') +
+      '<tbody>' + (rows.map(a => '<tr data-accion="' + UI.escapeHtml(a.accion) + '"><td class="muted">' + UI.fmtDate(a.fecha) + '</td><td>' + UI.chip(UI.escapeHtml(a.accion), 'info') + '</td><td class="muted">' + UI.escapeHtml(a.detalle || '') + '</td></tr>').join('') || '<tr><td colspan="3" class="muted">Sin registros.</td></tr>') +
       '</tbody></table></div>';
+    const apply = () => {
+      const q = (body.querySelector('#aq').value || '').toLowerCase();
+      const t = body.querySelector('#aTipo').value;
+      body.querySelectorAll('tbody tr').forEach(tr => {
+        const okT = !t || tr.dataset.accion === t;
+        const okQ = !q || tr.textContent.toLowerCase().includes(q);
+        tr.hidden = !(okT && okQ);
+      });
+    };
+    body.querySelector('#aq').addEventListener('input', apply);
+    body.querySelector('#aTipo').addEventListener('change', apply);
   }
 })(typeof window !== 'undefined' ? window : globalThis);

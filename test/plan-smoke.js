@@ -59,7 +59,9 @@ function assert(cond, msg) { if (!cond) throw new Error(msg); }
     const m = await G.api('POST', '/rpc/metricas');
     assert(typeof m.obras === 'number' && typeof m.usuarios === 'number', 'metricas() inválida');
     assert(typeof m.arr === 'number' && typeof m.mrr === 'number', 'metricas sin MRR/ARR');
+    assert(typeof m.conversion === 'number', 'metricas sin % conversión');
     assert(Object.keys(m.por_plan).length === 4, 'por_plan debe tener los 4 planes');
+    assert(G.config.negocio && G.config.negocio.trial_dias === 45, 'config negocio no cargó trial_dias');
     const gd = await G.api('GET', '/app_data?select=data&user_id=eq.' + encodeURIComponent('u-gestor@test.com') + '&limit=1');
     assert(gd && gd[0] && gd[0].data && gd[0].data.works && gd[0].data.works.length === 1, 'admin no pudo leer datos del cliente');
     console.log('métricas MRR/ARR + 4 planes + ver datos OK · usuarios=' + m.usuarios + ' · obras=' + m.obras);

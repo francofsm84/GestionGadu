@@ -6,7 +6,8 @@ const users = new Map();      // email -> objeto de perfil completo
 const appData = new Map();    // userId -> {data, updated_at}
 const auditoria = [];
 const invitaciones = new Map();   // email -> objeto de invitación pendiente
-const negocio = { id: 1, nombre: 'GADU Construye', telefono: '', direccion: '', datos_fiscales: '', moneda: 'ARS' };
+const negocio = { id: 1, nombre: 'GADU Construye', telefono: '', direccion: '', datos_fiscales: '', moneda: 'ARS', trial_dias: 45, modo_mantenimiento: false, banner_global: '' };
+const cpago = { id: 1, mp_public_key: '', mp_access_token: '' };
 const PLANES = [
   { id: 'free', nombre: 'Free', precio_mensual: 0, precio_anual: 0, limite_obras_activas: 1, limite_empleados: 3, caracteristicas: [], activo: true, orden: 1 },
   { id: 'pro', nombre: 'Pro', precio_mensual: 5000, precio_anual: 50000, limite_obras_activas: 2, limite_empleados: 10, caracteristicas: [], activo: true, orden: 2 },
@@ -155,6 +156,11 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'PATCH') { const b = await readBody(req); Object.assign(negocio, b); send(res, 204); return; }
   }
 
+  if (url === '/rest/v1/credenciales_pago') {
+    if (req.method === 'GET') { send(res, 200, [cpago]); return; }
+    if (req.method === 'PATCH') { const b = await readBody(req); Object.assign(cpago, b); send(res, 204); return; }
+  }
+
   if (url === '/rest/v1/auditoria') {
     if (req.method === 'GET') { send(res, 200, auditoria); return; }
     if (req.method === 'POST') {
@@ -186,7 +192,9 @@ const server = http.createServer(async (req, res) => {
     const arr = PLANES.reduce((s, p) => s + (p.precio_anual || 0) * all.filter(x => x.plan_id === p.id && x.estado_cuenta === 'activo').length, 0);
     const porPlan = {};
     PLANES.forEach(p => { porPlan[p.nombre] = all.filter(x => x.plan_id === p.id).length; });
-    send(res, 200, { mrr, arr, usuarios: all.length, activos: activos.length, past_due: 0, obras, por_plan: porPlan });
+    const convBase = all.filter(x => ['active', 'trialing', 'past_due', 'canceled'].includes(x.subscription_status)).length;
+    const conversion = convBase ? Math.round(1000 * all.filter(x => x.subscription_status === 'active').length / convBase) / 10 : 0;
+    send(res, 200, { mrr, arr, usuarios: all.length, activos: activos.length, past_due: 0, obras, conversion, por_plan: porPlan });
     return;
   }
 
