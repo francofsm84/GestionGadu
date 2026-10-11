@@ -39,7 +39,9 @@
     'admin-export': () => { if (G.actions.adminTab) G.actions.adminTab('usuarios'); },
   };
 
-  function isAdminMode() { return !!(G.plan.isAdmin && G.plan.isAdmin()); }
+  /* Modo dinámico según la vista actual: #/admin → COO Virtual · resto → Capataz Digital */
+  function currentMode() { return location.hash.indexOf('#/admin') === 0 ? 'admin' : 'usuario'; }
+  function isAdminMode() { return currentMode() === 'admin'; }
 
   function context() {
     const d = G.store.data || {};
@@ -84,7 +86,7 @@
     return div;
   }
 
-  let host = null, log = null, input = null, busy = false;
+  let host = null, log = null, input = null, busy = false, builtMode = null;
 
   function build() {
     if (document.getElementById('aiRoot')) return;
@@ -92,10 +94,11 @@
     host.id = 'aiRoot';
     host.innerHTML =
       '<button class="ai-fab" id="aiFab" title="Asistente GADU" aria-label="Asistente GADU">' +
-      '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg>' +
+      '<img src="logo%20gadu%20blanco%20asistente%20ia.png" alt="Asistente GADU">' +
       '</button>' +
       '<div class="ai-panel" id="aiPanel" hidden>' +
-      '<div class="ai-head"><strong>Asistente GADU</strong><span class="muted small">Te guío paso a paso</span>' +
+      '<div class="ai-head"><span class="ai-head-logo"><img src="logo%20gadu%20blanco%20asistente%20ia.png" alt=""></span>' +
+      '<div class="ai-head-txt"><strong>Asistente GADU</strong><span class="muted small" id="aiSub">Te guío paso a paso</span></div>' +
       '<button class="icon-btn sm" id="aiClose">' + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>' + '</button></div>' +
       '<div class="ai-log" id="aiLog"></div>' +
       '<div class="ai-foot"><input class="input" id="aiInput" placeholder="Preguntame… (ej. ¿cómo cargo una obra?)">' +
@@ -109,13 +112,20 @@
     document.getElementById('aiSend').addEventListener('click', send);
     input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
     addGreeting();
+    window.addEventListener('hashchange', refreshGreeting);
   }
 
   function setOpen(v) {
     document.getElementById('aiPanel').hidden = !v;
-    if (v) input.focus();
+    if (v) { refreshGreeting(); input.focus(); }
   }
   function toggle() { setOpen(document.getElementById('aiPanel').hidden); }
+
+  function refreshGreeting() {
+    if (builtMode === currentMode()) return;
+    log.innerHTML = '';
+    addGreeting();
+  }
 
   function addGreeting() {
     const pillsAdmin = [
@@ -134,10 +144,13 @@
       { k: 'herramientas', e: '🛠️', l: 'Herramientas / Jornada' },
     ];
     const admin = isAdminMode();
+    builtMode = admin ? 'admin' : 'usuario';
+    const sub = document.getElementById('aiSub');
+    if (sub) sub.textContent = admin ? 'COO Virtual · gestión del SaaS' : 'Capataz Digital · te guío paso a paso';
     const pills = admin ? pillsAdmin : pillsUser;
     const saludo = admin
-      ? 'Hola, <b>Super Admin</b> 👑. Soy tu COO Virtual: consultame métricas, churn, auditoría o gestioná la plataforma.'
-      : '¡Hola! 👋 Soy tu Capataz Digital. Tocá una acción rápida o preguntame lo que necesites.';
+      ? '¡Hola Super Admin 👑! Soy tu COO Virtual. Consultame métricas o gestiona el SaaS.'
+      : '¡Hola! 👋 Soy tu asistente GADU. Tocá una acción rápida o preguntame lo que necesites.';
     const bot = bubble(
       saludo + '<br>' +
       '<div class="ai-actions">' + pills.map(p => '<button class="btn btn-soft btn-sm" data-act="' + p.k + '">' + p.e + ' ' + p.l + '</button>').join('') + '</div>',
