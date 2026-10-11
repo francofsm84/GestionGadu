@@ -480,22 +480,18 @@
       bu.addEventListener('click', openBackup);
     }
 
-    /* Datos: nube vs dispositivo local */
+    /* Datos: sincronización automática e invisible desde la nube */
+    const spin = document.getElementById('syncSpinner');
+    if (spin) spin.hidden = false;
     try {
       const remote = await G.sync.pull();
       const lastSync = S.data.settings.lastCloudSync || '';
       if (remote && (!lastSync || String(remote.updatedAt) > String(lastSync))) {
-        const ok = await UI.confirm({
-          title: 'Tus datos están en la nube',
-          message: 'Encontré tus datos en la nube (última actualización: <strong>' + UI.escapeHtml(String(remote.updatedAt || '—')) + '</strong>). ¿Descargarlos a este dispositivo?',
-          okLabel: 'Descargar',
-        });
-        if (ok) {
-          S.importJSON(JSON.stringify(remote.data));
-          S.data.settings.lastCloudSync = String(remote.updatedAt);
-          S.save();
-          UI.toast('Datos descargados de la nube');
-        }
+        /* La nube está más actualizada: se reemplaza en segundo plano, sin modal */
+        S.importJSON(JSON.stringify(remote.data));
+        S.data.settings.lastCloudSync = String(remote.updatedAt);
+        S.save();
+        UI.toast('Datos actualizados desde la nube', 'info');
       } else if (!remote && !S.hasLocalData()) {
         S.startReal();
         UI.toast('¡Bienvenido a GADU! Dejamos un ejemplo en cada módulo para que arranques.');
@@ -509,10 +505,10 @@
           await G.sync.push(S.data);
           S.data.settings.lastCloudSync = new Date().toISOString();
           S.save();
-          UI.toast('Tus datos locales se subieron a la nube');
         } catch (e) {}
       }
     } catch (e) { /* sin conexión: la app sigue en modo local */ }
+    finally { if (spin) spin.hidden = true; }
 
     if (!location.hash || location.hash === '#') location.hash = '#/dashboard';
     else renderNow();
