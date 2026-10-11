@@ -131,5 +131,35 @@
     return arr[0] || null;
   }
 
-  G.auth = { SUPABASE_URL, SUPABASE_ANON_KEY, override, load, setSession, getSession, clear, headers, signup, login, refresh, logout, getProfile };
+  /* ---------- Inicio de sesión con Google (OAuth) ---------- */
+  function googleAuthURL() {
+    const redirect = location.origin + location.pathname;
+    return SUPABASE_URL + '/auth/v1/authorize?provider=google&redirect_to=' + encodeURIComponent(redirect);
+  }
+  function signInWithGoogle() {
+    location.assign(googleAuthURL());
+  }
+  /* Al volver de Google, Supabase deja access_token/refresh_token en el hash.
+     Lo parseamos, obtenemos el usuario y armamos la sesión. Devuelve true si
+     se inició sesión (para que el boot no pinte el login). */
+  async function handleOAuthRedirect() {
+    try {
+      const h = location.hash || '';
+      if (h.indexOf('access_token') === -1) return false;
+      const params = new URLSearchParams(h.replace(/^#/, ''));
+      const at = params.get('access_token');
+      const rt = params.get('refresh_token');
+      if (!at || !rt) { try { location.hash = ''; } catch (e) {} return false; }
+      try { location.hash = ''; } catch (e) {}
+      const res = await fetchT(SUPABASE_URL + '/auth/v1/user', {
+        headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + at },
+      });
+      if (!res.ok) return false;
+      const u = await res.json();
+      setSession({ accessToken: at, refreshToken: rt, email: u.email, userId: u.id });
+      return true;
+    } catch (e) { return false; }
+  }
+
+  G.auth = { SUPABASE_URL, SUPABASE_ANON_KEY, override, load, setSession, getSession, clear, headers, signup, login, refresh, logout, getProfile, signInWithGoogle, handleOAuthRedirect };
 })(typeof window !== 'undefined' ? window : globalThis);

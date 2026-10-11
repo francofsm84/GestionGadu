@@ -679,6 +679,10 @@ body.no-session .app { display: none; }
 .login-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--surface-2); border-radius: 10px; padding: 4px; }
 .login-tabs button { border: none; background: transparent; color: var(--muted); padding: 8px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; }
 .login-tabs button.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.25); }
+.btn-google { width: 100%; display: flex; align-items: center; justify-content: center; gap: 9px; margin-top: 12px; background: #fff; color: #3c4043; border: 1px solid #dadce0; font-weight: 600; }
+.btn-google:hover { background: #f8f9fa; }
+.login-divider { display: flex; align-items: center; gap: 12px; margin: 16px 0 2px; color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; }
+.login-divider::before, .login-divider::after { content: ''; flex: 1; height: 1px; background: var(--border-soft); }
 
 /* ---------- Cuenta bloqueada (plan vencido) ---------- */
 .lock-overlay { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: rgba(5,8,16,.82); backdrop-filter: blur(4px); padding: 16px; }
