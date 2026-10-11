@@ -44,6 +44,28 @@ G.store.load();
     if (typeof m.obras !== 'number' || typeof m.usuarios !== 'number') throw new Error('metricas() inválida');
     console.log('métricas OK · usuarios=' + m.usuarios + ' · obras=' + m.obras);
 
+    // Problema 2: invitación pre-asignada + vinculación automática al primer login
+    await G.api('POST', '/invitaciones', { email: 'nuevo@test.com', rol: 'admin', plan_id: 'empresa', empresa: 'Nueva SA', estado: 'pendiente' });
+    const invs = await G.api('GET', '/invitaciones');
+    if (!invs.length) throw new Error('invitación no se guardó');
+    console.log('invitación OK · guardada como pendiente');
+    A.setSession(null);
+    await A.signup('nuevo@test.com', 'clave123');
+    await P.load();
+    if (P.profile.rol !== 'admin' || P.profile.plan_id !== 'empresa' || P.profile.empresa !== 'Nueva SA') {
+      throw new Error('la invitación no se vinculó al primer login');
+    }
+    console.log('vinculación OK · el usuario nuevo heredó rol/plan/empresa del admin');
+
+    // Problema 1: usuario nuevo SIN invitación -> defaults (gestor_obra + free)
+    A.setSession(null);
+    await A.signup('sininv@test.com', 'clave456');
+    await P.load();
+    if (P.profile.rol !== 'gestor_obra' || P.profile.plan_id !== 'free' || P.profile.subscription_status !== 'trialing') {
+      throw new Error('usuario nuevo sin invitación debería tener defaults');
+    }
+    console.log('defaults OK · nuevo usuario sin invitación = gestor_obra + plan Free + prueba');
+
     console.log('✔ PLAN SMOKE TEST PASADO');
     process.exit(0);
   } catch (e) {

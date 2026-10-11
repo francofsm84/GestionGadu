@@ -5,6 +5,7 @@ const http = require('http');
 const users = new Map();      // email -> objeto de perfil completo
 const appData = new Map();    // userId -> {data, updated_at}
 const auditoria = [];
+const invitaciones = new Map();   // email -> objeto de invitación pendiente
 const negocio = { id: 1, nombre: 'GADU Construye', telefono: '', direccion: '', datos_fiscales: '', moneda: 'ARS' };
 const PLANES = [
   { id: 'free', nombre: 'Free', precio_mensual: 0, precio_anual: 0, limite_obras_activas: 1, limite_empleados: 3, caracteristicas: [], activo: true, orden: 1 },
@@ -56,7 +57,9 @@ const server = http.createServer(async (req, res) => {
   if (url === '/auth/v1/signup') {
     const b = await readBody(req);
     if (users.has(b.email)) { send(res, 400, { msg: 'User already registered' }); return; }
-    const u = newUser(b.email, b.password);
+    const inv = invitaciones.get(b.email);
+    const u = newUser(b.email, b.password, inv ? { rol: inv.rol, plan_id: inv.plan_id, empresa: inv.empresa } : {});
+    if (inv) invitaciones.delete(b.email);   // vinculación: consume la invitación
     send(res, 200, { session: { access_token: 'tok-' + b.email, refresh_token: 'rt-' + b.email }, user: { id: u.id, email: u.email } });
     return;
   }
@@ -134,6 +137,20 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       auditoria.push({ id: auditoria.length + 1, user_id: u ? u.id : null, accion: b.accion, detalle: b.detalle, fecha: new Date().toISOString() });
       send(res, 201, []); return;
+    }
+  }
+
+  if (url === '/rest/v1/invitaciones') {
+    if (req.method === 'GET') { send(res, 200, [...invitaciones.values()]); return; }
+    if (req.method === 'POST') {
+      const b = await readBody(req);
+      invitaciones.set(b.email, { email: b.email, rol: b.rol || 'gestor_obra', plan_id: b.plan_id || 'free', empresa: b.empresa || '', estado: b.estado || 'pendiente', created_at: new Date().toISOString() });
+      send(res, 201, []); return;
+    }
+    if (req.method === 'DELETE') {
+      const em = eqVal(query.email);
+      invitaciones.delete(em);
+      send(res, 204); return;
     }
   }
 

@@ -46,6 +46,8 @@
   /* ---------- Usuarios ---------- */
   async function tabUsuarios(body) {
     const rows = await G.api('GET', '/profiles?select=*&order=created_at.asc');
+    let invitaciones = [];
+    try { invitaciones = await G.api('GET', '/invitaciones?select=*&order=created_at.asc'); } catch (e) {}
     const planes = G.plan.planes || [];
     body.innerHTML =
       '<div class="toolbar">' +
@@ -55,13 +57,29 @@
       '</div>' +
       '<div class="table-wrap"><table class="data-table">' +
       '<thead><tr><th>Usuario</th><th>Rol</th><th>Plan</th><th>Suscripción</th><th>Estado</th><th>Última conexión</th><th></th></tr></thead>' +
-      '<tbody>' + rows.map(u => userRow(u, planes)).join('') + '</tbody></table></div>';
+      '<tbody>' + rows.map(u => userRow(u, planes)).join('') + '</tbody></table></div>' +
+      (invitaciones.length
+        ? '<div class="card" style="margin-top:14px"><div class="card-head"><div><h3>Invitaciones pendientes</h3><p class="muted">Se activan solas cuando la persona entra por primera vez con Google.</p></div></div>' +
+          '<div class="stack">' + invitaciones.map(i =>
+            '<div class="split-row">' +
+            '<div class="split-row-main"><strong>' + UI.escapeHtml(i.email) + '</strong>' +
+            '<span class="muted small">' + (ROL_LABEL[i.rol] || i.rol) + ' · ' + UI.escapeHtml(planes.find(p => p.id === i.plan_id) ? (planes.find(p => p.id === i.plan_id)).nombre : (i.plan_id || '')) + (i.empresa ? ' · ' + UI.escapeHtml(i.empresa) : '') + '</span></div>' +
+            '<div class="split-row-end">' + UI.chip('Pendiente', 'warning') +
+            '<button class="icon-btn sm danger" data-delinv="' + UI.escapeHtml(i.email) + '" title="Eliminar">' + UI.icon('trash', 14) + '</button></div>' +
+            '</div>').join('') + '</div></div>'
+        : '');
 
     body.querySelector('#uq').addEventListener('input', e => {
       const q = e.target.value.toLowerCase();
       body.querySelectorAll('tbody tr').forEach(tr => { tr.hidden = !tr.textContent.toLowerCase().includes(q); });
     });
-    body.querySelector('#btnInvite').addEventListener('click', () => inviteModal());
+    body.querySelector('#btnInvite').addEventListener('click', () => inviteModal(() => tabUsuarios(body)));
+    body.querySelectorAll('[data-delinv]').forEach(b => b.addEventListener('click', async e => {
+      await G.api('DELETE', '/invitaciones?email=eq.' + encodeURIComponent(b.dataset.delinv));
+      await G.plan.log('invitacion_eliminada', b.dataset.delinv);
+      UI.toast('Invitación eliminada');
+      tabUsuarios(body);
+    }));
 
     body.querySelectorAll('[data-sel]').forEach(sel => sel.addEventListener('change', e => {
       const uid = sel.dataset.uid;
@@ -114,13 +132,13 @@
     UI.toast('Guardado');
   }
 
-  function inviteModal() {
+  function inviteModal(onSaved) {
     const m = UI.openModal({
       title: 'Registrar usuario',
-      subtitle: 'En esta versión el registro es por Google. Aquí se asigna rol y plan tras el primer ingreso.',
+      subtitle: 'Se crea una invitación pre-asignada. Cuando la persona entre por primera vez con ese Google, recibe automáticamente este rol y plan.',
       body:
         '<div class="grid-form">' +
-        '<div class="field span-2"><label>Email de Google</label><input class="input" id="iEmail" placeholder="usuario@gmail.com"></div>' +
+        '<div class="field span-2"><label>Email de Google *</label><input class="input" id="iEmail" placeholder="usuario@gmail.com"></div>' +
         '<div class="field"><label>Rol</label><select class="select" id="iRol">' + G.plan.ROLES.map(r => '<option>' + r + '</option>').join('') + '</select></div>' +
         '<div class="field"><label>Plan</label><select class="select" id="iPlan">' + (G.plan.planes || []).map(p => '<option value="' + p.id + '">' + p.nombre + '</option>').join('') + '</select></div>' +
         '<div class="field span-2"><label>Empresa / constructora</label><input class="input" id="iEmp" placeholder="Nombre de la constructora"></div>' +
@@ -131,11 +149,21 @@
     m.panel.querySelector('[data-save]').addEventListener('click', async () => {
       const email = m.panel.querySelector('#iEmail').value.trim();
       if (!email) { UI.toast('Ingresá el email', 'error'); return; }
-      /* Registra un perfil pendiente: cuando entre por Google, lo completamos */
-      await G.api('POST', '/profiles', { email, rol: m.panel.querySelector('#iRol').value, plan_id: m.panel.querySelector('#iPlan').value, empresa: m.panel.querySelector('#iEmp').value.trim(), estado_cuenta: 'activo' });
-      await G.plan.log('usuario_invitado', email);
-      UI.toast('Registro creado. La persona debe entrar con ese Google.');
-      m.close();
+      try {
+        await G.api('POST', '/invitaciones', {
+          email: email.toLowerCase(),
+          rol: m.panel.querySelector('#iRol').value,
+          plan_id: m.panel.querySelector('#iPlan').value,
+          empresa: m.panel.querySelector('#iEmp').value.trim(),
+          estado: 'pendiente',
+        });
+        await G.plan.log('usuario_invitado', email);
+        UI.toast('✅ Invitación creada. Aparecerá como "Pendiente" hasta que entre por Google.', 'success');
+        m.close();
+        if (onSaved) onSaved();
+      } catch (err) {
+        UI.toast('❌ No se pudo crear: ' + ((err && err.message) || err), 'error');
+      }
     });
   }
 

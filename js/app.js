@@ -461,6 +461,16 @@
     try { await G.plan.load(); } catch (e) {}
     const navAdmin = document.getElementById('navAdmin');
     if (navAdmin) navAdmin.hidden = !G.plan.isAdmin();
+    const pc = document.getElementById('planChip');
+    if (pc) {
+      const p = G.plan.currentPlan();
+      const st = G.plan.profile ? G.plan.profile.subscription_status : 'trialing';
+      const tone = st === 'active' ? 'success' : (st === 'past_due' ? 'danger' : (st === 'canceled' ? 'neutral' : 'info'));
+      pc.className = 'chip chip-' + tone;
+      pc.textContent = p.nombre + (st === 'active' ? '' : (st === 'trialing' ? ' · prueba' : ' · ' + st));
+      pc.hidden = false;
+      pc.title = 'Plan ' + p.nombre + ' · ' + st;
+    }
 
     const bu = document.getElementById('btnUser');
     if (bu) {
