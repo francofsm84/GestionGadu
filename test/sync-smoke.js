@@ -11,7 +11,7 @@ const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
   if (req.url.includes('/app_data')) {
-    if (req.method === 'PATCH') {
+    if (req.method === 'PATCH' || req.method === 'POST') {
       let body = '';
       req.on('data', c => { body += c; });
       req.on('end', () => {

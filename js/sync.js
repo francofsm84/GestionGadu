@@ -40,14 +40,14 @@
     return true;
   }
 
-  /* Subir los datos actuales a la nube */
+  /* Subir los datos actuales a la nube (upsert vía POST) */
   async function push(cfg, data) {
     if (!cfgOK(cfg)) throw new Error('Faltan datos de configuración');
-    const url = baseUrl(cfg) + '/app_data?id=eq.' + encodeURIComponent(rowId(cfg));
+    const url = baseUrl(cfg) + '/app_data';
     const payload = JSON.stringify({ id: rowId(cfg), data: data, updated_at: new Date().toISOString() });
     const res = await fetch(url, {
-      method: 'PATCH',
-      headers: Object.assign(headers(cfg), { 'Prefer': 'resolution=merge-duplicates,return=representation' }),
+      method: 'POST',
+      headers: Object.assign(headers(cfg), { 'Prefer': 'resolution=merge-duplicates' }),
       body: payload,
     });
     if (!res.ok) {
