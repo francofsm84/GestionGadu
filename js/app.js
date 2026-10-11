@@ -525,9 +525,6 @@
        con brillo adaptativo (notebooks que oscurecen el contenido oscuro) */
     try { document.documentElement.dataset.theme = 'light'; } catch (e) {}
     document.body.classList.add('no-session');
-    /* IMPORTANTE: el login se monta FUERA de .app. La clase no-session oculta
-       .app por completo (y #view está dentro de .app), así que el login debe
-       vivir en el body para ser visible. */
     const prev = document.getElementById('loginRoot');
     if (prev) prev.remove();
     const host = document.createElement('div');
@@ -536,21 +533,74 @@
       '<div class="login-wrap"><div class="login-card login-card-center">' +
       '<img src="logo.png" alt="GADU Construye" class="login-logo">' +
       '<p class="login-slogan">Tu gestión, perfecta</p>' +
-      '<p class="login-sub">Ingresá con tu cuenta de Google para acceder a tu panel.</p>' +
+      '<div class="auth-tabs">' +
+      '<button type="button" class="auth-tab active" data-mode="login">Iniciar sesión</button>' +
+      '<button type="button" class="auth-tab" data-mode="register">Crear cuenta</button>' +
+      '</div>' +
       '<button class="btn btn-google" id="btnGoogle" type="button">' +
       '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>' +
       'Continuar con Google</button>' +
+      '<div class="login-divider"><span>o con email</span></div>' +
+      '<div id="regFields" hidden>' +
+      '<input class="input" id="fFullName" placeholder="Nombre completo" autocomplete="name">' +
+      '<input class="input" id="fTel" placeholder="Teléfono / Obra (opcional)" autocomplete="tel">' +
+      '</div>' +
+      '<input class="input" id="fEmail" type="email" placeholder="Correo electrónico" autocomplete="email">' +
+      '<input class="input" id="fPass" type="password" placeholder="Contraseña" autocomplete="current-password">' +
+      '<button class="btn btn-primary" id="btnSubmit" type="button" style="width:100%">Iniciar sesión</button>' +
       '<p class="form-hint" id="loginMsg" style="margin-top:12px;text-align:center"></p>' +
       '</div></div>';
     document.body.appendChild(host);
+
     const setMsg = (msg, err) => {
-      const el = document.getElementById('loginMsg');
+      const el = host.querySelector('#loginMsg');
       el.textContent = msg || '';
       el.style.color = err ? 'var(--danger)' : 'var(--muted)';
     };
-    document.getElementById('btnGoogle').addEventListener('click', () => {
+    let authMode = 'login';
+    const setMode = (m) => {
+      authMode = m;
+      host.querySelectorAll('.auth-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === m));
+      host.querySelector('#regFields').hidden = (m !== 'register');
+      host.querySelector('#btnSubmit').textContent = (m === 'register' ? 'Crear cuenta' : 'Iniciar sesión');
+      host.querySelector('#fPass').setAttribute('autocomplete', (m === 'register' ? 'new-password' : 'current-password'));
+      setMsg('', false);
+    };
+    host.querySelectorAll('.auth-tab').forEach(t => t.addEventListener('click', () => setMode(t.dataset.mode)));
+    host.querySelector('#btnGoogle').addEventListener('click', () => {
       try { G.auth.signInWithGoogle(); }
       catch (err) { setMsg('No se pudo abrir Google: ' + ((err && err.message) || err), true); }
+    });
+    const submit = async () => {
+      const email = host.querySelector('#fEmail').value.trim();
+      const pass = host.querySelector('#fPass').value;
+      if (!email || !pass) { setMsg('Completá email y contraseña.', true); return; }
+      const btn = host.querySelector('#btnSubmit');
+      btn.disabled = true;
+      setMsg('', false);
+      try {
+        if (authMode === 'register') {
+          const nombre = host.querySelector('#fFullName').value.trim();
+          const tel = host.querySelector('#fTel').value.trim();
+          await G.auth.signup(email, pass, { full_name: nombre || null, telefono: tel || null });
+        } else {
+          await G.auth.login(email, pass);
+        }
+        await startApp();
+      } catch (err) {
+        const m = (err && err.message) || String(err);
+        if (m === 'CONFIRMA_EMAIL') setMsg('Te enviamos un correo de confirmación. Verificá tu casilla y volvé a entrar.', false);
+        else if (m === 'DB_ERROR' || /database error/i.test(m)) setMsg('Ocurrió un error al crear tu cuenta. Por favor intenta de nuevo o contacta a soporte.', true);
+        else if (/invalid login credentials/i.test(m)) setMsg('Email o contraseña incorrectos.', true);
+        else setMsg(m, true);
+        btn.disabled = false;
+        btn.textContent = (authMode === 'register' ? 'Crear cuenta' : 'Iniciar sesión');
+      }
+    };
+    host.querySelector('#btnSubmit').addEventListener('click', submit);
+    ['fFullName', 'fTel', 'fEmail', 'fPass'].forEach(id => {
+      const el = host.querySelector('#' + id);
+      if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
     });
   }
 

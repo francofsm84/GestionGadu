@@ -56,15 +56,21 @@
     return fetch(url, Object.assign({}, opts, { signal: ctrl.signal })).finally(() => clearTimeout(t));
   }
 
-  async function signup(email, password) {
+  async function signup(email, password, meta) {
+    const body = { email, password };
+    if (meta) body.data = meta;   // se guarda en raw_user_meta_data (full_name, telefono)
     const res = await fetchT(SUPABASE_URL + '/auth/v1/signup', {
       method: 'POST',
       headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(body),
     });
     let j = null;
     try { j = await res.json(); } catch (e) {}
-    if (!res.ok) throw new Error((j && (j.msg || j.message)) || ('Error ' + res.status));
+    if (!res.ok) {
+      const msg = (j && (j.msg || j.error_description || j.message)) || ('Error ' + res.status);
+      if (/database error saving new user/i.test(msg)) throw new Error('DB_ERROR');
+      throw new Error(msg);
+    }
     if (!j.session) throw new Error('CONFIRMA_EMAIL');
     setSession({
       accessToken: j.session.access_token,
