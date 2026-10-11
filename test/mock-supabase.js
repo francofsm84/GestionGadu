@@ -9,8 +9,9 @@ const invitaciones = new Map();   // email -> objeto de invitación pendiente
 const negocio = { id: 1, nombre: 'GADU Construye', telefono: '', direccion: '', datos_fiscales: '', moneda: 'ARS' };
 const PLANES = [
   { id: 'free', nombre: 'Free', precio_mensual: 0, precio_anual: 0, limite_obras_activas: 1, limite_empleados: 3, caracteristicas: [], activo: true, orden: 1 },
-  { id: 'pro', nombre: 'Pro', precio_mensual: 5000, precio_anual: 50000, limite_obras_activas: 10, limite_empleados: 20, caracteristicas: [], activo: true, orden: 2 },
-  { id: 'empresa', nombre: 'Empresa', precio_mensual: 15000, precio_anual: 150000, limite_obras_activas: 999, limite_empleados: 999, caracteristicas: [], activo: true, orden: 3 },
+  { id: 'pro', nombre: 'Pro', precio_mensual: 5000, precio_anual: 50000, limite_obras_activas: 2, limite_empleados: 10, caracteristicas: [], activo: true, orden: 2 },
+  { id: 'pyme', nombre: 'Pyme', precio_mensual: 20000, precio_anual: 200000, limite_obras_activas: 5, limite_empleados: 20, caracteristicas: [], activo: true, orden: 3 },
+  { id: 'empresa', nombre: 'Empresa', precio_mensual: 50000, precio_anual: 500000, limite_obras_activas: 999, limite_empleados: 999, caracteristicas: [], activo: true, orden: 4 },
 ];
 
 function newUser(email, password, extra) {
@@ -21,6 +22,7 @@ function newUser(email, password, extra) {
     gateway_customer_id: null, estado_cuenta: 'activo', empresa: '',
     trial_end: new Date(Date.now() + 14 * 86400000).toISOString(), paid_until: null,
     ultima_conexion: null, created_at: new Date().toISOString(),
+    trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(),
   };
   Object.assign(u, extra || {});
   users.set(email, u);

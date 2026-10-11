@@ -17,8 +17,10 @@ G.store.load();
     await A.login('admin@test.com', 'secreto123');
     await P.load();
     if (!P.isAdmin()) throw new Error('admin@test.com debería ser admin');
-    if (!Array.isArray(P.planes) || P.planes.length !== 3) throw new Error('catálogo de planes no cargó (3 planes)');
-    console.log('roles/planes OK · isAdmin=true · 3 planes');
+    if (!Array.isArray(P.planes) || P.planes.length !== 4) throw new Error('catálogo de planes no cargó (4 planes)');
+    const tdl = P.trialDaysLeft();
+    if (!(tdl >= 0 && tdl <= 14)) throw new Error('trialDaysLeft inválido: ' + tdl);
+    console.log('roles/planes OK · isAdmin=true · 4 planes · prueba ' + tdl + ' días');
 
     // Límite con plan free (1 obra activa)
     await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent(UID), { plan_id: 'free' });

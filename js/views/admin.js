@@ -187,14 +187,28 @@
       const id = b.dataset.save;
       const patch = {};
       body.querySelectorAll('[data-campo][data-id="' + id + '"]').forEach(inp => { patch[inp.dataset.campo] = UI.readNum(inp); });
-      await G.api('PATCH', '/planes?id=eq.' + encodeURIComponent(id), patch);
-      await G.plan.log('plan_editado', id);
-      UI.toast('Plan guardado');
+      const btn = b;
+      btn.disabled = true;
+      try {
+        await G.api('PATCH', '/planes?id=eq.' + encodeURIComponent(id), patch);
+        await G.plan.log('plan_editado', id);
+        UI.toast('✅ Plan "' + id + '" guardado', 'success');
+        await tabPlanes(body);   // recarga la vista con los valores persistidos
+      } catch (err) {
+        UI.toast('❌ No se pudo guardar: ' + ((err && err.message) || err), 'error');
+        btn.disabled = false;
+      }
     }));
     body.querySelectorAll('[data-activo]').forEach(cb => cb.addEventListener('change', async e => {
-      await G.api('PATCH', '/planes?id=eq.' + encodeURIComponent(cb.dataset.activo), { activo: cb.checked });
-      await G.plan.log('plan_activado', cb.dataset.activo + '=' + cb.checked);
-      UI.toast('Plan actualizado');
+      try {
+        await G.api('PATCH', '/planes?id=eq.' + encodeURIComponent(cb.dataset.activo), { activo: cb.checked });
+        await G.plan.log('plan_activado', cb.dataset.activo + '=' + cb.checked);
+        UI.toast('✅ Plan actualizado', 'success');
+        await tabPlanes(body);
+      } catch (err) {
+        UI.toast('❌ No se pudo actualizar: ' + ((err && err.message) || err), 'error');
+        await tabPlanes(body);
+      }
     }));
   }
 

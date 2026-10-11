@@ -86,9 +86,17 @@
     try { await api('POST', '/auditoria', { accion: accion, detalle: detalle || '' }); } catch (e) {}
   }
 
+  /* Días restantes del período de prueba (null si no aplica) */
+  function trialDaysLeft() {
+    if (!profile) return null;
+    const end = profile.trial_ends_at || profile.trial_end;
+    if (!end) return null;
+    return Math.max(0, Math.ceil((new Date(end).getTime() - Date.now()) / 86400000));
+  }
+
   G.api = api;
   G.plan = {
-    ROLES, load, isAdmin, currentPlan, worksActive, employeesCount, limitFor, wouldExceed, checkLimit, log,
+    ROLES, load, isAdmin, currentPlan, worksActive, employeesCount, limitFor, wouldExceed, checkLimit, log, trialDaysLeft,
     get profile() { return profile; },
     get planes() { return planes; },
   };

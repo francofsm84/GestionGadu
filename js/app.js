@@ -348,18 +348,16 @@
   let profile = null;
 
   function planInfo() {
-    if (!profile) return { label: 'Plan', tone: 'neutral', locked: false };
-    const now = Date.now();
-    if (profile.plan === 'pro') {
-      const until = profile.paid_until ? new Date(profile.paid_until).getTime() : null;
-      if (until && until < now) return { label: 'Pro vencido', tone: 'warning', locked: true };
-      return { label: 'Plan Pro', tone: 'success', locked: false };
-    }
-    if (profile.plan === 'suspendido') return { label: 'Suspendido', tone: 'danger', locked: true };
-    const end = profile.trial_end ? new Date(profile.trial_end).getTime() : now;
-    const days = Math.max(0, Math.ceil((end - now) / 86400000));
-    if (end < now) return { label: 'Prueba vencida', tone: 'danger', locked: true };
-    return { label: 'Prueba · ' + days + ' día' + (days !== 1 ? 's' : ''), tone: 'info', locked: false };
+    const p = G.plan.profile;
+    if (!p) return { label: 'Plan', tone: 'neutral', locked: false };
+    const planName = G.plan.currentPlan().nombre;
+    const st = p.subscription_status || 'trialing';
+    if (p.estado_cuenta === 'suspendido') return { label: 'Suspendido', tone: 'danger', locked: true };
+    if (st === 'active') return { label: 'Plan ' + planName, tone: 'success', locked: false };
+    if (st === 'expired' || st === 'past_due' || st === 'canceled') return { label: 'Suscripción vencida', tone: 'danger', locked: true };
+    const days = G.plan.trialDaysLeft();
+    if (days === 0) return { label: 'Prueba vencida', tone: 'danger', locked: true };
+    return { label: planName + ' · Prueba' + (days !== null ? ' (Quedan ' + days + ' día' + (days !== 1 ? 's' : '') + ')' : ''), tone: 'info', locked: false };
   }
 
   function piIcon(pi) {
@@ -443,6 +441,47 @@
   }
   G.upgrade = openUpgrade;
 
+  /* ---------- Mi suscripción (modal desde el chip de plan) ---------- */
+  function openSubscription() {
+    const p = G.plan.currentPlan();
+    const prof = G.plan.profile || {};
+    const st = prof.subscription_status || 'trialing';
+    const days = G.plan.trialDaysLeft();
+    const planes = G.plan.planes || [];
+    const stLabel = st === 'active' ? 'Activo' : (st === 'trialing' ? 'En prueba' : (st === 'expired' ? 'Vencida' : st));
+    const stTone = st === 'active' ? 'success' : (st === 'trialing' ? 'info' : 'danger');
+    const m = UI.openModal({
+      title: 'Mi suscripción',
+      subtitle: (prof.email || '') + ' · ' + (prof.empresa || ''),
+      size: 'wide',
+      body:
+        '<div class="card-inset" style="margin-top:0">' +
+        '<div class="split-row"><strong>Plan actual</strong><b>' + UI.escapeHtml(p.nombre) + '</b></div>' +
+        '<div class="split-row"><strong>Estado</strong>' + UI.chip(stLabel, stTone) + '</div>' +
+        (days !== null && st === 'trialing'
+          ? '<div class="split-row"><strong>Prueba gratis</strong><b>' + (days > 0 ? 'Quedan ' + days + ' día' + (days !== 1 ? 's' : '') : 'Vencida') + '</b></div>'
+          : '') +
+        '</div>' +
+        '<h4 style="margin:14px 0 8px">Planes disponibles</h4>' +
+        '<div class="plans-grid">' +
+        planes.map(pl =>
+          '<div class="card plan-card' + (pl.id === p.id ? ' plan-card-actual' : '') + '">' +
+          '<strong>' + UI.escapeHtml(pl.nombre) + '</strong>' +
+          '<div class="plan-price">' + (Number(pl.precio_mensual) > 0 ? '$' + UI.fmtNum(Number(pl.precio_mensual)) + '<span class="muted small">/mes</span>' : 'Gratis') + '</div>' +
+          '<ul class="plan-feats">' +
+          '<li>' + (pl.limite_obras_activas >= 999 ? 'Obras ilimitadas' : pl.limite_obras_activas + ' obras activas') + '</li>' +
+          '<li>' + (pl.limite_empleados >= 999 ? 'Empleados ilimitados' : pl.limite_empleados + ' empleados') + '</li>' +
+          '</ul>' +
+          (pl.id !== p.id
+            ? '<a class="btn btn-soft btn-block btn-sm" href="https://wa.me/5493547469000?text=' + encodeURIComponent('Hola! Quiero cambiar mi plan a ' + pl.nombre + '.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 14) + 'Suscribirme</a>'
+            : '<span class="chip chip-success">Plan actual</span>') +
+          '</div>').join('') +
+        '</div>',
+      footer: '<button class="btn btn-ghost" data-cancel>Cerrar</button><a class="btn btn-primary" href="https://wa.me/5493547469000?text=' + encodeURIComponent('Hola! Quiero información sobre los planes de GADU.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 15) + 'Contactar</a>',
+    });
+    m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+  }
+
   async function startApp() {
     const sess = G.auth.getSession();
     if (!sess) { renderLogin('login'); return; }
@@ -453,23 +492,27 @@
     const lr = document.getElementById('loginRoot');
     if (lr) lr.remove();
 
-    try { profile = await G.auth.getProfile(); } catch (e) { profile = null; }
+    /* Planes, límites, rol y período de prueba */
+    try { await G.plan.load(); } catch (e) {}
     const pi = planInfo();
     if (pi.locked) { renderLock(); return; }
 
-    /* Planes, límites y rol de administrador */
-    try { await G.plan.load(); } catch (e) {}
     const navAdmin = document.getElementById('navAdmin');
     if (navAdmin) navAdmin.hidden = !G.plan.isAdmin();
     const pc = document.getElementById('planChip');
     if (pc) {
       const p = G.plan.currentPlan();
       const st = G.plan.profile ? G.plan.profile.subscription_status : 'trialing';
-      const tone = st === 'active' ? 'success' : (st === 'past_due' ? 'danger' : (st === 'canceled' ? 'neutral' : 'info'));
-      pc.className = 'chip chip-' + tone;
-      pc.textContent = p.nombre + (st === 'active' ? '' : (st === 'trialing' ? ' · prueba' : ' · ' + st));
+      const days = G.plan.trialDaysLeft();
+      let tone = 'neutral';
+      if (st === 'active') tone = 'success';
+      else if (st === 'trialing') tone = (days > 0 ? 'info' : 'danger');
+      else if (st === 'expired' || st === 'past_due') tone = 'danger';
+      pc.className = 'chip chip-' + tone + ' chip-button';
+      pc.textContent = pi.label;
       pc.hidden = false;
-      pc.title = 'Plan ' + p.nombre + ' · ' + st;
+      pc.title = 'Ver mi suscripción';
+      pc.onclick = openSubscription;
     }
 
     const bu = document.getElementById('btnUser');
