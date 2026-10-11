@@ -91,6 +91,8 @@
   }
 
   let host = null, log = null, input = null, busy = false, builtMode = null, rec = null, listening = false, voiceOn = true;
+  let voicePref = null;
+  try { voicePref = localStorage.getItem('gadu_ai_voice') || null; } catch (e) {}
 
   function build() {
     if (document.getElementById('aiRoot')) return;
@@ -103,6 +105,7 @@
       '<div class="ai-panel" id="aiPanel" hidden>' +
       '<div class="ai-head"><span class="ai-head-logo"><img src="logo%20gadu%20blanco%20asistente%20ia.png" alt=""></span>' +
       '<div class="ai-head-txt"><strong>Asistente GADU</strong><span class="muted small" id="aiSub">Te guío paso a paso</span></div>' +
+      '<select class="ai-voice-sel" id="aiVoiceSel" title="Elegir voz" hidden></select>' +
       '<button class="icon-btn sm" id="aiVoice" title="Silenciar voz">🔊</button>' +
       '<button class="icon-btn sm" id="aiClose">' + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>' + '</button></div>' +
       '<div class="ai-log" id="aiLog"></div>' +
@@ -118,6 +121,9 @@
     document.getElementById('aiSend').addEventListener('click', send);
     document.getElementById('aiMic').addEventListener('click', toggleMic);
     document.getElementById('aiVoice').addEventListener('click', toggleVoice);
+    document.getElementById('aiVoiceSel').addEventListener('change', onVoiceChange);
+    populateVoices();
+    if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = populateVoices;
     input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
     addGreeting();
     window.addEventListener('hashchange', refreshGreeting);
@@ -154,6 +160,32 @@
   }
 
   /* Texto a voz (Text-to-Speech) */
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function spanishVoices() {
+    try {
+      const vs = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+      return vs.filter(v => /^es/i.test(v.lang));
+    } catch (e) { return []; }
+  }
+  function voiceLabel(v) {
+    return (v.name || '').replace(/Microsoft |Google /gi, '').replace(/\s*\(.*\)/, '').trim() || v.lang || 'Voz';
+  }
+  function populateVoices() {
+    const sel = document.getElementById('aiVoiceSel');
+    if (!sel) return;
+    const vs = spanishVoices();
+    if (!vs.length) { sel.hidden = true; return; }
+    sel.hidden = false;
+    sel.innerHTML = vs.map(v =>
+      '<option value="' + esc(v.name) + '"' + (v.name === voicePref ? ' selected' : '') + '>' + esc(voiceLabel(v)) + '</option>'
+    ).join('');
+  }
+  function onVoiceChange(e) {
+    voicePref = e.target.value;
+    try { localStorage.setItem('gadu_ai_voice', voicePref); } catch (er) {}
+    try { speak('Hola, soy tu asistente GADU. Esta es mi voz.'); } catch (er) {}
+  }
+
   function speak(text) {
     if (!voiceOn || !text) return;
     try {
@@ -171,7 +203,9 @@
       u.rate = 1.0;
       u.pitch = 1.0;
       const voices = window.speechSynthesis.getVoices();
-      const es = voices.find(v => /es[-_]AR/i.test(v.lang)) || voices.find(v => /es[-_]ES/i.test(v.lang)) || voices.find(v => /^es/i.test(v.lang));
+      let es = null;
+      if (voicePref) es = voices.find(v => v.name === voicePref);
+      if (!es) es = voices.find(v => /es[-_]AR/i.test(v.lang)) || voices.find(v => /es[-_]ES/i.test(v.lang)) || voices.find(v => /^es/i.test(v.lang));
       if (es) u.voice = es;
       window.speechSynthesis.speak(u);
     } catch (e) {}
@@ -238,6 +272,7 @@
           if (c.horas) setVal('[data-k="hours"]', c.horas);
           break;
       }
+      setOpen(false);   // contraer el chat para dejar ver el formulario (móvil)
     } catch (e) { /* si algo falla, el modal ya quedó abierto */ }
   }
 
