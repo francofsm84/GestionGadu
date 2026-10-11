@@ -20,10 +20,15 @@
     clientes: () => location.hash = '#/clientes',
     socios: () => location.hash = '#/socios',
     seguros: () => location.hash = '#/seguros',
+    agenda: () => location.hash = '#/agenda',
     'new-obra': () => { if (G.actions.work) G.actions.work(); },
-    'new-presupuesto': () => { if (G.actions.budget) G.actions.budget(); },
-    'new-ingreso': () => { if (G.actions.income) G.actions.income(); },
+    'new-empleado': () => { if (G.actions.employee) G.actions.employee(); },
+    'new-cliente': () => { if (G.actions.client) G.actions.client(); },
     'new-gasto': () => { if (G.actions.expense) G.actions.expense(); },
+    'new-ingreso': () => { if (G.actions.income) G.actions.income(); },
+    'new-presupuesto': () => { if (G.actions.budget) G.actions.budget(); },
+    'new-jornada': () => { if (G.actions.attendance) G.actions.attendance(); },
+    'new-seguro': () => { if (G.actions.seguro) G.actions.seguro(); },
   };
 
   function context() {
@@ -103,12 +108,24 @@
   function toggle() { setOpen(document.getElementById('aiPanel').hidden); }
 
   function addGreeting() {
-    log.appendChild(bubble(
-      '¡Hola! 👋 Soy tu asistente GADU. Preguntame cómo cargar obras, gastos, presupuestos, empleados o lo que necesites.<br>' +
-      '<div class="ai-actions"><button class="btn btn-soft btn-sm" data-q="¿Cómo creo una nueva obra?">Nueva obra</button>' +
-      '<button class="btn btn-soft btn-sm" data-q="¿Cómo cargo un gasto?">Cargar gasto</button></div>',
-      'bot'));
-    log.querySelectorAll('[data-q]').forEach(b => b.addEventListener('click', () => { input.value = b.dataset.q; send(); }));
+    const pills = [
+      { k: 'new-obra', e: '🏗️', l: 'Nueva obra' },
+      { k: 'new-empleado', e: '👷', l: 'Nuevo empleado' },
+      { k: 'new-cliente', e: '👤', l: 'Nuevo cliente' },
+      { k: 'new-gasto', e: '💸', l: 'Cargar gasto' },
+      { k: 'new-ingreso', e: '💰', l: 'Nuevo ingreso' },
+      { k: 'new-presupuesto', e: '📄', l: 'Nuevo presupuesto' },
+      { k: 'herramientas', e: '🛠️', l: 'Herramientas / Jornada' },
+    ];
+    const bot = bubble(
+      '¡Hola! 👋 Soy tu asistente GADU. Tocá una acción rápida o preguntame lo que necesites.<br>' +
+      '<div class="ai-actions">' + pills.map(p => '<button class="btn btn-soft btn-sm" data-act="' + p.k + '">' + p.e + ' ' + p.l + '</button>').join('') + '</div>',
+      'bot');
+    log.appendChild(bot);
+    log.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
+      const fn = ACTION_KEYS[b.dataset.act];
+      if (fn) { fn(); setOpen(false); }
+    }));
   }
 
   function send() {
