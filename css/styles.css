@@ -733,7 +733,7 @@ body.no-session .app { display: none; }
 
 /* ---------- Asistente de IA (chat flotante) ---------- */
 .ai-fab { position: fixed; right: 20px; bottom: 20px; z-index: 9999; width: 56px; height: 56px; border-radius: 50%; border: none; padding: 0; overflow: hidden; background: linear-gradient(135deg, #f59e0b, #f97316); color: #1a1205; display: grid; place-items: center; cursor: pointer; box-shadow: 0 6px 20px rgba(245,158,11,.4); }
-.ai-fab img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+.ai-fab img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; overflow: hidden; }
 .ai-fab:hover { transform: translateY(-2px); }
 .ai-panel { position: fixed; right: 20px; bottom: 88px; z-index: 9999; width: 360px; max-width: calc(100vw - 32px); height: 480px; max-height: calc(100vh - 110px); background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden; }
 .ai-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border-soft); }

@@ -3,7 +3,8 @@
 // Ruta: /functions/v1/ai-assistant
 // Variables de entorno (secrets):
 //   GEMINI_API_KEY · clave de Google AI Studio (https://aistudio.google.com/apikey)
-//   GEMINI_MODEL   · (opcional) modelo, por defecto gemini-3.8-flash
+//   GEMINI_MODEL   · (opcional) modelo principal, por defecto gemini-3.5-flash
+//                    (con cadena de respaldo automática si está congestionado)
 // Despliegue:
 //   supabase functions deploy ai-assistant
 //   supabase secrets set GEMINI_API_KEY=... --project-ref kalqvykomlfwxmsdaipf
@@ -102,7 +103,6 @@ serve(async (req) => {
     }
 
     const key = Deno.env.get("GEMINI_API_KEY");
-    const model = Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash";
     if (!key) {
       return new Response(JSON.stringify({ reply: fallbackText() }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -110,32 +110,54 @@ serve(async (req) => {
     }
 
     const systemPrompt = mode === "admin" ? ADMIN_PROMPT : USER_PROMPT;
+    const userText = `Contexto de mi cuenta:\n${finalContext || "sin contexto"}\n\nMi consulta:\n${message}`;
 
-    // 2) Llamada a Google Gemini (generateContent)
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-    console.log(`[ai-assistant] modo=${mode} · llamando a ${model}`);
-    const aiRes = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: [
-          { role: "user", parts: [{ text: `Contexto de mi cuenta:\n${finalContext || "sin contexto"}\n\nMi consulta:\n${message}` }] },
-        ],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
-      }),
-    });
+    // Cadena de modelos: si el principal está congestionado (503/429), probamos el siguiente.
+    const modelos = [...new Set([
+      Deno.env.get("GEMINI_MODEL") || "gemini-3.5-flash",
+      "gemini-3.5-flash",
+      "gemini-3.8-flash",
+      "gemini-3.7-flash",
+      "gemini-flash-latest",
+    ])];
 
-    if (!aiRes.ok) {
-      const errBody = await aiRes.text();
-      console.error(`[ai-assistant] Gemini respondió ${aiRes.status}: ${errBody.slice(0, 600)}`);
+    let reply = "";
+    let ultimoError = "";
+    for (const modelo of modelos) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`;
+      try {
+        const aiRes = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: systemPrompt }] },
+            contents: [{ role: "user", parts: [{ text: userText }] }],
+            generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
+          }),
+        });
+        if (aiRes.ok) {
+          const data = await aiRes.json();
+          const t = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (t) { reply = t; console.log(`[ai-assistant] respondió con ${modelo}`); break; }
+          ultimoError = "respuesta vacía";
+        } else {
+          const errBody = await aiRes.text();
+          ultimoError = `${aiRes.status} ${errBody.slice(0, 300)}`;
+          console.error(`[ai-assistant] ${modelo} falló (${aiRes.status}): ${errBody.slice(0, 400)}`);
+        }
+      } catch (e) {
+        ultimoError = String(e);
+        console.error(`[ai-assistant] ${modelo} lanzó excepción:`, e);
+      }
+    }
+
+    if (!reply) {
+      console.error("[ai-assistant] TODOS los modelos fallaron. Último error:", ultimoError);
       return new Response(JSON.stringify({ reply: fallbackText() }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const data = await aiRes.json();
-    const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || fallbackText();
     return new Response(JSON.stringify({ reply }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
