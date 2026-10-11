@@ -439,4 +439,16 @@
     body.querySelector('#aq').addEventListener('input', apply);
     body.querySelector('#aTipo').addEventListener('change', apply);
   }
+
+  /* Deep-links del asistente (COO Virtual): navegar a una pestaña del admin */
+  G.actions.adminTab = function (name) {
+    tab = name || 'usuarios';
+    if (location.hash !== '#/admin') location.hash = '#/admin';
+    else { const v = document.getElementById('view'); render(v); }
+  };
+  G.actions.adminInvite = function () {
+    tab = 'usuarios';
+    if (location.hash !== '#/admin') location.hash = '#/admin';
+    setTimeout(() => inviteModal(() => { const v = document.getElementById('view'); render(v); }), 400);
+  };
 })(typeof window !== 'undefined' ? window : globalThis);

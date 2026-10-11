@@ -29,7 +29,17 @@
     'new-presupuesto': () => { if (G.actions.budget) G.actions.budget(); },
     'new-jornada': () => { if (G.actions.attendance) G.actions.attendance(); },
     'new-seguro': () => { if (G.actions.seguro) G.actions.seguro(); },
+    // Deep-links del COO Virtual (super admin)
+    'admin-metrics': () => { if (G.actions.adminTab) G.actions.adminTab('metricas'); },
+    'admin-users': () => { if (G.actions.adminTab) G.actions.adminTab('usuarios'); },
+    'admin-planes': () => { if (G.actions.adminTab) G.actions.adminTab('planes'); },
+    'admin-config': () => { if (G.actions.adminTab) G.actions.adminTab('config'); },
+    'admin-audit': () => { if (G.actions.adminTab) G.actions.adminTab('auditoria'); },
+    'admin-register-user': () => { if (G.actions.adminInvite) G.actions.adminInvite(); },
+    'admin-export': () => { if (G.actions.adminTab) G.actions.adminTab('usuarios'); },
   };
+
+  function isAdminMode() { return !!(G.plan.isAdmin && G.plan.isAdmin()); }
 
   function context() {
     const d = G.store.data || {};
@@ -108,7 +118,13 @@
   function toggle() { setOpen(document.getElementById('aiPanel').hidden); }
 
   function addGreeting() {
-    const pills = [
+    const pillsAdmin = [
+      { k: 'admin-metrics', e: '📊', l: 'Métricas MRR/ARR' },
+      { k: 'admin-users', e: '👥', l: 'Usuarios en trial' },
+      { k: 'admin-audit', e: '🔍', l: 'Auditoría' },
+      { k: 'admin-register-user', e: '➕', l: 'Registrar usuario' },
+    ];
+    const pillsUser = [
       { k: 'new-obra', e: '🏗️', l: 'Nueva obra' },
       { k: 'new-empleado', e: '👷', l: 'Nuevo empleado' },
       { k: 'new-cliente', e: '👤', l: 'Nuevo cliente' },
@@ -117,8 +133,13 @@
       { k: 'new-presupuesto', e: '📄', l: 'Nuevo presupuesto' },
       { k: 'herramientas', e: '🛠️', l: 'Herramientas / Jornada' },
     ];
+    const admin = isAdminMode();
+    const pills = admin ? pillsAdmin : pillsUser;
+    const saludo = admin
+      ? 'Hola, <b>Super Admin</b> 👑. Soy tu COO Virtual: consultame métricas, churn, auditoría o gestioná la plataforma.'
+      : '¡Hola! 👋 Soy tu Capataz Digital. Tocá una acción rápida o preguntame lo que necesites.';
     const bot = bubble(
-      '¡Hola! 👋 Soy tu asistente GADU. Tocá una acción rápida o preguntame lo que necesites.<br>' +
+      saludo + '<br>' +
       '<div class="ai-actions">' + pills.map(p => '<button class="btn btn-soft btn-sm" data-act="' + p.k + '">' + p.e + ' ' + p.l + '</button>').join('') + '</div>',
       'bot');
     log.appendChild(bot);
@@ -146,7 +167,7 @@
         'apikey': G.auth.SUPABASE_ANON_KEY,
         'Authorization': 'Bearer ' + sess.accessToken,
       },
-      body: JSON.stringify({ message: msg, context: context() }),
+      body: JSON.stringify({ message: msg, context: context(), mode: isAdminMode() ? 'admin' : 'usuario' }),
     })
       .then(r => r.json())
       .then(data => {
