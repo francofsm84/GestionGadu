@@ -573,6 +573,29 @@
       } else {
         renderLogin('login');
       }
+
+      /* Vigilante: si una extensión (traductor/modo oscuro) oculta o vacía la
+         página después del arranque, se muestra un aviso visible en pantalla */
+      (function watchTampering() {
+        let checks = 0;
+        const iv = setInterval(() => {
+          checks++;
+          if (document.querySelector('[data-boot-error]')) { clearInterval(iv); return; }
+          const view = document.getElementById('view');
+          const hayContenido = (view && view.innerHTML.trim().length > 0) || !!document.querySelector('.login-card');
+          if (!hayContenido && checks > 2) {
+            clearInterval(iv);
+            const b = document.createElement('div');
+            b.setAttribute('data-tamper-warn', '1');
+            b.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:99998;background:#7f1d1d;color:#fff;padding:14px 16px;border-radius:12px;font-family:Arial,sans-serif;font-size:14px;line-height:1.5;box-shadow:0 6px 24px rgba(0,0,0,.5)';
+            b.innerHTML = '<b style="font-size:15px">🔴 GADU detectó que algo ocultó la página.</b><br>' +
+              'Esto lo causan extensiones del navegador (traductor automático o modo oscuro forzado).<br>' +
+              '<b>Probalo en una pestaña privada (Ctrl+Shift+N)</b> o desactivá las extensiones, y la app va a quedar visible.';
+            document.body.appendChild(b);
+          }
+          if (checks > 25) clearInterval(iv);
+        }, 800);
+      })();
     } catch (err) {
       renderBootError(err);
     }
