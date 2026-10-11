@@ -103,32 +103,39 @@
   }
 
   function closeMobileSidebar() {
-    document.getElementById('sidebar').classList.remove('open');
-    document.getElementById('backdrop').classList.remove('show');
+    const sb = document.getElementById('sidebar');
+    const bd = document.getElementById('backdrop');
+    if (sb) sb.classList.remove('open');
+    if (bd) bd.classList.remove('show');
   }
 
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 
+  /* Bind seguro: nunca lanza si un elemento falta (DOM alterado por extensiones) */
+  function $id(id) { return document.getElementById(id); }
+  function bind(id, evt, fn) { const el = $id(id); if (el) el.addEventListener(evt, fn); }
+
   function initSidebar() {
-    const sb = document.getElementById('sidebar');
+    const sb = $id('sidebar');
     const collapsed = lsGet('gadu_sb_collapsed') === '1';
     document.body.classList.toggle('sb-collapsed', collapsed);
     syncCollapse(collapsed);
-    document.getElementById('btnCollapse').addEventListener('click', () => {
+    bind('btnCollapse', 'click', () => {
       const now = !document.body.classList.contains('sb-collapsed');
       document.body.classList.toggle('sb-collapsed', now);
       lsSet('gadu_sb_collapsed', now ? '1' : '0');
       syncCollapse(now);
     });
-    document.getElementById('btnMenu').addEventListener('click', () => {
-      sb.classList.add('open');
-      document.getElementById('backdrop').classList.add('show');
+    bind('btnMenu', 'click', () => {
+      if (sb) sb.classList.add('open');
+      const bd = $id('backdrop');
+      if (bd) bd.classList.add('show');
     });
-    document.getElementById('sidebarClose').addEventListener('click', closeMobileSidebar);
-    document.getElementById('backdrop').addEventListener('click', closeMobileSidebar);
+    bind('sidebarClose', 'click', closeMobileSidebar);
+    bind('backdrop', 'click', closeMobileSidebar);
     document.querySelectorAll('.nav-link[data-route]').forEach(a => a.addEventListener('click', closeMobileSidebar));
-    document.getElementById('btnBackup').addEventListener('click', closeMobileSidebar);
+    bind('btnBackup', 'click', closeMobileSidebar);
   }
 
   /* ---------- Topbar ---------- */
@@ -143,15 +150,19 @@
         } else {
           UI.toast('Función no disponible', 'error');
         }
-        document.getElementById('quickMenu').hidden = true;
+        const qm = $id('quickMenu');
+        if (qm) qm.hidden = true;
       });
     });
-    const more = document.getElementById('btnMore');
-    const menu = document.getElementById('quickMenu');
-    more.addEventListener('click', e => { e.stopPropagation(); menu.hidden = !menu.hidden; });
-    document.addEventListener('click', () => { menu.hidden = true; });
-    document.getElementById('btnTheme').addEventListener('click', () => {
+    const more = $id('btnMore');
+    const menu = $id('quickMenu');
+    if (more && menu) {
+      more.addEventListener('click', e => { e.stopPropagation(); menu.hidden = !menu.hidden; });
+      document.addEventListener('click', () => { menu.hidden = true; });
+    }
+    bind('btnTheme', 'click', () => {
       const d = S.data;
+      if (!d || !d.settings) return;
       const next = d.settings.theme === 'dark' ? 'light' : 'dark';
       d.settings.theme = next;
       S.save();
@@ -487,54 +498,83 @@
   /* API interna (para pruebas e integración) */
   G.app = { startApp, renderLogin, planInfo };
 
+  /* Pantalla de error visible: si algo falla al arrancar, nunca quedará
+     una pantalla en negro muda — se muestra el motivo y un botón de reinicio */
+  function renderBootError(err) {
+    const msg = String((err && err.message) || err || 'Error desconocido');
+    try {
+      const el = document.createElement('div');
+      el.setAttribute('data-boot-error', '1');
+      el.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#0b1020;color:#fff;display:grid;place-items:center;padding:20px;font-family:Arial,sans-serif;text-align:center';
+      el.innerHTML =
+        '<div style="max-width:520px">' +
+        '<div style="font-size:40px;margin-bottom:8px">⚠️</div>' +
+        '<h2 style="margin:0 0 10px;font-size:20px">GADU no pudo iniciar</h2>' +
+        '<p style="color:#94a3b8;margin:0 0 10px">Motivo: <b style="color:#f87171">' + UI.escapeHtml(msg) + '</b></p>' +
+        '<p style="color:#94a3b8;margin:0 0 16px;font-size:13px">Suele pasar por una extensión del navegador (como el traductor automático). Probá abrir en una pestaña privada (Ctrl+Shift+N), o reiniciá la app limpia con el botón:</p>' +
+        '<a href="?reset=1" style="display:inline-block;background:#f59e0b;color:#0b1020;padding:11px 20px;border-radius:10px;font-weight:700;text-decoration:none">Reiniciar GADU limpio</a>' +
+        '</div>';
+      document.body.appendChild(el);
+    } catch (e2) { /* último recurso: consola */ console.error(err); }
+  }
+
   /* ---------- Arranque ---------- */
   document.addEventListener('DOMContentLoaded', () => {
-    /* Soporte: abrir con ?reset=1 limpia los datos locales de GADU
-       (útil para empezar de cero en un dispositivo con datos viejos) */
     try {
-      const qp = new URLSearchParams(location.search);
-      if (qp.get('reset') === '1') {
-        localStorage.removeItem('gadu_auth_v1');
-        Object.keys(localStorage).filter(k => k.indexOf('gadu_data_v1') === 0).forEach(k => localStorage.removeItem(k));
-        location.replace(location.pathname + location.hash);
-        return;
+      /* Soporte: abrir con ?reset=1 limpia los datos locales de GADU
+         (útil para empezar de cero en un dispositivo con datos viejos) */
+      try {
+        const qp = new URLSearchParams(location.search);
+        if (qp.get('reset') === '1') {
+          localStorage.removeItem('gadu_auth_v1');
+          Object.keys(localStorage).filter(k => k.indexOf('gadu_data_v1') === 0).forEach(k => localStorage.removeItem(k));
+          location.replace(location.pathname + location.hash);
+          return;
+        }
+      } catch (e) {}
+
+      document.querySelectorAll('[data-icon]').forEach(el => {
+        const size = el.getAttribute('data-size');
+        el.innerHTML = UI.icon(el.getAttribute('data-icon'), size ? +size : 18);
+      });
+      initSidebar();
+      initTopbar();
+      bind('btnBackup', 'click', openBackup);
+      window.addEventListener('hashchange', renderNow);
+      let lastWidth = window.innerWidth;
+      window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+          if (window.innerWidth === lastWidth) return;
+          lastWidth = window.innerWidth;
+          if (current) renderNow();
+        }, 250);
+      });
+      window.addEventListener('storage', e => {
+        const sess = G.auth.getSession();
+        if (!sess) return;
+        const userKey = S.KEY + '_' + sess.userId;
+        if (e.key !== userKey && e.key !== null) return;
+        S.reload();
+        UI.toast('Datos actualizados desde otra pestaña', 'info');
+        renderNow();
+      });
+      const sess = G.auth.load();
+      if (sess) {
+        (async () => {
+          try {
+            await G.auth.refresh();
+            if (!G.auth.getSession()) { renderLogin('login'); return; }
+            await startApp();
+          } catch (err) {
+            try { renderLogin('login'); } catch (e2) { renderBootError(e2); }
+          }
+        })();
+      } else {
+        renderLogin('login');
       }
-    } catch (e) {}
-    document.querySelectorAll('[data-icon]').forEach(el => {
-      const size = el.getAttribute('data-size');
-      el.innerHTML = UI.icon(el.getAttribute('data-icon'), size ? +size : 18);
-    });
-    initSidebar();
-    initTopbar();
-    document.getElementById('btnBackup').addEventListener('click', openBackup);
-    window.addEventListener('hashchange', renderNow);
-    let lastWidth = window.innerWidth;
-    window.addEventListener('resize', () => {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        if (window.innerWidth === lastWidth) return;
-        lastWidth = window.innerWidth;
-        if (current) renderNow();
-      }, 250);
-    });
-    window.addEventListener('storage', e => {
-      const sess = G.auth.getSession();
-      if (!sess) return;
-      const userKey = S.KEY + '_' + sess.userId;
-      if (e.key !== userKey && e.key !== null) return;
-      S.reload();
-      UI.toast('Datos actualizados desde otra pestaña', 'info');
-      renderNow();
-    });
-    const sess = G.auth.load();
-    if (sess) {
-      (async () => {
-        try { await G.auth.refresh(); } catch (e) {}
-        if (!G.auth.getSession()) { renderLogin('login'); return; }
-        await startApp();
-      })();
-    } else {
-      renderLogin('login');
+    } catch (err) {
+      renderBootError(err);
     }
   });
 })(typeof window !== 'undefined' ? window : globalThis);
