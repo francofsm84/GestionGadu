@@ -86,7 +86,7 @@
     return div;
   }
 
-  let host = null, log = null, input = null, busy = false, builtMode = null;
+  let host = null, log = null, input = null, busy = false, builtMode = null, rec = null, listening = false;
 
   function build() {
     if (document.getElementById('aiRoot')) return;
@@ -101,7 +101,8 @@
       '<div class="ai-head-txt"><strong>Asistente GADU</strong><span class="muted small" id="aiSub">Te guío paso a paso</span></div>' +
       '<button class="icon-btn sm" id="aiClose">' + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>' + '</button></div>' +
       '<div class="ai-log" id="aiLog"></div>' +
-      '<div class="ai-foot"><input class="input" id="aiInput" placeholder="Preguntame… (ej. ¿cómo cargo una obra?)">' +
+      '<div class="ai-foot"><button class="ai-mic" id="aiMic" title="Dictar por voz" aria-label="Dictar por voz">🎙️</button>' +
+      '<input class="input" id="aiInput" placeholder="Preguntame… (o tocá el micrófono y dictá)">' +
       '<button class="btn btn-primary btn-sm" id="aiSend">Enviar</button></div>' +
       '</div>';
     document.body.appendChild(host);
@@ -110,9 +111,36 @@
     document.getElementById('aiFab').addEventListener('click', toggle);
     document.getElementById('aiClose').addEventListener('click', () => setOpen(false));
     document.getElementById('aiSend').addEventListener('click', send);
+    document.getElementById('aiMic').addEventListener('click', toggleMic);
     input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
     addGreeting();
     window.addEventListener('hashchange', refreshGreeting);
+  }
+
+  /* Dictado por voz (Web Speech API) */
+  function toggleMic() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const mic = document.getElementById('aiMic');
+    if (!SR) {
+      if (G.ui && G.ui.toast) G.ui.toast('Tu navegador no soporta dictado por voz. Probá con Chrome o Edge.', 'error');
+      return;
+    }
+    if (listening) { if (rec) rec.stop(); return; }
+    rec = new SR();
+    rec.lang = 'es-ES';
+    rec.interimResults = false;
+    rec.continuous = false;
+    rec.onstart = () => { listening = true; mic.classList.add('ai-mic-on'); };
+    rec.onresult = (e) => {
+      let txt = '';
+      for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+      input.value = input.value ? (input.value + ' ' + txt).trim() : txt;
+    };
+    rec.onerror = (e) => {
+      if (G.ui && G.ui.toast) G.ui.toast('Error de dictado: ' + (e.error || 'desconocido'), 'error');
+    };
+    rec.onend = () => { listening = false; mic.classList.remove('ai-mic-on'); };
+    try { rec.start(); } catch (e) { listening = false; mic.classList.remove('ai-mic-on'); }
   }
 
   function setOpen(v) {
