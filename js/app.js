@@ -393,9 +393,15 @@
        con brillo adaptativo (notebooks que oscurecen el contenido oscuro) */
     try { document.documentElement.dataset.theme = 'light'; } catch (e) {}
     document.body.classList.add('no-session');
-    const view = document.getElementById('view');
+    /* IMPORTANTE: el login se monta FUERA de .app. La clase no-session oculta
+       .app por completo (y #view está dentro de .app), así que el login debe
+       vivir en el body para ser visible. */
+    const prev = document.getElementById('loginRoot');
+    if (prev) prev.remove();
+    const host = document.createElement('div');
+    host.id = 'loginRoot';
     const signup = mode === 'signup';
-    view.innerHTML =
+    host.innerHTML =
       '<div class="login-wrap"><div class="login-card">' +
       '<img src="logo.png" alt="GADU Construye" class="login-logo">' +
       '<p class="login-slogan">Tu gestión, perfecta</p>' +
@@ -411,6 +417,7 @@
       '<button class="btn btn-primary" id="lGo" style="width:100%">' + (signup ? 'Crear cuenta y empezar gratis' : 'Entrar') + '</button>' +
       '<p class="form-hint" style="margin-top:12px;text-align:center">' + (signup ? 'Probá 14 días gratis · sin tarjeta.' : '¿No tenés cuenta? Creala: es gratis.') + '</p>' +
       '</div></div>';
+    document.body.appendChild(host);
     const setMsg = (msg, err) => {
       const el = document.getElementById('loginMsg');
       el.textContent = msg || '';
@@ -447,6 +454,8 @@
     S.load();
     applyTheme(S.data.settings.theme || 'dark');
     document.body.classList.remove('no-session');
+    const lr = document.getElementById('loginRoot');
+    if (lr) lr.remove();
 
     try { profile = await G.auth.getProfile(); } catch (e) { profile = null; }
     const pi = planInfo();
