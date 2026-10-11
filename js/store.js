@@ -277,11 +277,33 @@
      Persistencia
      ------------------------------------------------------------ */
   let data = null;
+  let key = KEY;
+
+  /* En modo SaaS cada usuario tiene su almacén local separado.
+     Al migrar desde la versión sin usuarios, se copian los datos
+     de la clave vieja a la clave del primer usuario que entra. */
+  function attachUser(uid) {
+    const oldKey = KEY;
+    const newKey = uid ? (KEY + '_' + uid) : KEY;
+    if (uid) {
+      try {
+        if (!localStorage.getItem(newKey) && localStorage.getItem(oldKey)) {
+          localStorage.setItem(newKey, localStorage.getItem(oldKey));
+        }
+      } catch (e) {}
+    }
+    key = newKey;
+    data = null;
+  }
+
+  function hasLocalData() {
+    try { return !!localStorage.getItem(key); } catch (e) { return false; }
+  }
 
   function load() {
     if (data) return data;
     try {
-      const raw = localStorage.getItem(KEY);
+      const raw = localStorage.getItem(key);
       if (raw) {
         const d = JSON.parse(raw);
         if (d && Array.isArray(d.works) && Array.isArray(d.incomes)) data = d;
@@ -303,7 +325,7 @@
     });
   }
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify(data)); }
+    try { localStorage.setItem(key, JSON.stringify(data)); }
     catch (e) {
       try {
         if (G.ui && G.ui.toast) G.ui.toast('No se pudo guardar en este navegador (' + e.message + '). Exportá un respaldo para no perder datos.', 'error');
@@ -676,7 +698,7 @@
     workClientAdvances, workEmployeeAdvances, workEmployees,
     moveAsset, assetUsage,
     CATS_OBRA, CATS_GENERAL, METODOS, WORK_STATUS, ASSET_STATUS, ASSET_CATS, CONTACT_TYPES, BUDGET_STATUS,
-    uid, todayISO, parseISO, monthLabel, daysAgo, daysAhead, sum, KEY,
+    uid, todayISO, parseISO, monthLabel, daysAgo, daysAhead, sum, KEY, attachUser, hasLocalData,
     get data() { return data; },
   };
 })(typeof window !== 'undefined' ? window : globalThis);

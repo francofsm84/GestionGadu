@@ -59,13 +59,16 @@ En el Dashboard hay un selector **"Período de análisis"** (este mes, últimos 
 - Desde **"Respaldos y datos"** (parte inferior del menú) podés **exportar un respaldo JSON**, **importarlo** en otra máquina o **restaurar los datos de ejemplo**.
 - Para **empezar con datos reales**: "Respaldos y datos" → **"Dejar 1 ejemplo por módulo"** borra toda la demo y deja un solo ejemplo en cada lugar (obra, cliente, proveedor, subcontratista, socio, presupuesto, ingreso, gasto, empleado, jornada, herramienta y liquidación) con montos en $0, listos para editar o reemplazar. También existe **"Vaciar por completo"** si preferís arrancar sin ningún registro.
 
-## Sincronización en la nube (Supabase)
+## SaaS: usuarios, planes y datos en la nube (Supabase)
 
-- La app puede **compartir los datos entre la PC y el celular** usando tu proyecto de Supabase como base de datos.
-- **Paso 1 (una sola vez):** en el panel de Supabase → *SQL Editor* → pegá el contenido de `supabase-setup.sql` → *Run*. Se crea la tabla `app_data`.
-- **Paso 2:** en la app, *Respaldos y datos* → sección **☁️ Sincronización en la nube**: cargá la **URL del proyecto**, la **anon public key** (Supabase → *Project Settings* → *API*) y un **código de sincronización** (lo inventás vos, ej. `gadu2026`). Usá **la misma configuración** en los dos dispositivos.
-- **Paso 3:** tocá **Probar conexión**, después **Subir mis datos** en un dispositivo y **Descargar mis datos** en el otro. Si activás **"automática"**, cada cambio se sube solo y los demás dispositivos lo bajan con un toque.
-- La fila en la nube queda protegida por el código de sincronización (actúa como contraseña compartida entre tus dispositivos).
+- Cada persona **crea su cuenta** (email + contraseña) desde la pantalla de inicio. Sus datos viven en **una fila propia** de la nube y **no puede ver los de otros usuarios** (seguridad RLS de Supabase por `user_id`).
+- Al registrarse arranca un **período de prueba de 14 días**; vencido, la app muestra la pantalla de activación con botón de WhatsApp. Los datos quedan guardados mientras tanto.
+- **Cobro manual (panel de administrador):** en Supabase → *Table Editor* → tabla **`profiles`** → fila del cliente → `plan = 'pro'` y `paid_until` = fecha de vencimiento. Para suspender: `plan = 'suspendido'`. La vista **`v_clientes`** lista todos los clientes con su plan y última sincronización.
+- **Configuración inicial (una sola vez):**
+  1. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v2.sql`** → *Run* (crea `profiles`, `app_data` por usuario, seguridad RLS y alta automática de perfil).
+  2. *Authentication → Providers → Email* → desactivá **"Confirm email"** para que el registro sea inmediato.
+- **Uso diario:** cada guardado puede subirse solo a la nube (activá "Sincronizar automáticamente" en *Respaldos y datos* → Mi cuenta). En otro dispositivo, al iniciar sesión la app ofrece descargar los datos de la nube. También hay botones manuales **Subir / Descargar / Probar conexión** y **Cerrar sesión**.
+- Sin conexión la app sigue funcionando con los datos locales del dispositivo.
 
 ## Estructura del proyecto
 

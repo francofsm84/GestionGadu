@@ -1,55 +1,45 @@
 /* ============================================================
-   GADU · Sincronización en la nube (Supabase / PostgREST)
-   Sube y descarga los datos completos para compartirlos
-   entre la PC y el celular. Configuración por dispositivo
-   (URL del proyecto + anon public key + código de sincronización).
+   GADU SaaS · Sincronización por usuario (Supabase / PostgREST)
+   Cada usuario logueado tiene UNA fila con todos sus datos.
+   La seguridad la aplica Supabase (RLS por user_id): nadie
+   puede leer ni escribir los datos de otro usuario.
    ============================================================ */
 (function (root) {
   'use strict';
   const G = root.GADU = root.GADU || {};
 
-  function baseUrl(cfg) {
-    let u = String(cfg.url || '').trim().replace(/\/+$/, '');
-    if (!/\/rest\/v1$/.test(u)) u += '/rest/v1';
-    return u;
+  function baseUrl() {
+    return G.auth.SUPABASE_URL + '/rest/v1';
   }
-  function headers(cfg) {
+
+  function headers() {
     return {
-      'apikey': cfg.anonKey || '',
-      'Authorization': 'Bearer ' + (cfg.anonKey || ''),
+      'apikey': G.auth.SUPABASE_ANON_KEY,
+      'Authorization': 'Bearer ' + ((G.auth.getSession() && G.auth.getSession().accessToken) || ''),
       'Content-Type': 'application/json',
     };
   }
-  function rowId(cfg) {
-    return 'gadu-' + String(cfg.code || '').trim().toLowerCase().replace(/[^a-z0-9-_]/g, '');
-  }
 
-  function cfgOK(cfg) {
-    return !!(cfg && cfg.url && cfg.anonKey && cfg.code);
-  }
+  function notAuthed(res) { return res.status === 401 || res.status === 403; }
 
-  /* Prueba de conexión: consulta barata al endpoint */
-  async function test(cfg) {
-    if (!cfgOK(cfg)) throw new Error('Faltan datos de configuración');
-    const res = await fetch(baseUrl(cfg) + '/app_data?select=id&limit=1', { headers: headers(cfg) });
-    if (!res.ok) {
-      let msg = 'HTTP ' + res.status;
-      try { const j = await res.json(); msg = j.message || j.msg || j.error_description || msg; } catch (e) {}
-      throw new Error(msg);
-    }
+  /* Prueba de conexión */
+  async function test() {
+    const res = await fetch(baseUrl() + '/app_data?select=id&limit=1', { headers: headers() });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     return true;
   }
 
-  /* Subir los datos actuales a la nube (upsert vía POST) */
-  async function push(cfg, data) {
-    if (!cfgOK(cfg)) throw new Error('Faltan datos de configuración');
-    const url = baseUrl(cfg) + '/app_data';
-    const payload = JSON.stringify({ id: rowId(cfg), data: data, updated_at: new Date().toISOString() });
-    const res = await fetch(url, {
+  /* Subir los datos actuales (upsert de la fila del usuario) */
+  async function push(data) {
+    const res = await fetch(baseUrl() + '/app_data?on_conflict=user_id', {
       method: 'POST',
-      headers: Object.assign(headers(cfg), { 'Prefer': 'resolution=merge-duplicates' }),
-      body: payload,
+      headers: Object.assign(headers(), { 'Prefer': 'resolution=merge-duplicates' }),
+      body: JSON.stringify({ data: data, updated_at: new Date().toISOString() }),
     });
+    if (notAuthed(res)) {
+      const r = await G.auth.refresh();
+      if (r) return push(data);
+    }
     if (!res.ok) {
       let msg = 'HTTP ' + res.status;
       try { const j = await res.json(); msg = j.message || j.msg || j.error_description || msg; } catch (e) {}
@@ -58,11 +48,13 @@
     return true;
   }
 
-  /* Descargar los datos desde la nube (null si no hay nada guardado) */
-  async function pull(cfg) {
-    if (!cfgOK(cfg)) throw new Error('Faltan datos de configuración');
-    const url = baseUrl(cfg) + '/app_data?id=eq.' + encodeURIComponent(rowId(cfg)) + '&select=data,updated_at';
-    const res = await fetch(url, { headers: headers(cfg) });
+  /* Descargar los datos del usuario desde la nube (null si no hay) */
+  async function pull() {
+    const res = await fetch(baseUrl() + '/app_data?select=data,updated_at&limit=1', { headers: headers() });
+    if (notAuthed(res)) {
+      const r = await G.auth.refresh();
+      if (r) return pull();
+    }
     if (!res.ok) {
       let msg = 'HTTP ' + res.status;
       try { const j = await res.json(); msg = j.message || j.msg || msg; } catch (e) {}
@@ -80,12 +72,16 @@
     timer = setTimeout(() => {
       if (!G.store || !G.store.data) return;
       const cfg = G.store.data.settings && G.store.data.settings.cloud;
-      if (!cfg || !cfg.autoPush || !cfgOK(cfg)) return;
-      push(cfg, G.store.data).catch(err => {
+      if (!cfg || !cfg.autoPush) return;
+      push(G.store.data).then(() => {
+        if (G.store && G.store.data) {
+          G.store.data.settings.lastCloudSync = new Date().toISOString();
+        }
+      }).catch(err => {
         if (G.ui && G.ui.toast) G.ui.toast('No se pudo sincronizar con la nube: ' + ((err && err.message) || err), 'error');
       });
     }, 2500);
   }
 
-  G.sync = { baseUrl, headers, rowId, cfgOK, test, push, pull, schedulePush };
+  G.sync = { baseUrl, headers, test, push, pull, schedulePush };
 })(typeof window !== 'undefined' ? window : globalThis);

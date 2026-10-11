@@ -156,6 +156,8 @@
   /* ---------- Respaldos ---------- */
   function openBackup() {
     const cfg = (S.data.settings && S.data.settings.cloud) || {};
+    const sess = G.auth.getSession();
+    const pi = planInfo();
     const m = UI.openModal({
       title: 'Respaldos y datos',
       subtitle: 'Tu información se guarda automáticamente en este navegador (localStorage).',
@@ -175,21 +177,16 @@
         '<button class="btn btn-danger" id="bStartEmpty">' + UI.icon('trash') + 'Vaciar por completo (sin ejemplos)</button>' +
         '</div></div>' +
         '<div class="card-inset">' +
-        '<h4>☁️ Sincronización en la nube (Supabase)</h4>' +
-        '<p class="form-hint">Configurá lo mismo en la PC y en el celular: tocá <strong>Subir mis datos</strong> en uno y <strong>Descargar mis datos</strong> en el otro. Con "automática" activada, cada cambio se sube solo.</p>' +
-        '<div class="grid-form" style="margin-top:8px">' +
-        '<div class="field span-2"><label>URL del proyecto</label><input class="input" id="cUrl" placeholder="https://xxxx.supabase.co" value="' + UI.escapeHtml(cfg.url || '') + '"></div>' +
-        '<div class="field span-2"><label>anon public key</label><input class="input" id="cKey" placeholder="eyJ…" value="' + UI.escapeHtml(cfg.anonKey || '') + '"></div>' +
-        '<div class="field"><label>Código de sincronización</label><input class="input" id="cCode" placeholder="Ej.: gadu2026" value="' + UI.escapeHtml(cfg.code || '') + '"></div>' +
-        '<div class="field"><label>Automática</label><label class="form-hint" style="margin-top:7px"><input type="checkbox" id="cAuto"' + (cfg.autoPush ? ' checked' : '') + ' style="accent-color:var(--primary)"> Subir cada vez que guardo</label></div>' +
-        '</div>' +
+        '<h4>👤 Mi cuenta</h4>' +
+        '<p class="form-hint">' + UI.escapeHtml((sess && sess.email) || '') + ' · ' + UI.chip(pi.label, pi.tone, piIcon(pi)) + '</p>' +
         '<div class="backup-options" style="margin-top:10px">' +
-        '<button class="btn btn-soft" id="bCloudSave">' + UI.icon('check') + 'Guardar configuración</button>' +
-        '<button class="btn btn-soft" id="bCloudTest">' + UI.icon('activity') + 'Probar conexión</button>' +
         '<button class="btn btn-soft-success" id="bPush">' + UI.icon('upload') + 'Subir mis datos ahora</button>' +
         '<button class="btn btn-soft-info" id="bPull">' + UI.icon('download') + 'Descargar mis datos</button>' +
+        '<button class="btn btn-soft" id="bCloudTest">' + UI.icon('activity') + 'Probar conexión</button>' +
         '</div>' +
+        '<label class="form-hint" style="display:block;margin-top:10px"><input type="checkbox" id="cAuto"' + (cfg.autoPush ? ' checked' : '') + ' style="accent-color:var(--primary)"> Sincronizar automáticamente cada vez que guardo</label>' +
         '<p class="form-hint" id="cloudStatus" style="margin-top:8px"></p>' +
+        '<button class="btn btn-danger" id="bLogout" style="margin-top:10px">' + UI.icon('log-out', 15) + 'Cerrar sesión</button>' +
         '</div>',
     });
     m.panel.querySelector('#bExport').addEventListener('click', () => {
@@ -264,26 +261,20 @@
       }
     });
     /* ---------- Nube (Supabase) ---------- */
-    const readCfg = () => ({
-      url: m.panel.querySelector('#cUrl').value.trim(),
-      anonKey: m.panel.querySelector('#cKey').value.trim(),
-      code: m.panel.querySelector('#cCode').value.trim(),
-      autoPush: m.panel.querySelector('#cAuto').checked,
-    });
     const setStatus = (msg, ok) => {
       const el = m.panel.querySelector('#cloudStatus');
       el.textContent = msg;
       el.style.color = ok ? 'var(--success)' : 'var(--danger)';
     };
-    m.panel.querySelector('#bCloudSave').addEventListener('click', () => {
-      S.data.settings.cloud = readCfg();
+    m.panel.querySelector('#cAuto').addEventListener('change', e => {
+      S.data.settings.cloud = { autoPush: e.target.checked };
       S.save();
-      setStatus('Configuración guardada. Usá el mismo código en la PC y en el celular.', true);
+      if (e.target.checked) UI.toast('Sincronización automática activada', 'info');
     });
     m.panel.querySelector('#bCloudTest').addEventListener('click', async () => {
       setStatus('Probando conexión…');
       try {
-        await G.sync.test(readCfg());
+        await G.sync.test();
         setStatus('✅ Conexión OK: todo listo para sincronizar.', true);
       } catch (err) {
         setStatus('❌ No se pudo conectar: ' + ((err && err.message) || err), false);
@@ -292,8 +283,8 @@
     m.panel.querySelector('#bPush').addEventListener('click', async () => {
       setStatus('Subiendo…');
       try {
-        S.data.settings.cloud = readCfg();
-        await G.sync.push(S.data.settings.cloud, S.data);
+        await G.sync.push(S.data);
+        S.data.settings.lastCloudSync = new Date().toISOString();
         S.save();
         setStatus('✅ Datos subidos a la nube (' + new Date().toLocaleTimeString('es-AR') + ').', true);
       } catch (err) {
@@ -303,8 +294,7 @@
     m.panel.querySelector('#bPull').addEventListener('click', async () => {
       setStatus('Buscando datos en la nube…');
       try {
-        const cfg2 = readCfg();
-        const remote = await G.sync.pull(cfg2);
+        const remote = await G.sync.pull();
         if (!remote) { setStatus('No hay datos guardados en la nube todavía. Subí primero desde el otro dispositivo.', false); return; }
         const ok = await UI.confirm({
           title: 'Descargar desde la nube',
@@ -314,7 +304,7 @@
         });
         if (!ok) return;
         S.importJSON(JSON.stringify(remote.data));
-        S.data.settings.cloud = cfg2;
+        S.data.settings.lastCloudSync = String(remote.updatedAt);
         S.save();
         setStatus('✅ Datos descargados. La app se actualizó.', true);
         m.close();
@@ -323,12 +313,176 @@
         setStatus('❌ No se pudo descargar: ' + ((err && err.message) || err), false);
       }
     });
+    m.panel.querySelector('#bLogout').addEventListener('click', async () => {
+      const ok = await UI.confirm({
+        title: 'Cerrar sesión',
+        message: 'Se cerrará tu sesión. Tus datos quedan guardados en este dispositivo y en la nube.',
+        okLabel: 'Cerrar sesión',
+      });
+      if (ok) {
+        await G.auth.logout();
+        S.attachUser(null);
+        location.reload();
+      }
+    });
   }
+
+  /* ---------- Sesión, plan y arranque (SaaS) ---------- */
+  let profile = null;
+
+  function planInfo() {
+    if (!profile) return { label: 'Plan', tone: 'neutral', locked: false };
+    const now = Date.now();
+    if (profile.plan === 'pro') {
+      const until = profile.paid_until ? new Date(profile.paid_until).getTime() : null;
+      if (until && until < now) return { label: 'Pro vencido', tone: 'warning', locked: true };
+      return { label: 'Plan Pro', tone: 'success', locked: false };
+    }
+    if (profile.plan === 'suspendido') return { label: 'Suspendido', tone: 'danger', locked: true };
+    const end = profile.trial_end ? new Date(profile.trial_end).getTime() : now;
+    const days = Math.max(0, Math.ceil((end - now) / 86400000));
+    if (end < now) return { label: 'Prueba vencida', tone: 'danger', locked: true };
+    return { label: 'Prueba · ' + days + ' día' + (days !== 1 ? 's' : ''), tone: 'info', locked: false };
+  }
+
+  function piIcon(pi) {
+    if (pi.locked) return 'alert-triangle';
+    return pi.tone === 'success' ? 'check-circle' : 'user';
+  }
+
+  function renderLock() {
+    const pi = planInfo();
+    const sess = G.auth.getSession();
+    const overlay = document.createElement('div');
+    overlay.className = 'lock-overlay';
+    overlay.innerHTML =
+      '<div class="lock-card">' +
+      '<span class="lock-ico">🔒</span>' +
+      '<h2>' + (pi.label === 'Suspendido' ? 'Tu cuenta está suspendida' : 'Tu período de prueba terminó') + '</h2>' +
+      '<p>Tus datos están guardados y seguros. Para seguir usando GADU, escribinos por WhatsApp y te activamos el plan al instante.</p>' +
+      '<a class="btn btn-primary" href="https://wa.me/5493547469000?text=' + encodeURIComponent('Hola! Quiero activar mi plan de GADU. Mi email: ' + (sess ? sess.email : '')) + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 16) + 'Activar por WhatsApp</a>' +
+      '<button class="btn btn-ghost" id="lockLogout">Cerrar sesión</button>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    overlay.querySelector('#lockLogout').addEventListener('click', () => {
+      G.auth.logout();
+      S.attachUser(null);
+      location.reload();
+    });
+  }
+
+  function renderLogin(mode) {
+    document.body.classList.add('no-session');
+    const view = document.getElementById('view');
+    const signup = mode === 'signup';
+    view.innerHTML =
+      '<div class="login-wrap"><div class="login-card">' +
+      '<img src="logo.png" alt="GADU Construye" class="login-logo">' +
+      '<p class="login-slogan">Tu gestión, perfecta</p>' +
+      '<div class="login-tabs">' +
+      '<button id="tLogin"' + (signup ? '' : ' class="active"') + '>Iniciar sesión</button>' +
+      '<button id="tSignup"' + (signup ? ' class="active"' : '') + '>Crear cuenta</button>' +
+      '</div>' +
+      '<div class="grid-form" style="margin-top:14px">' +
+      '<div class="field span-2"><label>Email</label><input class="input" type="email" id="lEmail" placeholder="tu@email.com" autocomplete="email"></div>' +
+      '<div class="field span-2"><label>Contraseña</label><input class="input" type="password" id="lPass" placeholder="Mínimo 6 caracteres" autocomplete="current-password"></div>' +
+      '</div>' +
+      '<p class="form-hint" id="loginMsg" style="margin-top:8px"></p>' +
+      '<button class="btn btn-primary" id="lGo" style="width:100%">' + (signup ? 'Crear cuenta y empezar gratis' : 'Entrar') + '</button>' +
+      '<p class="form-hint" style="margin-top:12px;text-align:center">' + (signup ? 'Probá 14 días gratis · sin tarjeta.' : '¿No tenés cuenta? Creala: es gratis.') + '</p>' +
+      '</div></div>';
+    const setMsg = (msg, err) => {
+      const el = document.getElementById('loginMsg');
+      el.textContent = msg || '';
+      el.style.color = err ? 'var(--danger)' : 'var(--muted)';
+    };
+    document.getElementById('tLogin').addEventListener('click', () => renderLogin('login'));
+    document.getElementById('tSignup').addEventListener('click', () => renderLogin('signup'));
+    const go = async () => {
+      const email = document.getElementById('lEmail').value.trim();
+      const pass = document.getElementById('lPass').value;
+      if (!email || !pass) { setMsg('Completá email y contraseña.', true); return; }
+      if (pass.length < 6) { setMsg('La contraseña necesita al menos 6 caracteres.', true); return; }
+      setMsg(signup ? 'Creando tu cuenta…' : 'Entrando…');
+      try {
+        if (signup) await G.auth.signup(email, pass);
+        else await G.auth.login(email, pass);
+        await startApp();
+      } catch (err) {
+        if (err && err.message === 'CONFIRMA_EMAIL') {
+          setMsg('Te enviamos un email de confirmación. Confirmalo y después iniciá sesión.', true);
+        } else {
+          setMsg('No se pudo ' + (signup ? 'crear la cuenta' : 'entrar') + ': ' + ((err && err.message) || err), true);
+        }
+      }
+    };
+    document.getElementById('lGo').addEventListener('click', go);
+    document.getElementById('lPass').addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+  }
+
+  async function startApp() {
+    const sess = G.auth.getSession();
+    if (!sess) { renderLogin('login'); return; }
+    S.attachUser(sess.userId);
+    S.load();
+    applyTheme(S.data.settings.theme || 'dark');
+    document.body.classList.remove('no-session');
+
+    try { profile = await G.auth.getProfile(); } catch (e) { profile = null; }
+    const pi = planInfo();
+    if (pi.locked) { renderLock(); return; }
+
+    const bu = document.getElementById('btnUser');
+    if (bu) {
+      bu.hidden = false;
+      bu.textContent = '👤 ' + (sess.email || 'Cuenta').split('@')[0];
+      bu.title = (sess.email || '') + ' · ' + pi.label;
+      bu.addEventListener('click', openBackup);
+    }
+
+    /* Datos: nube vs dispositivo local */
+    try {
+      const remote = await G.sync.pull();
+      const lastSync = S.data.settings.lastCloudSync || '';
+      if (remote && (!lastSync || String(remote.updatedAt) > String(lastSync))) {
+        const ok = await UI.confirm({
+          title: 'Tus datos están en la nube',
+          message: 'Encontré tus datos en la nube (última actualización: <strong>' + UI.escapeHtml(String(remote.updatedAt || '—')) + '</strong>). ¿Descargarlos a este dispositivo?',
+          okLabel: 'Descargar',
+        });
+        if (ok) {
+          S.importJSON(JSON.stringify(remote.data));
+          S.data.settings.lastCloudSync = String(remote.updatedAt);
+          S.save();
+          UI.toast('Datos descargados de la nube');
+        }
+      } else if (!remote && !S.hasLocalData()) {
+        S.startReal();
+        UI.toast('¡Bienvenido a GADU! Dejamos un ejemplo en cada módulo para que arranques.');
+        try {
+          await G.sync.push(S.data);
+          S.data.settings.lastCloudSync = new Date().toISOString();
+          S.save();
+        } catch (e) {}
+      } else if (!remote && S.hasLocalData()) {
+        try {
+          await G.sync.push(S.data);
+          S.data.settings.lastCloudSync = new Date().toISOString();
+          S.save();
+          UI.toast('Tus datos locales se subieron a la nube');
+        } catch (e) {}
+      }
+    } catch (e) { /* sin conexión: la app sigue en modo local */ }
+
+    if (!location.hash || location.hash === '#') location.hash = '#/dashboard';
+    else renderNow();
+  }
+
+  /* API interna (para pruebas e integración) */
+  G.app = { startApp, renderLogin, planInfo };
 
   /* ---------- Arranque ---------- */
   document.addEventListener('DOMContentLoaded', () => {
-    S.load();
-    applyTheme(S.data.settings.theme || 'dark');
     document.querySelectorAll('[data-icon]').forEach(el => {
       const size = el.getAttribute('data-size');
       el.innerHTML = UI.icon(el.getAttribute('data-icon'), size ? +size : 18);
@@ -347,12 +501,23 @@
       }, 250);
     });
     window.addEventListener('storage', e => {
-      if (e.key !== S.KEY && e.key !== null) return;
+      const sess = G.auth.getSession();
+      if (!sess) return;
+      const userKey = S.KEY + '_' + sess.userId;
+      if (e.key !== userKey && e.key !== null) return;
       S.reload();
       UI.toast('Datos actualizados desde otra pestaña', 'info');
       renderNow();
     });
-    if (!location.hash || location.hash === '#') location.hash = '#/dashboard';
-    else renderNow();
+    const sess = G.auth.load();
+    if (sess) {
+      (async () => {
+        try { await G.auth.refresh(); } catch (e) {}
+        if (!G.auth.getSession()) { renderLogin('login'); return; }
+        await startApp();
+      })();
+    } else {
+      renderLogin('login');
+    }
   });
 })(typeof window !== 'undefined' ? window : globalThis);

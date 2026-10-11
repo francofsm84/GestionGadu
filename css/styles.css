@@ -669,3 +669,21 @@ tr.row-overdue td { background: var(--danger-soft); }
   .topbar { gap: 8px; }
   .topbar-title h1 { font-size: 15px; }
 }
+
+/* ---------- Pantalla de login (SaaS) ---------- */
+body.no-session .app { display: none; }
+.login-wrap { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
+.login-card { width: 100%; max-width: 380px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 26px; box-shadow: var(--shadow); }
+.login-logo { width: 190px; display: block; margin: 0 auto 6px; }
+.login-slogan { text-align: center; font-size: 12px; color: var(--muted); font-style: italic; margin-bottom: 12px; }
+.login-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--surface-2); border-radius: 10px; padding: 4px; }
+.login-tabs button { border: none; background: transparent; color: var(--muted); padding: 8px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; }
+.login-tabs button.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,.25); }
+
+/* ---------- Cuenta bloqueada (plan vencido) ---------- */
+.lock-overlay { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: rgba(5,8,16,.82); backdrop-filter: blur(4px); padding: 16px; }
+.lock-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 26px; max-width: 420px; text-align: center; box-shadow: var(--shadow); }
+.lock-ico { font-size: 42px; display: block; margin-bottom: 6px; }
+.lock-card h2 { margin: 6px 0; font-size: 19px; }
+.lock-card p { color: var(--muted); margin-bottom: 16px; font-size: 13.5px; line-height: 1.55; }
+.lock-card .btn { width: 100%; margin-bottom: 8px; }
