@@ -868,6 +868,18 @@
         UI.toast('Datos actualizados desde otra pestaña', 'info');
         renderNow();
       });
+      /* Listener de estado de sesión: si hay sesión y estamos en el login, forzar Dashboard */
+      try {
+        G.auth.onAuthStateChange((event, s) => {
+          if (s) {
+            const h = location.hash || '';
+            if (!h || h === '#' || h === '#/' || h.indexOf('#/login') === 0) {
+              location.hash = '#/dashboard';
+            }
+          }
+        });
+      } catch (e) {}
+
       const sess = G.auth.load();
       if (sess) {
         (async () => {

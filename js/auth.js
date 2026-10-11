@@ -28,6 +28,18 @@
 
   let session = null;
 
+  /* Equivalente a supabase.auth.onAuthStateChange (sin SDK):
+     notifica SIGNED_IN / SIGNED_OUT a los suscriptores y escucha
+     cambios de sesión entre pestañas. */
+  const listeners = [];
+  function onAuthStateChange(cb) {
+    listeners.push(cb);
+    return { subscription: { unsubscribe() { const i = listeners.indexOf(cb); if (i >= 0) listeners.splice(i, 1); } } };
+  }
+  function emitAuthChange(event, s) {
+    listeners.forEach(cb => { try { cb(event, s); } catch (e) {} });
+  }
+
   function load() {
     try { session = JSON.parse(storage.getItem(SKEY)) || null; } catch (e) { session = null; }
     return session;
@@ -35,10 +47,25 @@
   function setSession(s) {
     session = s;
     try { if (s) storage.setItem(SKEY, JSON.stringify(s)); else storage.removeItem(SKEY); } catch (e) {}
+    emitAuthChange(s ? 'SIGNED_IN' : 'SIGNED_OUT', s);
     return session;
   }
   function getSession() { return session; }
   function clear() { return setSession(null); }
+
+  /* Cambios en otra pestaña → sincronizar sesión y notificar */
+  if (typeof window !== 'undefined') {
+    try {
+      window.addEventListener('storage', e => {
+        if (e.key === SKEY) {
+          let s = null;
+          try { s = e.newValue ? JSON.parse(e.newValue) : null; } catch (er) { s = null; }
+          session = s;
+          emitAuthChange(s ? 'SIGNED_IN' : 'SIGNED_OUT', s);
+        }
+      });
+    } catch (e) {}
+  }
 
   function headers(json) {
     const h = {
@@ -168,5 +195,5 @@
     } catch (e) { return false; }
   }
 
-  G.auth = { SUPABASE_URL, SUPABASE_ANON_KEY, override, load, setSession, getSession, clear, headers, signup, login, refresh, logout, getProfile, signInWithGoogle, handleOAuthRedirect };
+  G.auth = { SUPABASE_URL, SUPABASE_ANON_KEY, override, load, setSession, getSession, clear, headers, signup, login, refresh, logout, getProfile, signInWithGoogle, handleOAuthRedirect, onAuthStateChange };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -43,11 +43,33 @@
   }
 
   async function load() {
-    const uid = G.auth.getSession() ? G.auth.getSession().userId : null;
+    const sess = G.auth.getSession();
+    const uid = sess ? sess.userId : null;
     try {
       const rows = await api('GET', '/profiles?select=*&user_id=eq.' + encodeURIComponent(uid));
       profile = (rows && rows[0]) || null;
     } catch (e) { profile = null; }
+    /* Fallback seguro: si el trigger no creó el perfil, lo insertamos (jamás bloquea) */
+    if (!profile && uid) {
+      try {
+        const email = (sess && sess.email) || '';
+        await api('POST', '/profiles?on_conflict=user_id', {
+          user_id: uid,
+          email: email,
+          nombre: email ? email.split('@')[0] : '',
+          apellido: '',
+          rol: 'gestor_obra',
+          plan_id: 'free',
+          empresa: '',
+          subscription_status: 'trialing',
+          estado_cuenta: 'activo',
+          trial_end: new Date(Date.now() + 45 * 86400000).toISOString(),
+          trial_ends_at: new Date(Date.now() + 45 * 86400000).toISOString(),
+        });
+        const rows2 = await api('GET', '/profiles?select=*&user_id=eq.' + encodeURIComponent(uid));
+        profile = (rows2 && rows2[0]) || null;
+      } catch (e) { profile = null; }
+    }
     try {
       planes = (await api('GET', '/planes?select=*&activo=eq.true&order=orden.asc')) || [];
     } catch (e) { planes = []; }
