@@ -159,19 +159,22 @@
   }
 
   function userRow(u, planes) {
+    const protegido = u.rol === 'admin' || u.rol === 'super_admin';
     const planOpts = planes.map(p => '<option value="' + p.id + '"' + (u.plan_id === p.id ? ' selected' : '') + '>' + p.nombre + '</option>').join('');
     const rolOpts = G.plan.ROLES.map(r => '<option value="' + r + '"' + (u.rol === r ? ' selected' : '') + '>' + (ROL_LABEL[r] || r) + '</option>').join('');
     return '<tr data-uid="' + u.user_id + '">' +
-      '<td><strong>' + UI.escapeHtml(u.email || '—') + '</strong><br><span class="muted small">' + UI.escapeHtml(u.empresa_constructora || u.empresa || '—') + '</span></td>' +
-      '<td><select class="select" data-sel="rol" data-uid="' + u.user_id + '">' + rolOpts + '</select></td>' +
-      '<td><select class="select" data-sel="plan_id" data-uid="' + u.user_id + '">' + planOpts + '</select></td>' +
+      '<td><strong>' + UI.escapeHtml(u.email || '—') + '</strong>' + (protegido ? ' ' + UI.chip('🔒 Protegida', 'success') : '') + '<br><span class="muted small">' + UI.escapeHtml(u.empresa_constructora || u.empresa || '—') + '</span></td>' +
+      '<td><select class="select" data-sel="rol" data-uid="' + u.user_id + '"' + (protegido ? ' disabled' : '') + '>' + rolOpts + '</select></td>' +
+      '<td><select class="select" data-sel="plan_id" data-uid="' + u.user_id + '"' + (protegido ? ' disabled' : '') + '>' + planOpts + '</select></td>' +
       '<td>' + UI.chip(STATUS_LABEL[u.subscription_status] || u.subscription_status, u.subscription_status === 'active' ? 'success' : (u.subscription_status === 'past_due' ? 'danger' : 'warning')) + '</td>' +
       '<td>' + UI.chip(u.estado_cuenta === 'activo' ? 'Activo' : 'Suspendido', u.estado_cuenta === 'activo' ? 'success' : 'danger') + '</td>' +
       '<td class="muted small">' + (u.ultima_conexion ? UI.fmtDate(u.ultima_conexion) : '—') + '</td>' +
       '<td><div class="row-actions">' +
-      '<button class="icon-btn sm" data-trial="' + u.user_id + '" title="Extender prueba 7 días">' + UI.icon('calendar-plus', 14) + '</button>' +
-      '<button class="icon-btn sm" data-toggle="' + u.user_id + '" data-estado="' + u.estado_cuenta + '" title="Activar/Suspender">' + UI.icon(u.estado_cuenta === 'activo' ? 'pause' : 'play', 14) + '</button>' +
-      '<button class="icon-btn sm danger" data-del="' + u.user_id + '" title="Eliminar">' + UI.icon('trash', 14) + '</button>' +
+      (protegido
+        ? '<span class="muted small">Acceso total</span>'
+        : '<button class="icon-btn sm" data-trial="' + u.user_id + '" title="Extender prueba 7 días">' + UI.icon('calendar-plus', 14) + '</button>' +
+          '<button class="icon-btn sm" data-toggle="' + u.user_id + '" data-estado="' + u.estado_cuenta + '" title="Activar/Suspender">' + UI.icon(u.estado_cuenta === 'activo' ? 'pause' : 'play', 14) + '</button>' +
+          '<button class="icon-btn sm danger" data-del="' + u.user_id + '" title="Eliminar">' + UI.icon('trash', 14) + '</button>') +
       '</div></td></tr>';
   }
 

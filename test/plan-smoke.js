@@ -1,4 +1,4 @@
-/* Prueba del módulo de planes/roles/límites (plan.js) contra el mock local */
+/* Prueba del módulo de planes/roles/límites/onboarding (plan.js) contra el mock local */
 'use strict';
 global.window = global;
 const mem = {};
@@ -8,95 +8,84 @@ require('../js/sync.js');
 require('../js/plan.js');
 require('../js/store.js');
 const A = global.GADU.auth, P = global.GADU.plan, G = global.GADU;
-const UID = 'u-admin@test.com';
 G.store.load();
+
+function assert(cond, msg) { if (!cond) throw new Error(msg); }
 
 (async () => {
   try {
     A.override('http://localhost:9333', 'test-anon');
+
+    /* 1) Admin: roles, planes, trial de 45 días y blindaje absoluto */
     await A.login('admin@test.com', 'secreto123');
     await P.load();
-    if (!P.isAdmin()) throw new Error('admin@test.com debería ser admin');
-    if (!Array.isArray(P.planes) || P.planes.length !== 4) throw new Error('catálogo de planes no cargó (4 planes)');
-    const tdl = P.trialDaysLeft();
-    if (!(tdl >= 0 && tdl <= 14)) throw new Error('trialDaysLeft inválido: ' + tdl);
-    console.log('roles/planes OK · isAdmin=true · 4 planes · prueba ' + tdl + ' días');
+    assert(P.isAdmin(), 'admin debería ser admin');
+    assert(Array.isArray(P.planes) && P.planes.length === 4, 'catálogo de 4 planes');
+    assert(P.profile.plan_id === 'empresa' && P.profile.subscription_status === 'active', 'admin arranca con plan máximo activo');
+    console.log('roles/planes OK · admin = Empresa/activo · 4 planes');
 
-    // EXCEPCIÓN ABSOLUTA: un admin suspendido/en mora/prueba vencida NUNCA se bloquea
-    await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent(UID), {
+    // intentar suspender/rebajar al admin → el blindaje lo fuerza a activo/Empresa
+    await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent('u-admin@test.com'), {
       estado_cuenta: 'suspendido', subscription_status: 'past_due', plan_id: 'free',
       onboarding_completo: false, trial_ends_at: new Date(Date.now() - 86400000).toISOString(),
     });
     await P.load();
-    if (!P.isAdmin()) throw new Error('admin debería seguir siendo admin');
-    if (P.isLocked()) throw new Error('CRÍTICO: un admin fue bloqueado');
-    if (P.needsOnboarding()) throw new Error('CRÍTICO: a un admin le pidieron onboarding');
-    console.log('excepción admin OK · suspendido/past_due/prueba vencida no lo bloquean');
-    await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent(UID), {
-      estado_cuenta: 'activo', subscription_status: 'active', plan_id: 'pro',
-      trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(),
-    });
-    await P.load();
+    assert(P.isAdmin(), 'admin sigue siendo admin');
+    assert(P.profile.plan_id === 'empresa', 'blindaje: plan forzado a Empresa');
+    assert(P.profile.estado_cuenta === 'activo' && P.profile.subscription_status === 'active', 'blindaje: estado forzado a activo');
+    assert(!P.isLocked(), 'admin nunca bloqueado');
+    assert(!P.needsOnboarding(), 'admin nunca pasa por onboarding');
+    console.log('blindaje admin OK · suspendido/past_due/free → forzado a Empresa/activo/activo');
 
-    // Límite con plan free (1 obra activa)
-    await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent(UID), { plan_id: 'free' });
+    /* 2) Límites con un usuario NORMAL (gestor_obra + Free) */
+    await A.signup('gestor@test.com', 'clave123');
     await P.load();
-    if (P.currentPlan().limite_obras_activas !== 1) throw new Error('plan free debe limitar a 1 obra');
+    assert(!P.isAdmin(), 'gestor no es admin');
+    assert(P.currentPlan().limite_obras_activas === 1, 'plan free limita a 1 obra');
     G.store.data.works = [{ id: 'w1', status: 'activa' }];
-    if (!P.wouldExceed('obras')) throw new Error('con 1 obra activa y plan free debería exceder');
-    if (P.checkLimit('obras') !== false) throw new Error('checkLimit debería bloquear y devolver false');
-    console.log('límite free OK · bloquea la 2ª obra activa');
-
-    // Sin límite con plan pro
-    await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent(UID), { plan_id: 'pro' });
+    assert(P.wouldExceed('obras'), '1 obra activa + free → excede');
+    assert(P.checkLimit('obras') === false, 'checkLimit bloquea');
+    await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent('u-gestor@test.com'), { plan_id: 'pro' });
     await P.load();
-    if (P.wouldExceed('obras')) throw new Error('plan pro no debería exceder con 1 obra');
-    console.log('límite pro OK · no bloquea');
+    assert(!P.wouldExceed('obras'), 'plan pro no excede con 1 obra');
+    console.log('límites OK · free bloquea la 2ª obra, pro no');
 
-    // Auditoría
+    /* 3) Auditoría + métricas (admin) */
+    await A.login('admin@test.com', 'secreto123');
+    await P.load();
     await P.log('prueba', 'acción de prueba');
-    console.log('auditoría OK');
-
-    // Métricas vía RPC
     const m = await G.api('POST', '/rpc/metricas');
-    if (typeof m.obras !== 'number' || typeof m.usuarios !== 'number') throw new Error('metricas() inválida');
-    console.log('métricas OK · usuarios=' + m.usuarios + ' · obras=' + m.obras);
+    assert(typeof m.obras === 'number' && typeof m.usuarios === 'number', 'metricas() inválida');
+    console.log('métricas + auditoría OK · usuarios=' + m.usuarios + ' · obras=' + m.obras);
 
-    // Problema 2: invitación pre-asignada + vinculación automática al primer login
-    await G.api('POST', '/invitaciones', { email: 'nuevo@test.com', rol: 'admin', plan_id: 'empresa', empresa: 'Nueva SA', estado: 'pendiente' });
+    /* 4) Invitación pre-asignada + vinculación automática */
+    await G.api('POST', '/invitaciones', { email: 'nuevo@test.com', rol: 'gestor_obra', plan_id: 'pyme', empresa: 'Nueva SA' });
     const invs = await G.api('GET', '/invitaciones');
-    if (!invs.length) throw new Error('invitación no se guardó');
-    console.log('invitación OK · guardada como pendiente');
-    A.setSession(null);
+    assert(invs.length, 'invitación no se guardó');
     await A.signup('nuevo@test.com', 'clave123');
     await P.load();
-    if (P.profile.rol !== 'admin' || P.profile.plan_id !== 'empresa' || P.profile.empresa !== 'Nueva SA') {
-      throw new Error('la invitación no se vinculó al primer login');
-    }
-    console.log('vinculación OK · el usuario nuevo heredó rol/plan/empresa del admin');
+    assert(P.profile.plan_id === 'pyme' && P.profile.empresa === 'Nueva SA', 'invitación no se vinculó al primer login');
+    console.log('invitación + vinculación OK');
 
-    // Problema 1: usuario nuevo SIN invitación -> defaults (gestor_obra + free)
-    A.setSession(null);
+    /* 5) Defaults usuario nuevo (Free + gestor + trialing + 45 días) */
     await A.signup('sininv@test.com', 'clave456');
     await P.load();
-    if (P.profile.rol !== 'gestor_obra' || P.profile.plan_id !== 'free' || P.profile.subscription_status !== 'trialing') {
-      throw new Error('usuario nuevo sin invitación debería tener defaults');
-    }
-    console.log('defaults OK · nuevo usuario sin invitación = gestor_obra + plan Free + prueba');
+    assert(P.profile.rol === 'gestor_obra' && P.profile.plan_id === 'free' && P.profile.subscription_status === 'trialing', 'defaults de usuario nuevo incorrectos');
+    const tdl = P.trialDaysLeft();
+    assert(tdl >= 44 && tdl <= 45, 'trial debe ser de 45 días, got ' + tdl);
+    console.log('defaults OK · free + gestor + trialing 45 días');
 
-    // Onboarding obligatorio (Plan Free sin perfil)
-    if (!P.needsOnboarding()) throw new Error('usuario free sin perfil debería requerir onboarding');
+    /* 6) Onboarding obligatorio (usuario normal Free) */
+    assert(P.needsOnboarding(), 'usuario free sin perfil debe requerir onboarding');
     await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent('u-sininv@test.com'), {
-      telefono: '+54 3547 123456', direccion: 'Av. Belgrano 123, Alta Gracia', latitud: '-31.66', longitud: '-64.43',
+      telefono: '+54 3547 123456', direccion: 'Av. Belgrano 123', latitud: '-31.66', longitud: '-64.43',
       localidad: 'Argentina · Alta Gracia', empresa_constructora: 'Mi Empresa', rubro_principal: 'General',
       perfil_tipo: 'Contratista', obras_simultaneas: 2, tamano_equipo: '2 a 5 personas', onboarding_completo: true,
     });
     await P.load();
-    if (P.needsOnboarding()) throw new Error('onboarding completado debería liberar el acceso');
-    if (P.profile.telefono !== '+54 3547 123456' || P.profile.rubro_principal !== 'General' || P.profile.latitud !== '-31.66' || P.profile.perfil_tipo !== 'Contratista') {
-      throw new Error('datos de perfil enriquecidos no persistieron');
-    }
-    console.log('onboarding OK · bloquea hasta completar perfil y persiste teléfono/dirección/lat-lng/rubro/perfil');
+    assert(!P.needsOnboarding(), 'onboarding completado debería liberar');
+    assert(P.profile.latitud === '-31.66' && P.profile.perfil_tipo === 'Contratista', 'datos enriquecidos no persistieron');
+    console.log('onboarding OK · bloquea hasta completar y persiste');
 
     console.log('✔ PLAN SMOKE TEST PASADO');
     process.exit(0);

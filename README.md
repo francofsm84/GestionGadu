@@ -78,7 +78,9 @@ En el Dashboard hay un selector **"Período de análisis"** (este mes, últimos 
   3. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v4.sql`** → *Run* (crea `invitaciones` para pre-registrar usuarios y reemplaza el hook de primer ingreso: asigna rol/plan por defecto o hereda la invitación del admin).
   4. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v5.sql`** → *Run* (permite a los admins **editar planes**, define los **4 planes oficiales** Free/Pro/Pyme/Empresa y agrega `trial_ends_at` para el período de prueba).
   5. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v6.sql`** → *Run* (agrega los campos de **onboarding**: teléfono, dirección, nacionalidad, rubro y `onboarding_completo`).
-  6. *Authentication → Providers → Email* → desactivá **"Confirm email"** (si usás registro por email).
+  6. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v7.sql`** → *Run* (columnas ampliadas de perfil con lat/lng, localidad, rubro, tipo de perfil, etc., y refresh de caché).
+  7. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v8.sql`** → *Run* (blindaje absoluto del admin con trigger, prueba de **45 días** y corrección retroactiva de cuentas admin).
+  8. *Authentication → Providers → Email* → desactivá **"Confirm email"** (si usás registro por email).
   4. Para **hacerte administrador**: SQL Editor → `update public.profiles set rol='super_admin', plan_id='pro' where email='TU-EMAIL';`
 - **Uso diario:** cada guardado puede subirse solo a la nube (activá "Sincronizar automáticamente" en *Respaldos y datos* → Mi cuenta). En otro dispositivo, al iniciar sesión la app ofrece descargar los datos de la nube. También hay botones manuales **Subir / Descargar / Probar conexión** y **Cerrar sesión**.
 - Sin conexión la app sigue funcionando con los datos locales del dispositivo.

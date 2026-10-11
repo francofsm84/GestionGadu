@@ -20,14 +20,22 @@ function newUser(email, password, extra) {
     rol: 'gestor_obra', plan_id: 'free',
     subscription_status: 'trialing', subscription_end_date: null,
     gateway_customer_id: null, estado_cuenta: 'activo', empresa: '',
-    trial_end: new Date(Date.now() + 14 * 86400000).toISOString(), paid_until: null,
+    trial_end: new Date(Date.now() + 45 * 86400000).toISOString(), paid_until: null,
     ultima_conexion: null, created_at: new Date().toISOString(),
-    trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(),
+    trial_ends_at: new Date(Date.now() + 45 * 86400000).toISOString(),
     telefono: null, direccion: null, nacionalidad: null, rubro: null, onboarding_completo: false,
     latitud: null, longitud: null, localidad: null, empresa_constructora: null, rubro_principal: null,
     perfil_tipo: null, obras_simultaneas: null, tamano_equipo: null,
   };
   Object.assign(u, extra || {});
+  /* Blindaje admin (simula el trigger v8): admin/super_admin siempre activo y plan máximo */
+  if (u.rol === 'admin' || u.rol === 'super_admin') {
+    u.plan_id = 'empresa';
+    u.subscription_status = 'active';
+    u.estado_cuenta = 'activo';
+    u.trial_end = null;
+    u.trial_ends_at = null;
+  }
   users.set(email, u);
   return u;
 }
@@ -104,7 +112,18 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       const uid = eqVal(query.user_id);
       const found = [...users.values()].find(x => x.id === uid);
-      if (found) Object.assign(found, b);
+      if (found) {
+        Object.assign(found, b);
+        /* Blindaje admin (simula el trigger de la v8): un admin/super_admin
+           siempre queda activo con plan máximo, inmune a cambios manuales */
+        if (found.rol === 'admin' || found.rol === 'super_admin') {
+          found.plan_id = 'empresa';
+          found.subscription_status = 'active';
+          found.estado_cuenta = 'activo';
+          found.trial_end = null;
+          found.trial_ends_at = null;
+        }
+      }
       send(res, 204); return;
     }
     if (req.method === 'POST') {
