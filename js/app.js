@@ -389,6 +389,9 @@
   }
 
   function renderLogin(mode) {
+    /* Fondo claro durante el login: evita el atenuado automático de pantallas
+       con brillo adaptativo (notebooks que oscurecen el contenido oscuro) */
+    try { document.documentElement.dataset.theme = 'light'; } catch (e) {}
     document.body.classList.add('no-session');
     const view = document.getElementById('view');
     const signup = mode === 'signup';
