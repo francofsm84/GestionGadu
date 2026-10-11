@@ -868,10 +868,11 @@
         UI.toast('Datos actualizados desde otra pestaña', 'info');
         renderNow();
       });
-      /* Listener de estado de sesión: si hay sesión y estamos en el login, forzar Dashboard */
+      /* Listener de estado de sesión: asegurar perfil y forzar Dashboard */
       try {
         G.auth.onAuthStateChange((event, s) => {
           if (s) {
+            try { G.auth.ensureUserProfile(); } catch (e) {}   // upsert redundante (nunca bloquea)
             const h = location.hash || '';
             if (!h || h === '#' || h === '#/' || h.indexOf('#/login') === 0) {
               location.hash = '#/dashboard';

@@ -42,6 +42,7 @@
 
   function load() {
     try { session = JSON.parse(storage.getItem(SKEY)) || null; } catch (e) { session = null; }
+    if (session) emitAuthChange('INITIAL_SESSION', session);
     return session;
   }
   function setSession(s) {
@@ -165,6 +166,35 @@
     return arr[0] || null;
   }
 
+  /* Redundancia segura: si el trigger no creó el perfil, lo insertamos nosotros.
+     Envuelto en try/catch para que JAMÁS bloquee el ingreso al dashboard. */
+  async function ensureUserProfile() {
+    const s = session;
+    if (!s || !s.userId) return false;
+    try {
+      const email = s.email || '';
+      const body = {
+        user_id: s.userId,
+        email: email,
+        nombre: email ? email.split('@')[0] : '',
+        apellido: '',
+        rol: 'gestor_obra',
+        plan_id: 'free',
+        empresa: '',
+        subscription_status: 'trialing',
+        estado_cuenta: 'activo',
+        trial_end: new Date(Date.now() + 45 * 86400000).toISOString(),
+        trial_ends_at: new Date(Date.now() + 45 * 86400000).toISOString(),
+      };
+      const res = await fetchT(SUPABASE_URL + '/rest/v1/profiles?on_conflict=user_id', {
+        method: 'POST',
+        headers: headers(true),
+        body: JSON.stringify(body),
+      });
+      return res.ok;
+    } catch (e) { return false; }
+  }
+
   /* ---------- Inicio de sesión con Google (OAuth) ---------- */
   function googleAuthURL() {
     const redirect = location.origin + location.pathname;
@@ -195,5 +225,5 @@
     } catch (e) { return false; }
   }
 
-  G.auth = { SUPABASE_URL, SUPABASE_ANON_KEY, override, load, setSession, getSession, clear, headers, signup, login, refresh, logout, getProfile, signInWithGoogle, handleOAuthRedirect, onAuthStateChange };
+  G.auth = { SUPABASE_URL, SUPABASE_ANON_KEY, override, load, setSession, getSession, clear, headers, signup, login, refresh, logout, getProfile, ensureUserProfile, signInWithGoogle, handleOAuthRedirect, onAuthStateChange };
 })(typeof window !== 'undefined' ? window : globalThis);
