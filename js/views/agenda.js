@@ -1,0 +1,167 @@
+/* ============================================================
+   GADU · Vista: Agenda de contactos clave
+   Clientes, proveedores, subcontratistas y socios con accesos
+   directos (teléfono, WhatsApp, e-mail)
+   ============================================================ */
+(function (root) {
+  'use strict';
+  const G = root.GADU, S = G.store, UI = G.ui;
+  const state = { q: '', type: 'todos' };
+
+  G.router.add('agenda', 'agenda', 'Agenda de contactos', 'Directorio de clientes, proveedores, subcontratistas y socios', render);
+
+  const TYPES = {
+    cliente: ['Cliente', 'info'],
+    proveedor: ['Proveedor', 'primary'],
+    subcontratista: ['Subcontratista', 'violet'],
+    socio: ['Socio', 'success'],
+  };
+
+  function filtered() {
+    const q = state.q.toLowerCase();
+    return S.data.contacts.slice().sort((a, b) => a.name.localeCompare(b.name)).filter(c => {
+      const hay = (c.name + ' ' + (c.company || '') + ' ' + (c.address || '') + ' ' + (c.notes || '')).toLowerCase();
+      return (state.type === 'todos' || c.type === state.type) && (!q || hay.includes(q));
+    });
+  }
+
+  function render(view) {
+    const counts = {};
+    S.CONTACT_TYPES.forEach(t => { counts[t] = S.data.contacts.filter(c => c.type === t).length; });
+
+    view.innerHTML =
+      '<div class="toolbar">' +
+      '<div class="search">' + UI.icon('search', 16) + '<input id="fq" class="input" placeholder="Buscar por nombre, rubro o dirección…" value="' + UI.escapeHtml(state.q) + '"></div>' +
+      '<div class="chips-row">' +
+      chipBtn('todos', 'Todos (' + S.data.contacts.length + ')') +
+      S.CONTACT_TYPES.map(t => chipBtn(t, TYPES[t][0] + ' (' + (counts[t] || 0) + ')')).join('') +
+      '</div>' +
+      '<div class="grow"></div>' +
+      '<button class="btn btn-primary" id="btnNew">' + UI.icon('plus', 16) + 'Nuevo contacto</button>' +
+      '</div>' +
+      '<div id="listWrap">' + listHTML(filtered()) + '</div>';
+
+    view.querySelector('#fq').addEventListener('input', e => { state.q = e.target.value; updateList(view); });
+    view.querySelector('#btnNew').addEventListener('click', () => openContactModal());
+    UI.on(view, '[data-type]', 'click', e => {
+      state.type = e.currentTarget.dataset.type;
+      view.querySelectorAll('[data-type]').forEach(b => b.classList.toggle('active', b.dataset.type === state.type));
+      updateList(view);
+    });
+    bindList(view.querySelector('#listWrap'));
+  }
+
+  function chipBtn(type, label) {
+    return '<button class="chip-btn' + (state.type === type ? ' active' : '') + '" data-type="' + type + '">' + label + '</button>';
+  }
+
+  function updateList(view) {
+    const wrap = view.querySelector('#listWrap');
+    wrap.innerHTML = listHTML(filtered());
+    bindList(wrap);
+  }
+
+  function listHTML(list) {
+    if (!list.length) {
+      return '<div class="card">' + UI.emptyState('book', 'No hay contactos que coincidan', 'Probá con otra búsqueda o categoría.') + '</div>';
+    }
+    return '<div class="cards-grid">' + list.map(contactCard).join('') + '</div>';
+  }
+
+  function contactCard(c) {
+    const tl = TYPES[c.type] || ['', 'neutral'];
+    const chips = UI.chip(tl[0], tl[1]);
+    const pct = c.type === 'socio' && c.percent ? UI.chip(c.percent + '% participación', 'primary', 'percent') : '';
+    return '<article class="contact-card" data-id="' + c.id + '">' +
+      '<div class="contact-head">' +
+      UI.avatar(c.name, 42) +
+      '<div class="contact-info"><strong>' + UI.escapeHtml(c.name) + '</strong>' +
+      '<span>' + UI.escapeHtml(c.company || '—') + '</span></div>' +
+      '</div>' +
+      '<div class="contact-chips">' + chips + pct + '</div>' +
+      (c.address ? '<div class="contact-address">' + UI.icon('map-pin', 13) + UI.escapeHtml(c.address) + '</div>' : '') +
+      '<div class="contact-actions">' +
+      '<a class="icon-btn sm" href="' + UI.telLink(c.phone) + '" title="Llamar: ' + UI.escapeHtml(c.phone || '') + '">' + UI.icon('phone', 15) + '</a>' +
+      '<a class="icon-btn sm" href="' + UI.waLink(c.whatsapp || c.phone) + '" target="_blank" rel="noopener" title="WhatsApp">' + UI.icon('whatsapp', 15) + '</a>' +
+      (c.email ? '<a class="icon-btn sm" href="mailto:' + UI.escapeHtml(c.email) + '" title="' + UI.escapeHtml(c.email) + '">' + UI.icon('mail', 15) + '</a>' : '') +
+      '<div class="spacer"></div>' +
+      '<button class="icon-btn sm" data-edit="' + c.id + '" title="Editar">' + UI.icon('edit', 15) + '</button>' +
+      '<button class="icon-btn sm danger" data-del="' + c.id + '" title="Eliminar">' + UI.icon('trash', 15) + '</button>' +
+      '</div></article>';
+  }
+
+  function bindList(wrap) {
+    UI.on(wrap, '[data-edit]', 'click', e => openContactModal(S.data.contacts.find(c => c.id === e.target.closest('[data-edit]').dataset.edit)));
+    UI.on(wrap, '[data-del]', 'click', async e => {
+      const c = S.data.contacts.find(x => x.id === e.target.closest('[data-del]').dataset.del);
+      if (!c) return;
+      const ok = await UI.confirm({ title: 'Eliminar contacto', message: '¿Eliminar a <strong>' + UI.escapeHtml(c.name) + '</strong> del directorio?', okLabel: 'Eliminar' });
+      if (ok) { S.remove('contacts', c.id); UI.toast('Contacto eliminado'); G.router.refresh(); }
+    });
+  }
+
+  function openContactModal(c) {
+    const isEdit = !!c;
+    const m = UI.openModal({
+      title: isEdit ? 'Editar contacto' : 'Nuevo contacto',
+      size: 'wide',
+      body:
+        '<div class="grid-form">' +
+        '<div class="field"><label>Tipo *</label><select class="select" id="fType">' +
+        S.CONTACT_TYPES.map(t => '<option value="' + t + '"' + (c && c.type === t ? ' selected' : '') + '>' + TYPES[t][0] + '</option>').join('') +
+        '</select></div>' +
+        '<div class="field"><label>Nombre / razón social *</label><input class="input" id="fName" value="' + UI.escapeHtml(c ? c.name : '') + '" placeholder="Nombre y apellido"></div>' +
+        '<div class="field"><label>Empresa / rubro</label><input class="input" id="fCompany" value="' + UI.escapeHtml(c ? c.company : '') + '" placeholder="Ej.: Corralón, electricista…"></div>' +
+        '<div class="field"><label>Teléfono</label><input class="input" id="fPhone" value="' + UI.escapeHtml(c ? c.phone : '') + '" placeholder="+54 9 3547 …"></div>' +
+        '<div class="field"><label>WhatsApp</label><input class="input" id="fWa" value="' + UI.escapeHtml(c ? c.whatsapp : '') + '" placeholder="Si difiere del teléfono"></div>' +
+        '<div class="field"><label>E-mail</label><input class="input" id="fEmail" value="' + UI.escapeHtml(c ? c.email : '') + '" placeholder="correo@ejemplo.com"></div>' +
+        '<div class="field span-2"><label>Dirección</label><input class="input" id="fAddr" value="' + UI.escapeHtml(c ? c.address : '') + '" placeholder="Calle, barrio, ciudad"></div>' +
+        '<div class="field span-2"><label>Notas</label><textarea class="textarea" id="fNotes" rows="2" placeholder="Condiciones de pago, referencias…">' + UI.escapeHtml(c ? c.notes : '') + '</textarea></div>' +
+        '<div class="field span-2" id="socioFields" hidden>' +
+        '<div class="grid-form">' +
+        '<div class="field"><label>Participación (%)</label><input class="input" type="number" id="fPercent" min="0" max="100" value="' + (c && c.percent != null ? c.percent : '') + '" placeholder="0"></div>' +
+        '<div class="field"><label>Estado</label><select class="select" id="fActive">' +
+        '<option value="1"' + (!c || c.active !== false ? ' selected' : '') + '>Activo</option>' +
+        '<option value="0"' + (c && c.active === false ? ' selected' : '') + '>Inactivo</option>' +
+        '</select></div></div></div>' +
+        '</div>',
+      footer: '<button class="btn btn-ghost" data-cancel>Cancelar</button><button class="btn btn-primary" data-save>' + (isEdit ? 'Guardar cambios' : 'Agregar contacto') + '</button>',
+    });
+
+    const syncSocio = () => {
+      m.panel.querySelector('#socioFields').hidden = m.panel.querySelector('#fType').value !== 'socio';
+    };
+    m.panel.querySelector('#fType').addEventListener('change', syncSocio);
+    syncSocio();
+
+    m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+    m.panel.querySelector('[data-save]').addEventListener('click', () => {
+      const name = m.panel.querySelector('#fName').value.trim();
+      if (!name) { UI.toast('Ingresá el nombre del contacto', 'error'); return; }
+      const type = m.panel.querySelector('#fType').value;
+      const payload = {
+        type,
+        name,
+        company: m.panel.querySelector('#fCompany').value.trim(),
+        phone: m.panel.querySelector('#fPhone').value.trim(),
+        whatsapp: m.panel.querySelector('#fWa').value.trim(),
+        email: m.panel.querySelector('#fEmail').value.trim(),
+        address: m.panel.querySelector('#fAddr').value.trim(),
+        notes: m.panel.querySelector('#fNotes').value.trim(),
+      };
+      if (type === 'socio') {
+        payload.percent = Math.max(0, Math.min(100, UI.readNum(m.panel.querySelector('#fPercent'))));
+        payload.active = m.panel.querySelector('#fActive').value === '1';
+      }
+      if (isEdit) {
+        S.update('contacts', c.id, payload);
+        UI.toast('Contacto actualizado');
+      } else {
+        S.add('contacts', payload);
+        UI.toast('Contacto agregado a la agenda');
+      }
+      m.close();
+      G.router.refresh();
+    });
+  }
+})(typeof window !== 'undefined' ? window : globalThis);

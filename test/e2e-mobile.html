@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<title>E2E mobile</title>
+<link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-head">
+      <a class="logo" href="#/dashboard"><span class="logo-icon"><span data-icon="hard-hat" data-size="20"></span></span><span class="logo-text"><strong>GADU</strong><em>Construye · Gestión</em></span></a>
+      <button class="icon-btn sidebar-close" id="sidebarClose" aria-label="Cerrar menú"><span data-icon="x"></span></button>
+    </div>
+    <nav class="nav">
+      <div class="nav-section">Principal</div>
+      <a class="nav-link" href="#/dashboard" data-route="dashboard"><span class="nav-ico" data-icon="grid"></span><span class="nav-label">Dashboard</span></a>
+      <a class="nav-link" href="#/obras" data-route="obras"><span class="nav-ico" data-icon="hard-hat"></span><span class="nav-label">Obras</span><span class="badge badge-info" id="badgeObras" hidden>0</span></a>
+      <div class="nav-section">Finanzas</div>
+      <a class="nav-link" href="#/presupuestos" data-route="presupuestos"><span class="nav-ico" data-icon="file-text"></span><span class="nav-label">Presupuestos</span></a>
+      <a class="nav-link" href="#/ingresos" data-route="ingresos"><span class="nav-ico" data-icon="trending-up"></span><span class="nav-label">Ingresos</span></a>
+      <a class="nav-link" href="#/gastos" data-route="gastos"><span class="nav-ico" data-icon="receipt"></span><span class="nav-label">Gastos</span></a>
+      <div class="nav-section">Gestión</div>
+      <a class="nav-link" href="#/socios" data-route="socios"><span class="nav-ico" data-icon="users"></span><span class="nav-label">Socios y reparto</span><span class="badge badge-danger" id="badgeLiquidaciones" hidden>0</span></a>
+      <a class="nav-link" href="#/empleados" data-route="empleados"><span class="nav-ico" data-icon="user"></span><span class="nav-label">Empleados</span></a>
+      <a class="nav-link" href="#/herramientas" data-route="herramientas"><span class="nav-ico" data-icon="wrench"></span><span class="nav-label">Herramientas</span></a>
+      <a class="nav-link" href="#/agenda" data-route="agenda"><span class="nav-ico" data-icon="book"></span><span class="nav-label">Agenda</span></a>
+    </nav>
+    <div class="sidebar-foot">
+      <button class="nav-link nav-btn" id="btnBackup"><span class="nav-ico" data-icon="database"></span><span class="nav-label">Respaldos y datos</span></button>
+      <button class="nav-link nav-btn" id="btnCollapse"><span class="nav-ico" data-icon="chevrons-left"></span><span class="nav-label">Colapsar menú</span></button>
+    </div>
+  </aside>
+  <div class="backdrop" id="backdrop"></div>
+  <div class="main">
+    <header class="topbar">
+      <button class="icon-btn btn-menu" id="btnMenu" aria-label="Abrir menú"><span data-icon="menu"></span></button>
+      <div class="topbar-title"><h1 id="pageTitle">Panel general</h1><p id="pageSubtitle"></p></div>
+      <div class="topbar-actions">
+        <div class="quick-actions">
+          <button class="btn btn-soft-success btn-sm" data-action="income"><span data-icon="arrow-down-left"></span>Nuevo ingreso</button>
+          <button class="btn btn-soft-danger btn-sm" data-action="expense"><span data-icon="arrow-up-right"></span>Cargar gasto</button>
+          <button class="btn btn-primary btn-sm" data-action="budget"><span data-icon="file-text"></span>Nuevo presupuesto</button>
+          <button class="btn btn-soft btn-sm" data-action="work"><span data-icon="plus"></span>Nueva obra</button>
+          <button class="btn btn-soft-info btn-sm" data-action="attendance"><span data-icon="calendar-plus"></span>Jornada</button>
+        </div>
+        <div class="menu-wrap">
+          <button class="icon-btn btn-more" id="btnMore" aria-label="Acciones rápidas"><span data-icon="plus"></span></button>
+          <div class="menu" id="quickMenu" hidden>
+            <button class="menu-item" data-action="income"><span data-icon="arrow-down-left"></span>Nuevo ingreso</button>
+            <button class="menu-item" data-action="expense"><span data-icon="arrow-up-right"></span>Cargar gasto</button>
+            <button class="menu-item" data-action="budget"><span data-icon="file-text"></span>Nuevo presupuesto</button>
+            <button class="menu-item" data-action="work"><span data-icon="plus"></span>Nueva obra</button>
+            <button class="menu-item" data-action="attendance"><span data-icon="calendar-plus"></span>Registrar jornada</button>
+          </div>
+        </div>
+        <button class="icon-btn" id="btnTheme" aria-label="Cambiar tema" title="Cambiar tema"></button>
+      </div>
+    </header>
+    <main class="view" id="view"></main>
+  </div>
+</div>
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+<script src="../js/store.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/charts.js"></script>
+<script src="../js/app.js"></script>
+<script src="../js/views/dashboard.js"></script>
+<script src="../js/views/obras.js"></script>
+<script src="../js/views/obra-detalle.js"></script>
+<script src="../js/views/presupuestos.js"></script>
+<script src="../js/views/ingresos.js"></script>
+<script src="../js/views/gastos.js"></script>
+<script src="../js/views/socios.js"></script>
+<script src="../js/views/empleados.js"></script>
+<script src="../js/views/herramientas.js"></script>
+<script src="../js/views/agenda.js"></script>
+<script>
+(function () {
+  'use strict';
+  const results = [];
+  const log = m => results.push(m);
+  window.onerror = function (msg, src, line) { log('JS ERROR: ' + msg + ' @' + line); };
+  const $ = sel => document.querySelector(sel);
+  const $$ = sel => document.querySelectorAll(sel);
+  const click = el => { if (el) el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); };
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const vis = el => el && getComputedStyle(el).display !== 'none';
+
+  (async function run() {
+    try {
+      await wait(400);
+      log('P01 viewport: ' + window.innerWidth + 'x' + window.innerHeight);
+      log('P02 dashboard renderiza en móvil: ' + ($$('.kpi-card').length > 0));
+      log('P03 hamburguesa visible: ' + vis($('#btnMenu')));
+      log('P04 acciones rápidas ocultas en móvil: ' + !vis($('.quick-actions')));
+      log('P05 boton + (acciones) visible: ' + vis($('#btnMore')));
+
+      // Hamburguesa: abrir menú lateral
+      click($('#btnMenu'));
+      await wait(250);
+      log('P06 hamburguesa abre sidebar: ' + $('#sidebar').classList.contains('open'));
+      log('P07 backdrop visible: ' + $('#backdrop').classList.contains('show'));
+
+      // Navegar desde el menú
+      click($('a[data-route="empleados"]'));
+      await wait(350);
+      log('P08 navega a empleados: ' + (document.getElementById('pageTitle').textContent === 'Empleados'));
+      log('P09 sidebar se cierra al navegar: ' + !$('#sidebar').classList.contains('open'));
+
+      // Menú + de acciones rápidas
+      click($('#btnMore'));
+      await wait(150);
+      log('P10 menu + se abre: ' + !$('#quickMenu').hidden);
+      click($('#quickMenu [data-action="attendance"]'));
+      await wait(250);
+      log('P11 accion jornada desde menu +: ' + (!!$('#modalRoot .modal')));
+      if ($('#modalRoot .modal')) { click($('#modalRoot [data-close]')); await wait(150); }
+
+      // Tablas con scroll horizontal
+      location.hash = '#/ingresos';
+      await wait(300);
+      const wrap = $('.table-wrap');
+      log('P12 tabla con scroll horizontal en móvil: ' + (wrap && wrap.scrollWidth > wrap.clientWidth + 10));
+
+      // Modal: input sin zoom de iOS (16px)
+      click($('.quick-actions [data-action="income"]') || $('#btnMore'));
+      if (!vis($('.quick-actions'))) {
+        click($('#btnMore'));
+        await wait(120);
+        click($('#quickMenu [data-action="income"]'));
+      }
+      await wait(250);
+      const inp = $('#modalRoot .input');
+      log('P13 modal abre en móvil: ' + (!!$('#modalRoot .modal')));
+      log('P14 input modal con 16px (evita zoom iOS): ' + (inp ? getComputedStyle(inp).fontSize : 'sin input'));
+      if ($('#modalRoot .modal')) { click($('#modalRoot [data-close]')); await wait(150); }
+
+      // Kanban con scroll snap
+      location.hash = '#/obras';
+      await wait(300);
+      log('P15 kanban presente: ' + ($$('.kanban').length > 0));
+      log('P16 tarjetas de obra clicables: ' + ($$('.work-card').length > 0));
+
+      // Cerrar menú con la X y con el backdrop
+      click($('#btnMenu'));
+      await wait(200);
+      click($('#sidebarClose'));
+      await wait(200);
+      log('P17 cierre con X: ' + !$('#sidebar').classList.contains('open'));
+      click($('#btnMenu'));
+      await wait(200);
+      click($('#backdrop'));
+      await wait(200);
+      log('P18 cierre con backdrop: ' + !$('#sidebar').classList.contains('open'));
+
+      // Tema
+      const t0 = document.documentElement.dataset.theme;
+      click($('#btnTheme'));
+      await wait(150);
+      log('P19 cambio de tema funciona: ' + (document.documentElement.dataset.theme !== t0));
+      log('P20 meta theme-color actualizado: ' + ($('meta[name="theme-color"]').getAttribute('content') !== '#0b1020' || t0 === 'light'));
+
+      const out = document.createElement('pre');
+      out.id = 'e2e-results';
+      out.textContent = results.join('\n');
+      document.body.appendChild(out);
+      document.title = 'E2E-FIN';
+    } catch (err) {
+      const out = document.createElement('pre');
+      out.id = 'e2e-results';
+      out.textContent = 'E2E EXCEPTION: ' + (err && err.stack ? err.stack : err) + '\n---\n' + results.join('\n');
+      document.body.appendChild(out);
+      document.title = 'E2E-FIN';
+    }
+  })();
+})();
+</script>
+</body>
+</html>
