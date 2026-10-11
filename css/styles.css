@@ -158,6 +158,8 @@ body.sb-collapsed .main { margin-left: var(--sidebar-w-min); }
 }
 .topbar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .quick-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+/* En el panel de administración se ocultan las acciones rápidas operativas */
+body.on-admin .quick-actions, body.on-admin .menu-wrap { display: none !important; }
 @supports (background: color-mix(in srgb, red 50%, blue)) {
   .topbar { background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(10px); }
 }

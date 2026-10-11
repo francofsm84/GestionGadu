@@ -182,9 +182,11 @@ const server = http.createServer(async (req, res) => {
     const all = [...users.values()];
     const activos = all.filter(x => x.estado_cuenta === 'activo');
     const obras = [...appData.values()].reduce((acc, a) => acc + ((a.data && a.data.works) ? a.data.works.length : 0), 0);
+    const mrr = PLANES.reduce((s, p) => s + (p.precio_mensual || 0) * all.filter(x => x.plan_id === p.id && x.estado_cuenta === 'activo').length, 0);
+    const arr = PLANES.reduce((s, p) => s + (p.precio_anual || 0) * all.filter(x => x.plan_id === p.id && x.estado_cuenta === 'activo').length, 0);
     const porPlan = {};
-    all.forEach(x => { const n = (PLANES.find(p => p.id === x.plan_id) || {}).nombre || x.plan_id; porPlan[n] = (porPlan[n] || 0) + 1; });
-    send(res, 200, { mrr: 0, usuarios: all.length, activos: activos.length, past_due: 0, obras, por_plan: porPlan });
+    PLANES.forEach(p => { porPlan[p.nombre] = all.filter(x => x.plan_id === p.id).length; });
+    send(res, 200, { mrr, arr, usuarios: all.length, activos: activos.length, past_due: 0, obras, por_plan: porPlan });
     return;
   }
 
@@ -197,6 +199,15 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET') {
       if (query.select === 'id') { send(res, 200, []); return; }
+      /* admin puede leer los datos de OTRO usuario (auditoría de soporte) */
+      if (query.user_id) {
+        const uid = eqVal(query.user_id);
+        const esAdmin = u && (u.rol === 'admin' || u.rol === 'super_admin');
+        if (uid !== u.id && !esAdmin) { send(res, 200, []); return; }
+        const row = appData.get(uid);
+        send(res, 200, row ? [{ data: row.data, updated_at: row.updated_at }] : []);
+        return;
+      }
       const row = appData.get(u.id);
       send(res, 200, row ? [{ data: row.data, updated_at: row.updated_at }] : []);
       return;

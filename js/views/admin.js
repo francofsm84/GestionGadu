@@ -87,14 +87,66 @@
   }
 
   /* ---------- Usuarios ---------- */
+  function trialLabel(u) {
+    if (u.subscription_status === 'trialing') {
+      const end = u.trial_ends_at || u.trial_end;
+      if (end) {
+        const d = Math.max(0, Math.ceil((new Date(end).getTime() - Date.now()) / 86400000));
+        return 'En prueba · Quedan ' + d + ' día' + (d !== 1 ? 's' : '');
+      }
+      return 'En prueba';
+    }
+    return STATUS_LABEL[u.subscription_status] || u.subscription_status;
+  }
+
+  /* Auditoría de soporte: ver los datos de un cliente (solo lectura) */
+  async function openVerDatos(uid, email) {
+    const m = UI.openModal({
+      title: 'Datos de ' + email,
+      subtitle: 'Auditoría de soporte · solo lectura',
+      size: 'wide',
+      body: '<div id="vdBody"><p class="form-hint">Cargando…</p></div>',
+      footer: '<button class="btn btn-ghost" data-cancel>Cerrar</button>',
+    });
+    m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+    try {
+      const rows = await G.api('GET', '/app_data?select=data&user_id=eq.' + encodeURIComponent(uid) + '&limit=1');
+      const d = (rows && rows[0] && rows[0].data) || {};
+      const works = d.works || [], contacts = d.contacts || [], employees = d.employees || [], budgets = d.budgets || [], incomes = d.incomes || [], expenses = d.expenses || [];
+      const activas = works.filter(w => w.status === 'activa').length;
+      const clientes = contacts.filter(c => c.type === 'cliente').length;
+      const totalIn = S.sum(incomes.map(x => x.amount));
+      const totalOut = S.sum(expenses.map(x => x.amount));
+      const stat = (l, v, s) => '<div class="kpi-card"><div class="kpi-body"><span class="kpi-label">' + l + '</span><strong class="kpi-value">' + v + '</strong><span class="kpi-sub">' + s + '</span></div></div>';
+      const obrasList = works.slice(0, 12).map(w => '<div class="split-row"><span>' + UI.escapeHtml(w.name || '—') + '</span>' + UI.chip(w.status || '', w.status === 'activa' ? 'success' : 'neutral') + '</div>').join('');
+      m.panel.querySelector('#vdBody').innerHTML =
+        '<div class="kpi-grid kpi-4" style="margin-bottom:14px">' +
+        stat('Obras', works.length, activas + ' activas') + stat('Clientes', clientes, '') + stat('Empleados', employees.length, '') + stat('Presupuestos', budgets.length, '') +
+        '</div>' +
+        '<div class="card-inset">' +
+        '<div class="split-row"><strong>Ingresos</strong><b class="pos">+' + UI.fmtMoney(totalIn) + '</b></div>' +
+        '<div class="split-row"><strong>Gastos</strong><b class="neg">−' + UI.fmtMoney(totalOut) + '</b></div>' +
+        '<div class="split-row"><strong>Balance</strong><b>' + UI.fmtMoney(totalIn - totalOut) + '</b></div>' +
+        (obrasList ? '<h4 style="margin-top:10px">Obras</h4>' + obrasList : '<p class="form-hint" style="margin-top:8px">Sin obras registradas.</p>') +
+        '</div>';
+      await G.plan.log('ver_datos_usuario', email);
+    } catch (err) {
+      m.panel.querySelector('#vdBody').innerHTML = '<p class="form-hint" style="color:var(--danger)">No se pudo cargar: ' + ((err && err.message) || err) + '</p>';
+    }
+  }
+
   async function tabUsuarios(body) {
     const rows = await G.api('GET', '/profiles?select=*&order=created_at.asc');
     let invitaciones = [];
     try { invitaciones = await G.api('GET', '/invitaciones?select=*&order=created_at.asc'); } catch (e) {}
     const planes = G.plan.planes || [];
+    const rubros = [...new Set(rows.map(u => u.rubro_principal || u.rubro).filter(Boolean))];
     body.innerHTML =
       '<div class="toolbar">' +
       '<div class="search">' + UI.icon('search', 16) + '<input id="uq" class="input" placeholder="Buscar por email, empresa…"></div>' +
+      '<select id="fPlan" class="select" style="max-width:140px"><option value="">Plan: todos</option>' + planes.map(p => '<option value="' + p.id + '">' + p.nombre + '</option>').join('') + '</select>' +
+      '<select id="fStatus" class="select" style="max-width:150px"><option value="">Estado: todos</option><option value="trialing">Prueba</option><option value="active">Activa</option><option value="past_due">En mora</option><option value="canceled">Cancelada</option><option value="suspendido">Suspendida</option></select>' +
+      '<select id="fRubro" class="select" style="max-width:150px"><option value="">Rubro: todos</option>' + rubros.map(r => '<option value="' + UI.escapeHtml(r) + '">' + UI.escapeHtml(r) + '</option>').join('') + '</select>' +
       '<div class="grow"></div>' +
       '<button class="btn btn-soft btn-sm" id="btnCSV" title="Exportar CSV">' + UI.icon('download', 14) + 'CSV</button>' +
       '<button class="btn btn-soft btn-sm" id="btnExcel" title="Exportar Excel">' + UI.icon('download', 14) + 'Excel</button>' +
@@ -115,14 +167,32 @@
             '</div>').join('') + '</div></div>'
         : '');
 
-    body.querySelector('#uq').addEventListener('input', e => {
-      const q = e.target.value.toLowerCase();
-      body.querySelectorAll('tbody tr').forEach(tr => { tr.hidden = !tr.textContent.toLowerCase().includes(q); });
-    });
+    const applyFilters = () => {
+      const q = (body.querySelector('#uq').value || '').toLowerCase();
+      const fPlan = body.querySelector('#fPlan').value;
+      const fStatus = body.querySelector('#fStatus').value;
+      const fRubro = body.querySelector('#fRubro').value;
+      body.querySelectorAll('tbody tr').forEach(tr => {
+        const okPlan = !fPlan || tr.dataset.plan === fPlan;
+        const okStatus = !fStatus || tr.dataset.status === fStatus;
+        const okRubro = !fRubro || tr.dataset.rubro === fRubro;
+        const okQ = !q || tr.textContent.toLowerCase().includes(q);
+        tr.hidden = !(okPlan && okStatus && okRubro && okQ);
+      });
+    };
+    body.querySelector('#uq').addEventListener('input', applyFilters);
+    body.querySelector('#fPlan').addEventListener('change', applyFilters);
+    body.querySelector('#fStatus').addEventListener('change', applyFilters);
+    body.querySelector('#fRubro').addEventListener('change', applyFilters);
     body.querySelector('#btnInvite').addEventListener('click', () => inviteModal(() => tabUsuarios(body)));
     body.querySelector('#btnCSV').addEventListener('click', () => exportCSV(rows, planes));
     body.querySelector('#btnExcel').addEventListener('click', () => exportExcel(rows, planes));
     body.querySelector('#btnPDF').addEventListener('click', () => exportPDF(rows, planes));
+    body.querySelectorAll('[data-ver]').forEach(b => b.addEventListener('click', e => {
+      const uid = b.dataset.ver;
+      const u = rows.find(x => x.user_id === uid);
+      openVerDatos(uid, u ? u.email : uid);
+    }));
     body.querySelectorAll('[data-delinv]').forEach(b => b.addEventListener('click', async e => {
       await G.api('DELETE', '/invitaciones?email=eq.' + encodeURIComponent(b.dataset.delinv));
       await G.plan.log('invitacion_eliminada', b.dataset.delinv);
@@ -160,16 +230,19 @@
 
   function userRow(u, planes) {
     const protegido = u.rol === 'admin' || u.rol === 'super_admin';
+    const rubro = u.rubro_principal || u.rubro || '';
+    const stTone = u.subscription_status === 'active' ? 'success' : (u.subscription_status === 'past_due' ? 'danger' : (u.subscription_status === 'trialing' ? 'info' : 'warning'));
     const planOpts = planes.map(p => '<option value="' + p.id + '"' + (u.plan_id === p.id ? ' selected' : '') + '>' + p.nombre + '</option>').join('');
     const rolOpts = G.plan.ROLES.map(r => '<option value="' + r + '"' + (u.rol === r ? ' selected' : '') + '>' + (ROL_LABEL[r] || r) + '</option>').join('');
-    return '<tr data-uid="' + u.user_id + '">' +
-      '<td><strong>' + UI.escapeHtml(u.email || '—') + '</strong>' + (protegido ? ' ' + UI.chip('🔒 Protegida', 'success') : '') + '<br><span class="muted small">' + UI.escapeHtml(u.empresa_constructora || u.empresa || '—') + '</span></td>' +
+    return '<tr data-uid="' + u.user_id + '" data-plan="' + (u.plan_id || '') + '" data-status="' + (u.estado_cuenta === 'suspendido' ? 'suspendido' : (u.subscription_status || '')) + '" data-rubro="' + UI.escapeHtml(rubro) + '">' +
+      '<td><strong>' + UI.escapeHtml(u.email || '—') + '</strong>' + (protegido ? ' ' + UI.chip('🔒 Protegida', 'success') : '') + '<br><span class="muted small">' + UI.escapeHtml(u.empresa_constructora || u.empresa || '—') + (rubro ? ' · ' + UI.escapeHtml(rubro) : '') + '</span></td>' +
       '<td><select class="select" data-sel="rol" data-uid="' + u.user_id + '"' + (protegido ? ' disabled' : '') + '>' + rolOpts + '</select></td>' +
       '<td><select class="select" data-sel="plan_id" data-uid="' + u.user_id + '"' + (protegido ? ' disabled' : '') + '>' + planOpts + '</select></td>' +
-      '<td>' + UI.chip(STATUS_LABEL[u.subscription_status] || u.subscription_status, u.subscription_status === 'active' ? 'success' : (u.subscription_status === 'past_due' ? 'danger' : 'warning')) + '</td>' +
+      '<td>' + UI.chip(trialLabel(u), stTone) + '</td>' +
       '<td>' + UI.chip(u.estado_cuenta === 'activo' ? 'Activo' : 'Suspendido', u.estado_cuenta === 'activo' ? 'success' : 'danger') + '</td>' +
       '<td class="muted small">' + (u.ultima_conexion ? UI.fmtDate(u.ultima_conexion) : '—') + '</td>' +
       '<td><div class="row-actions">' +
+      '<button class="icon-btn sm" data-ver="' + u.user_id + '" title="Ver datos / auditar">' + UI.icon('eye', 14) + '</button>' +
       (protegido
         ? '<span class="muted small">Acceso total</span>'
         : '<button class="icon-btn sm" data-trial="' + u.user_id + '" title="Extender prueba 7 días">' + UI.icon('calendar-plus', 14) + '</button>' +
@@ -295,17 +368,18 @@
   async function tabMetricas(body) {
     const m = await G.api('POST', '/rpc/metricas');
     const porPlan = (m.por_plan && typeof m.por_plan === 'object') ? m.por_plan : {};
+    const ordenPlanes = ['Free', 'Pro', 'Pyme', 'Empresa'];
     body.innerHTML =
       '<section class="kpi-grid kpi-4">' +
-      kpi('wallet', 'success', 'MRR (mensual)', UI.fmtMoney(m.mrr || 0), 'Ingresos recurrentes') +
+      kpi('wallet', 'success', 'MRR (mensual)', UI.fmtMoney(m.mrr || 0), 'Ingresos recurrentes mensuales') +
+      kpi('trending-up', 'violet', 'ARR (anual)', UI.fmtMoney(m.arr || 0), 'Ingresos recurrentes anuales') +
       kpi('users', 'info', 'Usuarios', String(m.usuarios || 0), (m.activos || 0) + ' activos') +
-      kpi('hard-hat', 'violet', 'Obras totales', String(m.obras || 0), 'En todo el sistema') +
-      kpi('alert-triangle', (m.past_due || 0) ? 'danger' : 'neutral', 'En mora', String(m.past_due || 0), 'Cuentas suspendidas o vencidas') +
+      kpi('hard-hat', 'warning', 'Obras totales', String(m.obras || 0), 'En todo el sistema') +
       '</section>' +
       '<div class="card">' +
-      '<div class="card-head"><div><h3>Usuarios por plan</h3><p class="muted">Distribución actual</p></div></div>' +
+      '<div class="card-head"><div><h3>Distribución de planes activos</h3><p class="muted">Free · Pro · Pyme · Empresa</p></div></div>' +
       '<div class="stack">' +
-      Object.keys(porPlan).map(k => '<div class="split-row"><strong>' + UI.escapeHtml(k) + '</strong><b>' + porPlan[k] + '</b></div>').join('') +
+      ordenPlanes.map(k => '<div class="split-row"><strong>' + k + '</strong><b>' + (porPlan[k] != null ? porPlan[k] : 0) + ' usuarios</b></div>').join('') +
       '</div></div>';
   }
 

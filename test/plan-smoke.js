@@ -48,15 +48,21 @@ function assert(cond, msg) { if (!cond) throw new Error(msg); }
     await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent('u-gestor@test.com'), { plan_id: 'pro' });
     await P.load();
     assert(!P.wouldExceed('obras'), 'plan pro no excede con 1 obra');
+    /* subir datos del gestor a la nube para probar "ver datos" como admin */
+    await G.sync.push(G.store.data);
     console.log('límites OK · free bloquea la 2ª obra, pro no');
 
-    /* 3) Auditoría + métricas (admin) */
+    /* 3) Auditoría + métricas + "ver datos" (admin) */
     await A.login('admin@test.com', 'secreto123');
     await P.load();
     await P.log('prueba', 'acción de prueba');
     const m = await G.api('POST', '/rpc/metricas');
     assert(typeof m.obras === 'number' && typeof m.usuarios === 'number', 'metricas() inválida');
-    console.log('métricas + auditoría OK · usuarios=' + m.usuarios + ' · obras=' + m.obras);
+    assert(typeof m.arr === 'number' && typeof m.mrr === 'number', 'metricas sin MRR/ARR');
+    assert(Object.keys(m.por_plan).length === 4, 'por_plan debe tener los 4 planes');
+    const gd = await G.api('GET', '/app_data?select=data&user_id=eq.' + encodeURIComponent('u-gestor@test.com') + '&limit=1');
+    assert(gd && gd[0] && gd[0].data && gd[0].data.works && gd[0].data.works.length === 1, 'admin no pudo leer datos del cliente');
+    console.log('métricas MRR/ARR + 4 planes + ver datos OK · usuarios=' + m.usuarios + ' · obras=' + m.obras);
 
     /* 4) Invitación pre-asignada + vinculación automática */
     await G.api('POST', '/invitaciones', { email: 'nuevo@test.com', rol: 'gestor_obra', plan_id: 'pyme', empresa: 'Nueva SA' });

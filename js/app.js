@@ -59,6 +59,8 @@
     document.title = route.title + ' · GADU Construye · Tu gestión perfecta';
     document.getElementById('pageTitle').textContent = route.title;
     document.getElementById('pageSubtitle').textContent = route.subtitle || '';
+    /* En el panel de administración se ocultan las acciones operativas (+/ingresos/gastos/obras) */
+    document.body.classList.toggle('on-admin', route.key === 'admin');
     document.querySelectorAll('.nav-link').forEach(a => {
       const r = a.getAttribute('data-route');
       if (r) a.classList.toggle('active', r === route.key || (route.key === 'obra' && r === 'obras') || (route.key === 'empleado' && r === 'empleados'));
