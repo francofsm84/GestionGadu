@@ -61,6 +61,10 @@
     }
     s += ' · ' + works.length + ' obras (' + activas + ' activas), ' + clientes + ' clientes, ' + empleados + ' empleados, ' + presupuestos + ' presupuestos.';
     if (works.length) s += ' Obras: ' + works.slice(0, 8).map(w => w.name).join(', ') + '.';
+    const emps = d.employees || [];
+    if (emps.length) s += ' Empleados: ' + emps.slice(0, 12).map(e => ((e.firstName || '') + ' ' + (e.lastName || '')).trim()).join(', ') + '.';
+    const clis = (d.contacts || []).filter(c => c.type === 'cliente');
+    if (clis.length) s += ' Clientes: ' + clis.slice(0, 12).map(c => c.name).join(', ') + '.';
     return s;
   }
 
@@ -86,7 +90,7 @@
     return div;
   }
 
-  let host = null, log = null, input = null, busy = false, builtMode = null, rec = null, listening = false;
+  let host = null, log = null, input = null, busy = false, builtMode = null, rec = null, listening = false, voiceOn = true;
 
   function build() {
     if (document.getElementById('aiRoot')) return;
@@ -99,6 +103,7 @@
       '<div class="ai-panel" id="aiPanel" hidden>' +
       '<div class="ai-head"><span class="ai-head-logo"><img src="logo%20gadu%20blanco%20asistente%20ia.png" alt=""></span>' +
       '<div class="ai-head-txt"><strong>Asistente GADU</strong><span class="muted small" id="aiSub">Te guío paso a paso</span></div>' +
+      '<button class="icon-btn sm" id="aiVoice" title="Silenciar voz">🔊</button>' +
       '<button class="icon-btn sm" id="aiClose">' + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>' + '</button></div>' +
       '<div class="ai-log" id="aiLog"></div>' +
       '<div class="ai-foot"><button class="ai-mic" id="aiMic" title="Dictar por voz" aria-label="Dictar por voz">🎙️</button>' +
@@ -112,6 +117,7 @@
     document.getElementById('aiClose').addEventListener('click', () => setOpen(false));
     document.getElementById('aiSend').addEventListener('click', send);
     document.getElementById('aiMic').addEventListener('click', toggleMic);
+    document.getElementById('aiVoice').addEventListener('click', toggleVoice);
     input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
     addGreeting();
     window.addEventListener('hashchange', refreshGreeting);
@@ -139,8 +145,44 @@
     rec.onerror = (e) => {
       if (G.ui && G.ui.toast) G.ui.toast('Error de dictado: ' + (e.error || 'desconocido'), 'error');
     };
-    rec.onend = () => { listening = false; mic.classList.remove('ai-mic-on'); };
+    rec.onend = () => {
+      listening = false;
+      mic.classList.remove('ai-mic-on');
+      if (input.value.trim()) send();   // al terminar de hablar, envía automáticamente
+    };
     try { rec.start(); } catch (e) { listening = false; mic.classList.remove('ai-mic-on'); }
+  }
+
+  /* Texto a voz (Text-to-Speech) */
+  function speak(text) {
+    if (!voiceOn || !text) return;
+    try {
+      if (!window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+      const clean = String(text)
+        .replace(/\[\[accion:[^\]]+\]\]/g, '')
+        .replace(/\*\*(.+?)\*\*/g, '$1')
+        .replace(/<[^>]+>/g, '')
+        .replace(/[#*_`]/g, '')
+        .trim();
+      if (!clean) return;
+      const u = new SpeechSynthesisUtterance(clean);
+      u.lang = 'es-ES';
+      u.rate = 1.0;
+      u.pitch = 1.0;
+      const voices = window.speechSynthesis.getVoices();
+      const es = voices.find(v => /es[-_]AR/i.test(v.lang)) || voices.find(v => /es[-_]ES/i.test(v.lang)) || voices.find(v => /^es/i.test(v.lang));
+      if (es) u.voice = es;
+      window.speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+
+  function toggleVoice() {
+    voiceOn = !voiceOn;
+    const b = document.getElementById('aiVoice');
+    b.textContent = voiceOn ? '🔊' : '🔇';
+    b.title = voiceOn ? 'Silenciar voz' : 'Activar voz';
+    if (!voiceOn) { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {} }
   }
 
   function setOpen(v) {
@@ -213,6 +255,7 @@
       .then(r => r.json())
       .then(data => {
         pend.innerHTML = renderText(data.reply || data.error || 'Sin respuesta.');
+        speak(data.reply || data.error || '');
         const acts = parseActions(data.reply || '');
         if (acts.length) {
           const wrap = document.createElement('div');

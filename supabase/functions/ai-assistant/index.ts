@@ -38,7 +38,8 @@ Reglas estrictas:
 - Respondé SIEMPRE en español, con frases cortas y claras.
 - Decile DÓNDE cargar cada cosa (módulo → acción) e incluí SIEMPRE el botón interactivo [[accion:CLAVE|Texto]] para abrir el formulario sin salir del chat.
 - Usá el CONTEXTO de la cuenta (plan, días de prueba, cantidad de obras/clientes/empleados/presupuestos). No inventes datos.
-- No uses más de 2 acciones por respuesta y no repitas la misma.`;
+- No uses más de 2 acciones por respuesta y no repitas la misma.
+- Si el usuario pide registrar una jornada/asistencia (ej. "anotá a Juan en la obra X"), usá la herramienta "registrar_jornada" SOLO cuando el empleado y la obra sean inequívocos (un único candidato en el contexto). Si hay nombres repetidos o faltan datos, NO adivines: respondé con una pregunta aclaratoria (ej. "Encontré a dos empleados: Juan Pérez y Juan Maldonado. ¿A cuál te referís y en qué obra?").`;
 
 const ADMIN_PROMPT = `Sos el "COO Virtual" de GADU, el copiloto de gestión de la plataforma SaaS para el Super Administrador.
 
@@ -63,6 +64,69 @@ function fallbackText() {
   return "😅 Estoy teniendo un pico de consultas y no pude responder ahora. Probá de nuevo en unos segundos.\n\nMientras tanto podés:\n- Cargar una [[accion:new-obra|Nueva Obra]]\n- Ver tu [[accion:dashboard|Panel general]]\n- O escribirnos por WhatsApp al +54 9 3547 469000.";
 }
 
+/* Herramientas disponibles para el agente (function calling) */
+function tools() {
+  return [{
+    functionDeclarations: [{
+      name: "registrar_jornada",
+      description: "Registra la jornada laboral de un empleado en una obra para un día (asistencia). Solo usar cuando el usuario dio el nombre del empleado Y de la obra de forma clara; si hay ambigüedad, NO llamar y preguntar.",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          employeeName: { type: "STRING", description: "Nombre del empleado tal como lo dio el usuario" },
+          workName: { type: "STRING", description: "Nombre de la obra" },
+          date: { type: "STRING", description: "Fecha YYYY-MM-DD (por defecto hoy)" },
+          hours: { type: "NUMBER", description: "Horas trabajadas (por defecto 8)" },
+        },
+        required: ["employeeName", "workName"],
+      },
+    }],
+  }];
+}
+
+async function ejecutarJornada(args, supabaseUrl, anonKey, auth, userId) {
+  const empName = String(args.employeeName || "").toLowerCase().trim();
+  const workName = String(args.workName || "").toLowerCase().trim();
+  const date = args.date || new Date().toISOString().slice(0, 10);
+  const hours = Number(args.hours) || 8;
+
+  const adRes = await fetch(`${supabaseUrl}/rest/v1/app_data?select=data&user_id=eq.${userId}`, {
+    headers: { apikey: anonKey, Authorization: auth },
+  });
+  if (!adRes.ok) return { ok: false, error: `no pude leer los datos (${adRes.status})` };
+  const rows = await adRes.json();
+  const data = (rows && rows[0] && rows[0].data) || {};
+  const employees = data.employees || [];
+  const works = data.works || [];
+
+  const matchEmp = employees.filter(e => {
+    const full = ((e.firstName || "") + " " + (e.lastName || "")).toLowerCase().trim();
+    return full === empName || (e.firstName || "").toLowerCase().trim() === empName || (e.lastName || "").toLowerCase().trim() === empName;
+  });
+  const matchWork = works.filter(w => (w.name || "").toLowerCase().trim() === workName);
+
+  if (matchEmp.length !== 1) {
+    return { ok: false, ambiguedad: true, motivo: "empleado", opciones: employees.map(e => ((e.firstName || "") + " " + (e.lastName || "")).trim()).slice(0, 10) };
+  }
+  if (matchWork.length !== 1) {
+    return { ok: false, ambiguedad: true, motivo: "obra", opciones: works.map(w => w.name || "").slice(0, 10) };
+  }
+
+  const emp = matchEmp[0];
+  const work = matchWork[0];
+  const attendance = data.attendance || [];
+  attendance.push({ id: crypto.randomUUID(), employeeId: emp.id, date, status: "presente", hours: [{ workId: work.id, hours }], notes: "" });
+  data.attendance = attendance;
+
+  const wr = await fetch(`${supabaseUrl}/rest/v1/app_data?on_conflict=user_id`, {
+    method: "POST",
+    headers: { apikey: anonKey, Authorization: auth, "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id: userId, data, updated_at: new Date().toISOString() }),
+  });
+  if (!wr.ok) { const eb = await wr.text(); return { ok: false, error: `no pude guardar (${wr.status}: ${eb.slice(0, 200)})` }; }
+  return { ok: true, empleado: emp.firstName + " " + emp.lastName, obra: work.name, date, hours };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -83,6 +147,8 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const user = await userRes.json();
+    const userId = user.id;
 
     // Modo COO Virtual: enriquecer el contexto con métricas reales del SaaS
     let finalContext = context || "";
@@ -121,38 +187,67 @@ serve(async (req) => {
       "gemini-flash-latest",
     ])];
 
+    const callGemini = async (modelo, contents) => {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`;
+      const aiRes = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents,
+          tools: tools(),
+          generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
+        }),
+      });
+      if (!aiRes.ok) {
+        const errBody = await aiRes.text();
+        console.error(`[ai-assistant] ${modelo} falló (${aiRes.status}): ${errBody.slice(0, 400)}`);
+        return null;
+      }
+      return await aiRes.json();
+    };
+
     let reply = "";
     let ultimoError = "";
+    let functionCall = null;
+
+    // 1) Primera pasada: texto o llamada a herramienta
     for (const modelo of modelos) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`;
       try {
-        const aiRes = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-          body: JSON.stringify({
-            system_instruction: { parts: [{ text: systemPrompt }] },
-            contents: [{ role: "user", parts: [{ text: userText }] }],
-            generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
-          }),
-        });
-        if (aiRes.ok) {
-          const data = await aiRes.json();
-          const t = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (t) { reply = t; console.log(`[ai-assistant] respondió con ${modelo}`); break; }
-          ultimoError = "respuesta vacía";
-        } else {
-          const errBody = await aiRes.text();
-          ultimoError = `${aiRes.status} ${errBody.slice(0, 300)}`;
-          console.error(`[ai-assistant] ${modelo} falló (${aiRes.status}): ${errBody.slice(0, 400)}`);
-        }
+        const data = await callGemini(modelo, [{ role: "user", parts: [{ text: userText }] }]);
+        if (!data) { ultimoError = "sin respuesta"; continue; }
+        const part = data?.candidates?.[0]?.content?.parts?.[0];
+        if (part?.functionCall) { functionCall = part.functionCall; break; }
+        const t = part?.text;
+        if (t) { reply = t; console.log(`[ai-assistant] respondió con ${modelo}`); break; }
+      } catch (e) { ultimoError = String(e); console.error(`[ai-assistant] ${modelo} excepción:`, e); }
+    }
+
+    // 2) Si hay llamada a herramienta, ejecutarla y confirmar en lenguaje natural
+    if (functionCall && functionCall.name === "registrar_jornada") {
+      let toolResult;
+      try {
+        toolResult = await ejecutarJornada(functionCall.args || {}, supabaseUrl, anonKey, auth, userId);
+        console.log("[ai-assistant] registrar_jornada →", JSON.stringify(toolResult));
       } catch (e) {
-        ultimoError = String(e);
-        console.error(`[ai-assistant] ${modelo} lanzó excepción:`, e);
+        toolResult = { ok: false, error: String(e) };
+        console.error("[ai-assistant] error ejecutando jornada:", e);
+      }
+      for (const modelo of modelos) {
+        try {
+          const data = await callGemini(modelo, [
+            { role: "user", parts: [{ text: userText }] },
+            { role: "model", parts: [{ functionCall }] },
+            { role: "function", parts: [{ functionResponse: { name: "registrar_jornada", response: toolResult } }] },
+          ]);
+          const t = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (t) { reply = t; console.log(`[ai-assistant] confirmó con ${modelo}`); break; }
+        } catch (e) { console.error(`[ai-assistant] ${modelo} excepción confirmación:`, e); }
       }
     }
 
     if (!reply) {
-      console.error("[ai-assistant] TODOS los modelos fallaron. Último error:", ultimoError);
+      console.error("[ai-assistant] sin respuesta final. Último error:", ultimoError);
       return new Response(JSON.stringify({ reply: fallbackText() }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
