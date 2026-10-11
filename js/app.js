@@ -688,6 +688,9 @@
     } catch (e) { /* sin conexión: la app sigue en modo local */ }
     finally { if (spin) spin.hidden = true; }
 
+    /* Asistente de IA (chat flotante) */
+    try { G.ai.init(); } catch (e) {}
+
     /* Onboarding obligatorio para usuarios nuevos en Plan Free */
     if (G.plan.needsOnboarding()) { renderOnboarding(); return; }
 
