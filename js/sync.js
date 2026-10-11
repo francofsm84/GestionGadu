@@ -22,16 +22,23 @@
 
   function notAuthed(res) { return res.status === 401 || res.status === 403; }
 
+  /* fetch con timeout: evita que la UI quede "cargando" para siempre */
+  function fetchT(url, opts, ms) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms || 12000);
+    return fetch(url, Object.assign({}, opts, { signal: ctrl.signal })).finally(() => clearTimeout(t));
+  }
+
   /* Prueba de conexión */
   async function test() {
-    const res = await fetch(baseUrl() + '/app_data?select=id&limit=1', { headers: headers() });
+    const res = await fetchT(baseUrl() + '/app_data?select=id&limit=1', { headers: headers() });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     return true;
   }
 
   /* Subir los datos actuales (upsert de la fila del usuario) */
   async function push(data) {
-    const res = await fetch(baseUrl() + '/app_data?on_conflict=user_id', {
+    const res = await fetchT(baseUrl() + '/app_data?on_conflict=user_id', {
       method: 'POST',
       headers: Object.assign(headers(), { 'Prefer': 'resolution=merge-duplicates' }),
       body: JSON.stringify({ data: data, updated_at: new Date().toISOString() }),
@@ -50,7 +57,7 @@
 
   /* Descargar los datos del usuario desde la nube (null si no hay) */
   async function pull() {
-    const res = await fetch(baseUrl() + '/app_data?select=data,updated_at&limit=1', { headers: headers() });
+    const res = await fetchT(baseUrl() + '/app_data?select=data,updated_at&limit=1', { headers: headers() });
     if (notAuthed(res)) {
       const r = await G.auth.refresh();
       if (r) return pull();

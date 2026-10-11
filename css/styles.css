@@ -163,9 +163,9 @@ body.sb-collapsed .main { margin-left: var(--sidebar-w-min); }
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
 .quick-actions { display: flex; gap: 8px; }
 .btn-more { display: none; }
-.menu-wrap { position: relative; }
+.menu-wrap { position: static; }
 .menu {
-  position: absolute; top: calc(100% + 8px); right: 0; min-width: 215px;
+  position: absolute; top: calc(100% + 8px); right: 12px; min-width: 215px;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
   box-shadow: var(--shadow); padding: 6px; z-index: 70;
 }

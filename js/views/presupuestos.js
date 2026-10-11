@@ -19,11 +19,13 @@
   };
 
   function clientOptions(sel) {
-    return S.data.contacts.filter(c => c.type === 'cliente').slice().sort((a, b) => a.name.localeCompare(b.name))
-      .map(c => '<option value="' + c.id + '"' + (sel === c.id ? ' selected' : '') + '>' + UI.escapeHtml(c.name) + '</option>').join('');
+    return '<option value="__new__">➕ Agregar nuevo cliente…</option>' +
+      S.data.contacts.filter(c => c.type === 'cliente').slice().sort((a, b) => a.name.localeCompare(b.name))
+        .map(c => '<option value="' + c.id + '"' + (sel === c.id ? ' selected' : '') + '>' + UI.escapeHtml(c.name) + '</option>').join('');
   }
   function workOptions(sel) {
-    return S.data.works.map(w => '<option value="' + w.id + '"' + (sel === w.id ? ' selected' : '') + '>' + UI.escapeHtml(w.code + ' · ' + w.name) + '</option>').join('');
+    return '<option value="__new__">➕ Crear nueva obra…</option>' +
+      S.data.works.map(w => '<option value="' + w.id + '"' + (sel === w.id ? ' selected' : '') + '>' + UI.escapeHtml(w.code + ' · ' + w.name) + '</option>').join('');
   }
 
   function filtered() {
@@ -223,6 +225,26 @@
         clientId: fClient.value || null,
         onSaved: nw => { fWork.innerHTML = workOptions(nw.id); },
       });
+    });
+    /* Opción directa dentro del selector: "➕ Crear/Agregar…" */
+    fClient.addEventListener('change', () => {
+      if (fClient.value === '__new__') {
+        const prev = (b ? b.clientId : (prefill.clientId || '')) || '';
+        fClient.value = prev;
+        G.actions.client(null, nuevo => {
+          fClient.innerHTML = clientOptions(nuevo ? nuevo.id : prev);
+        });
+      }
+    });
+    fWork.addEventListener('change', () => {
+      if (fWork.value === '__new__') {
+        const prev = (b ? b.workId : (prefill.workId || '')) || '';
+        fWork.value = prev;
+        G.actions.work(null, {
+          clientId: fClient.value || null,
+          onSaved: nw => { fWork.innerHTML = workOptions(nw.id); },
+        });
+      }
     });
 
     function itemRow(it, i) {

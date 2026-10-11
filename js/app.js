@@ -586,26 +586,27 @@
         renderLogin('login');
       }
 
-      /* Vigilante: si una extensión (traductor/modo oscuro) oculta o vacía la
-         página después del arranque, se muestra un aviso visible en pantalla */
+      /* Vigilante: solo en la pantalla de login, avisa si una extensión oculta la
+         página. No actúa dentro de la app (contenido dinámico) para evitar falsos
+         positivos. El aviso es descartable y no bloquea el menú. */
       (function watchTampering() {
         let checks = 0;
         const iv = setInterval(() => {
           checks++;
-          if (document.querySelector('[data-boot-error]')) { clearInterval(iv); return; }
-          const view = document.getElementById('view');
-          const hayContenido = (view && view.innerHTML.trim().length > 0) || !!document.querySelector('.login-card');
-          if (!hayContenido && checks > 2) {
+          if (document.querySelector('[data-tamper-warn]') || document.querySelector('[data-boot-error]')) { clearInterval(iv); return; }
+          if (!document.body.classList.contains('no-session')) { if (checks > 3) clearInterval(iv); return; }
+          const hayLogin = !!document.querySelector('.login-card');
+          if (!hayLogin && checks > 4) {
             clearInterval(iv);
             const b = document.createElement('div');
             b.setAttribute('data-tamper-warn', '1');
-            b.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:99998;background:#7f1d1d;color:#fff;padding:14px 16px;border-radius:12px;font-family:Arial,sans-serif;font-size:14px;line-height:1.5;box-shadow:0 6px 24px rgba(0,0,0,.5)';
-            b.innerHTML = '<b style="font-size:15px">🔴 GADU detectó que algo ocultó la página.</b><br>' +
-              'Esto lo causan extensiones del navegador (traductor automático o modo oscuro forzado).<br>' +
-              '<b>Probalo en una pestaña privada (Ctrl+Shift+N)</b> o desactivá las extensiones, y la app va a quedar visible.';
+            b.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:99998;background:rgba(127,29,29,.96);color:#fff;padding:10px 12px;border-radius:10px;font-family:Arial,sans-serif;font-size:12.5px;line-height:1.45;box-shadow:0 4px 18px rgba(0,0,0,.4);display:flex;gap:10px;align-items:flex-start';
+            b.innerHTML = '<span style="flex:1"><b>Algo ocultó la pantalla de inicio.</b><br>Probá en una pestaña privada (Ctrl+Shift+N) o desactivá las extensiones del navegador.</span>' +
+              '<button type="button" style="background:none;border:none;color:#fff;font-size:18px;line-height:1;cursor:pointer;padding:0 2px" title="Cerrar">×</button>';
+            b.querySelector('button').addEventListener('click', () => b.remove());
             document.body.appendChild(b);
           }
-          if (checks > 25) clearInterval(iv);
+          if (checks > 30) clearInterval(iv);
         }, 800);
       })();
     } catch (err) {

@@ -49,8 +49,15 @@
     return h;
   }
 
+  /* fetch con timeout (evita que login/sincronización queden colgados) */
+  function fetchT(url, opts, ms) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms || 10000);
+    return fetch(url, Object.assign({}, opts, { signal: ctrl.signal })).finally(() => clearTimeout(t));
+  }
+
   async function signup(email, password) {
-    const res = await fetch(SUPABASE_URL + '/auth/v1/signup', {
+    const res = await fetchT(SUPABASE_URL + '/auth/v1/signup', {
       method: 'POST',
       headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
@@ -69,7 +76,7 @@
   }
 
   async function login(email, password) {
-    const res = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=password', {
+    const res = await fetchT(SUPABASE_URL + '/auth/v1/token?grant_type=password', {
       method: 'POST',
       headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
@@ -89,7 +96,7 @@
   async function refresh() {
     if (!session || !session.refreshToken) return null;
     try {
-      const res = await fetch(SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token', {
+      const res = await fetchT(SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token', {
         method: 'POST',
         headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({ refresh_token: session.refreshToken }),
@@ -113,7 +120,7 @@
 
   /* Perfil (plan y vencimientos) del usuario actual */
   async function getProfile() {
-    const res = await fetch(SUPABASE_URL + '/rest/v1/profiles?select=plan,trial_end,paid_until,email&limit=1', {
+    const res = await fetchT(SUPABASE_URL + '/rest/v1/profiles?select=plan,trial_end,paid_until,email&limit=1', {
       headers: headers(),
     });
     if (!res.ok) {
