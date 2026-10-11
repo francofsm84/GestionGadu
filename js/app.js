@@ -489,6 +489,17 @@
 
   /* ---------- Arranque ---------- */
   document.addEventListener('DOMContentLoaded', () => {
+    /* Soporte: abrir con ?reset=1 limpia los datos locales de GADU
+       (útil para empezar de cero en un dispositivo con datos viejos) */
+    try {
+      const qp = new URLSearchParams(location.search);
+      if (qp.get('reset') === '1') {
+        localStorage.removeItem('gadu_auth_v1');
+        Object.keys(localStorage).filter(k => k.indexOf('gadu_data_v1') === 0).forEach(k => localStorage.removeItem(k));
+        location.replace(location.pathname + location.hash);
+        return;
+      }
+    } catch (e) {}
     document.querySelectorAll('[data-icon]').forEach(el => {
       const size = el.getAttribute('data-size');
       el.innerHTML = UI.icon(el.getAttribute('data-icon'), size ? +size : 18);
