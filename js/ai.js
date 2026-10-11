@@ -219,10 +219,86 @@
     if (!voiceOn) { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {} }
   }
 
+  /* Persistencia real: inserta en la capa de datos local y sincroniza a Supabase */
+  function saveViaStore(mod, c) {
+    try {
+      const S = G.store;
+      const d = S.data;
+      const today = (S.todayISO && S.todayISO()) || new Date().toISOString().slice(0, 10);
+      const findId = (list, name, keyFn) => {
+        if (!name) return null;
+        const n = String(name).toLowerCase().trim();
+        const hit = (list || []).find(x => keyFn(x).toLowerCase().trim() === n);
+        return hit ? hit.id : null;
+      };
+      if (mod === 'gasto') {
+        const amount = Number(c.monto);
+        if (!(amount > 0)) return null;
+        const desc = c.concepto || c.categoria || 'Gasto';
+        const cat = c.categoria || 'General';
+        const workId = c.obra ? findId(d.works, c.obra, x => x.name) : null;
+        S.add('expenses', {
+          type: c.obra ? 'obra' : 'general', workId: workId || null, date: today, amount,
+          category: cat, providerId: null, employeeId: null, expenseKind: null,
+          description: desc, invoiceNumber: '', paymentMethod: (S.METODOS && S.METODOS[0]) || 'Efectivo',
+        });
+        return { ok: true, label: 'gasto de $' + amount + ' (' + desc + ')' };
+      }
+      if (mod === 'cliente' || mod === 'socio') {
+        const name = c.nombre || '';
+        if (!name) return null;
+        const tipo = mod === 'socio' ? 'socio' : 'cliente';
+        S.add('contacts', {
+          type: tipo, name,
+          nombre: name.split(/\s+/)[0] || name,
+          apellido: name.split(/\s+/).slice(1).join(' '),
+          company: '', phone: c.telefono || '', whatsapp: '', email: '',
+          address: c.direccion || '', notes: '', photo: null,
+        });
+        return { ok: true, label: (tipo === 'socio' ? 'socio ' : 'cliente ') + name };
+      }
+      if (mod === 'empleado') {
+        const full = c.nombre || '';
+        const fn = c.apellido ? c.nombre : (full.split(/\s+/)[0] || '');
+        const ln = c.apellido || full.split(/\s+/).slice(1).join(' ');
+        if (!fn) return null;
+        if (G.plan && G.plan.checkLimit && G.plan.checkLimit('empleados') === false) return null;
+        S.add('employees', { firstName: fn, lastName: ln, phone: c.telefono || '', paymentData: '', hourlyRate: 0, active: true, notes: '', photo: null });
+        return { ok: true, label: 'empleado ' + (fn + ' ' + ln).trim() };
+      }
+      if (mod === 'obra') {
+        const name = c.nombre || '';
+        if (!name) return null;
+        if (G.plan && G.plan.checkLimit && G.plan.checkLimit('obras') === false) return null;
+        const clientId = c.cliente ? findId((d.contacts || []).filter(x => x.type === 'cliente'), c.cliente, x => x.name) : null;
+        S.add('works', { name, code: (S.nextCode ? S.nextCode('OB', 'works') : ''), clientId: clientId || null, location: '', status: 'activa', budgetTotal: 0, advanceFisico: 0, startDate: today, endDate: '', description: '' });
+        return { ok: true, label: 'obra ' + name };
+      }
+      if (mod === 'ingreso') {
+        const amount = Number(c.monto);
+        if (!(amount > 0)) return null;
+        const workId = c.obra ? findId(d.works, c.obra, x => x.name) : null;
+        if (!workId) return null;   // sin obra no se puede guardar: abrir formulario
+        S.add('incomes', { workId, clientId: null, date: today, amount, concept: c.concepto || 'Cobro', incomeKind: 'pago', method: (S.METODOS && S.METODOS[0]) || 'Efectivo', reference: '', notes: '' });
+        return { ok: true, label: 'ingreso de $' + amount + ' en ' + c.obra };
+      }
+    } catch (e) { return null; }
+    return null;
+  }
+
   /* Auto-apertura de modales + pre-completado de campos detectados por la IA */
   function execFormAction(action) {
     const mod = (action && action.modulo) || '';
     const c = (action && action.campos) || {};
+
+    /* 1) Si hay datos suficientes, GUARDAR directo y sincronizar */
+    const saved = saveViaStore(mod, c);
+    if (saved && saved.ok) {
+      try { if (G.sync && G.sync.push) G.sync.push(G.store.data); } catch (e) {}
+      return { saved: true, label: saved.label };
+    }
+
+    /* 2) Sino, abrir el modal y pre-completar */
     const d = G.store.data || {};
     const setVal = (sel, val) => {
       if (val === undefined || val === null || val === '') return;
@@ -274,6 +350,7 @@
       }
       setOpen(false);   // contraer el chat para dejar ver el formulario (móvil)
     } catch (e) { /* si algo falla, el modal ya quedó abierto */ }
+    return { saved: false };
   }
 
   function setOpen(v) {
@@ -384,9 +461,16 @@
     })
       .then(r => r.json())
       .then(data => {
-        pend.innerHTML = renderText(data.reply || data.error || 'Sin respuesta.');
-        if (data.action) execFormAction(data.action);
-        speak(data.reply || data.error || '');
+        const replyText = data.reply || data.error || 'Sin respuesta.';
+        const res = data.action ? execFormAction(data.action) : null;
+        if (res && res.saved) {
+          const msg = '✅ Listo, guardé ' + res.label;
+          pend.innerHTML = renderText(msg);
+          speak(msg);
+        } else {
+          pend.innerHTML = renderText(replyText);
+          speak(replyText);
+        }
         const acts = parseActions(data.reply || '');
         if (acts.length) {
           const wrap = document.createElement('div');
