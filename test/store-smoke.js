@@ -109,6 +109,17 @@ S.reload();
 if (JSON.stringify(S.data) !== antes) throw new Error('fotos no sobreviven al guardado/carga');
 console.log('fotos OK · persisten en contacto y empleado tras guardar/cargar');
 
+// Seguros y vencimientos: semáforo (rojo/amarillo/verde)
+if (!Array.isArray(S.data.seguros) || S.data.seguros.length < 3) throw new Error('seed sin seguros');
+if (!S.data.seguros.some(s => S.seguroEstado(s).key === 'vencido')) throw new Error('debería haber un seguro vencido');
+if (!S.data.seguros.some(s => S.seguroEstado(s).key === 'por-vencer')) throw new Error('debería haber un seguro por vencer (≤7 días)');
+if (!S.data.seguros.some(s => S.seguroEstado(s).key === 'al-dia')) throw new Error('debería haber un seguro al día');
+S.add('seguros', { tipo: 'ART', compania: 'Prueba Seguro', numeroPoliza: '', costo: 1000, fechaVencimiento: S.todayISO(), estado: 'activo', obraId: null, createdAt: S.todayISO(), updatedAt: S.todayISO() });
+const sg = S.data.seguros.find(x => x.compania === 'Prueba Seguro');
+if (!sg || S.seguroEstado(sg).key !== 'hoy') throw new Error('seguro que vence hoy debe estar en rojo');
+if (typeof S.totals().seguros !== 'number') throw new Error('totals sin costo de seguros');
+console.log('seguros OK · semáforo vencido/por-vencer/al-día/hoy + CRUD + total');
+
 // "Cobrado hasta una fecha": con fecha vieja no debe contar pagos recientes
 const esOld = S.employeeStats('e1', S.daysAgo(30));
 if (esOld.paidTotal !== 0) throw new Error('upTo no filtra pagos, got ' + esOld.paidTotal);

@@ -186,6 +186,24 @@
       '</section>' +
 
       '<section class="card">' +
+      '<div class="card-head">' +
+      '<div><h3>🛡️ Seguros · Próximos vencimientos</h3><p class="muted">Rojo: vencido · Amarillo: 7 días o menos · Verde: al día</p></div>' +
+      '<a class="link-btn" href="#/seguros">Gestionar ' + UI.icon('chevron-right', 14) + '</a>' +
+      '</div>' +
+      '<div class="stack">' +
+      (S.data.seguros.slice().sort((a, b) => S.seguroDaysLeft(a) - S.seguroDaysLeft(b)).slice(0, 5).map(s => {
+        const st = S.seguroEstado(s);
+        const color = st.tone === 'danger' ? 'var(--danger)' : (st.tone === 'warning' ? 'var(--warning)' : 'var(--success)');
+        return '<a class="split-row" href="#/seguros">' +
+          '<div class="split-row-main"><span class="dot" style="background:' + color + '"></span>' +
+          '<strong>' + UI.escapeHtml(s.tipo) + ' · ' + UI.escapeHtml(s.compania) + '</strong>' +
+          '<span class="muted small">vence ' + UI.fmtDate(s.fechaVencimiento) + '</span></div>' +
+          '<div class="split-row-end">' + UI.chip(st.label, st.tone) + '</div>' +
+          '</a>';
+      }).join('') || '<p class="form-hint">Sin seguros registrados. <a href="#/seguros">Cargá la primera póliza</a>.</p>') +
+      '</div></section>' +
+
+      '<section class="card">' +
       '<div class="card-head"><div><h3>Últimos movimientos</h3><p class="muted">Ingresos y gastos recientes</p></div></div>' +
       '<div class="table-wrap"><table class="data-table">' +
       '<thead><tr><th>Fecha</th><th>Tipo</th><th>Obra / Destino</th><th>Concepto</th><th class="num">Monto</th></tr></thead>' +

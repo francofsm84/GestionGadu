@@ -84,6 +84,12 @@
     const over = S.distributionSummary().overdue.length;
     const b2 = document.getElementById('badgeLiquidaciones');
     if (b2) { b2.textContent = over; b2.hidden = !over; }
+    const segAlerta = S.data.seguros.filter(s => {
+      const st = S.seguroEstado(s);
+      return st.key === 'vencido' || st.key === 'hoy' || st.key === 'por-vencer';
+    }).length;
+    const b3 = document.getElementById('badgeSeguros');
+    if (b3) { b3.textContent = segAlerta; b3.hidden = !segAlerta; }
   }
 
   /* ---------- Sidebar ---------- */

@@ -163,7 +163,7 @@
             '</select></div>'
           : '') +
         '<div class="field"><label>Fecha</label><input class="input" type="date" id="fDate" value="' + (exp ? exp.date : S.todayISO()) + '"></div>' +
-        '<div class="field"><label>Monto ($) *</label><input class="input" type="number" id="fAmount" min="0" step="100" value="' + (exp ? exp.amount : '') + '" placeholder="0"></div>' +
+        '<div class="field"><label>Monto ($) *</label><input class="input" type="number" id="fAmount" min="0" step="100" value="' + (exp ? exp.amount : (opts.amount || '')) + '" placeholder="0"></div>' +
         '<div class="field"><label>Categoría *</label><select class="select" id="fCat">' +
         catOpts +
         '</select></div>' +
@@ -181,7 +181,7 @@
         '<option value="sueldo"' + (!exp || exp.expenseKind !== 'adelanto' ? ' selected' : '') + '>Sueldo / pago</option>' +
         '<option value="adelanto"' + ((exp && exp.expenseKind === 'adelanto') || (opts.expenseKind === 'adelanto') ? ' selected' : '') + '>Adelanto de dinero</option>' +
         '</select><span class="form-hint">Los adelantos quedan marcados en el legajo del empleado.</span></div>' +
-        '<div class="field span-2"><label>Descripción *</label><input class="input" id="fDesc" value="' + UI.escapeHtml(exp ? exp.description : '') + '" placeholder="Ej.: Compra de cemento, pago de cuadrilla, combustible…"></div>' +
+        '<div class="field span-2"><label>Descripción *</label><input class="input" id="fDesc" value="' + UI.escapeHtml(exp ? exp.description : (opts.description || '')) + '" placeholder="Ej.: Compra de cemento, pago de cuadrilla, combustible…"></div>' +
         '<div class="field"><label>N° de factura / comprobante</label><input class="input" id="fFact" value="' + UI.escapeHtml(exp ? exp.invoiceNumber : '') + '" placeholder="Ej.: F-00452"></div>' +
         '<div class="field"><label>Método de pago</label><select class="select" id="fMethod">' +
         methodOpts +

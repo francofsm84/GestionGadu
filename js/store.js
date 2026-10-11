@@ -13,6 +13,7 @@
   const WORK_STATUS = ['activa', 'pausada', 'finalizada'];
   const ASSET_STATUS = ['operativo', 'en reparación', 'dado de baja'];
   const ASSET_CATS = ['Herramienta manual', 'Herramienta eléctrica', 'Equipo mayor', 'Vehículo', 'Otros'];
+  const SEGURO_TIPOS = ['ART', 'Vehículo', 'VTV', 'Caución', 'Otro'];
   const CONTACT_TYPES = ['cliente', 'proveedor', 'subcontratista', 'socio'];
   const BUDGET_STATUS = ['borrador', 'enviado', 'aprobado', 'rechazado', 'vencido'];
 
@@ -267,9 +268,17 @@
       { id: 'd3', period: monthLabel(daysAhead(18)), date: daysAhead(18), amount: 200000, status: 'pendiente', paidDate: null, method: 'Transferencia', splits: split(200000), notes: '' },
     ];
 
+    const seguros = [
+      { id: 's1', tipo: 'ART', compania: 'Provincia ART', numeroPoliza: 'ART-45821-7', costo: 185000, fechaVencimiento: daysAgo(12), estado: 'vencido', obraId: null, createdAt: daysAgo(180), updatedAt: daysAgo(180) },
+      { id: 's2', tipo: 'Vehículo', compania: 'La Caja Seguros', numeroPoliza: 'AU-778412', costo: 92000, fechaVencimiento: daysAhead(5), estado: 'activo', obraId: 'w2', createdAt: daysAgo(120), updatedAt: daysAgo(120) },
+      { id: 's3', tipo: 'VTV', compania: 'Planta VTV Córdoba', numeroPoliza: 'VTV-2026-114', costo: 28000, fechaVencimiento: daysAhead(45), estado: 'activo', obraId: 'w2', createdAt: daysAgo(300), updatedAt: daysAgo(300) },
+      { id: 's4', tipo: 'Caución', compania: 'Fianzas del Centro', numeroPoliza: 'CAU-033-2026', costo: 340000, fechaVencimiento: daysAhead(20), estado: 'activo', obraId: 'w1', createdAt: daysAgo(60), updatedAt: daysAgo(60) },
+      { id: 's5', tipo: 'Otro', compania: 'Sancor Salud', numeroPoliza: 'SC-9012', costo: 64000, fechaVencimiento: daysAhead(90), estado: 'activo', obraId: null, createdAt: daysAgo(200), updatedAt: daysAgo(200) },
+    ];
+
     return {
       settings: { company: 'GADU Construye', theme: 'dark', reservePercent: 30 },
-      contacts, works, budgets, incomes, expenses, assets, distributions, employees, attendance,
+      contacts, works, budgets, incomes, expenses, assets, distributions, employees, attendance, seguros,
     };
   }
 
@@ -315,7 +324,7 @@
   }
   function normalize() {
     if (!data.settings) data.settings = { company: 'GADU Construye', theme: 'dark', reservePercent: 30 };
-    ['contacts', 'works', 'budgets', 'incomes', 'expenses', 'assets', 'distributions', 'employees', 'attendance'].forEach(k => {
+    ['contacts', 'works', 'budgets', 'incomes', 'expenses', 'assets', 'distributions', 'employees', 'attendance', 'seguros'].forEach(k => {
       if (!Array.isArray(data[k])) data[k] = [];
     });
     /* Migración: ubicación e historial de uso de herramientas */
@@ -326,6 +335,28 @@
     /* Migración: foto/avatar en contactos y empleados */
     data.contacts.forEach(c => { if (c.photo === undefined) c.photo = null; });
     data.employees.forEach(e => { if (e.photo === undefined) e.photo = null; });
+    /* Migración: seguros y vencimientos */
+    data.seguros.forEach(s => {
+      if (s.obraId === undefined) s.obraId = null;
+      if (s.createdAt === undefined) s.createdAt = s.fechaVencimiento || todayISO();
+      if (s.updatedAt === undefined) s.updatedAt = s.fechaVencimiento || todayISO();
+      if (s.estado === undefined) s.estado = (seguroDaysLeft(s) < 0 ? 'vencido' : 'activo');
+    });
+  }
+
+  /* ---------- Seguros y vencimientos: semáforo ---------- */
+  function seguroDaysLeft(s) {
+    if (!s || !s.fechaVencimiento) return 99999;
+    const end = parseISO(s.fechaVencimiento);
+    const today = parseISO(todayISO());
+    return Math.round((end - today) / 86400000);
+  }
+  function seguroEstado(s) {
+    const days = seguroDaysLeft(s);
+    if (days < 0) return { key: 'vencido', tone: 'danger', label: 'Vencido hace ' + (-days) + ' día' + (-days !== 1 ? 's' : ''), days };
+    if (days === 0) return { key: 'hoy', tone: 'danger', label: '¡Vence hoy!', days };
+    if (days <= 7) return { key: 'por-vencer', tone: 'warning', label: 'Vence en ' + days + ' día' + (days !== 1 ? 's' : ''), days };
+    return { key: 'al-dia', tone: 'success', label: 'Al día · ' + days + ' días', days };
   }
   function save() {
     try { localStorage.setItem(key, JSON.stringify(data)); }
@@ -384,6 +415,9 @@
       ],
       distributions: [
         { id: 'md1', period: monthLabel(hoy), date: hoy, amount: 0, status: 'pendiente', paidDate: null, method: 'Transferencia', splits: [{ partnerId: 'mso1', name: 'Socio de ejemplo', amount: 0 }], notes: '' },
+      ],
+      seguros: [
+        { id: 'ms1', tipo: 'ART', compania: 'ART de ejemplo', numeroPoliza: '', costo: 0, fechaVencimiento: daysAhead(30), estado: 'activo', obraId: null, createdAt: hoy, updatedAt: hoy },
       ],
     };
   }
@@ -471,9 +505,10 @@
     const general = sum(data.expenses.filter(x => x.type === 'general').map(x => x.amount));
     const assets = sum(data.assets.map(x => x.cost));
     const maint = sum(data.assets.map(a => sum((a.maintenance || []).map(m => m.cost))));
+    const seguros = sum(data.seguros.map(x => x.costo));
     return {
       incomes, direct, general, expenses: direct + general,
-      net: incomes - direct - general, grossMargin: incomes - direct, assets, maint,
+      net: incomes - direct - general, grossMargin: incomes - direct, assets, maint, seguros,
     };
   }
 
@@ -700,8 +735,9 @@
     employeeById, employeeName, attendanceFor, employeePayments, employeeStats, employeeMonth, employeeAdvances, employeeAdvancesThisMonth, presentToday, employeesPaidThisMonth,
     workClientAdvances, workEmployeeAdvances, workEmployees,
     moveAsset, assetUsage,
-    CATS_OBRA, CATS_GENERAL, METODOS, WORK_STATUS, ASSET_STATUS, ASSET_CATS, CONTACT_TYPES, BUDGET_STATUS,
+    CATS_OBRA, CATS_GENERAL, METODOS, WORK_STATUS, ASSET_STATUS, ASSET_CATS, SEGURO_TIPOS, CONTACT_TYPES, BUDGET_STATUS,
     uid, todayISO, parseISO, monthLabel, daysAgo, daysAhead, sum, KEY, attachUser, hasLocalData,
+    seguroDaysLeft, seguroEstado,
     get data() { return data; },
   };
 })(typeof window !== 'undefined' ? window : globalThis);
