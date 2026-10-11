@@ -185,6 +185,62 @@
     if (!voiceOn) { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {} }
   }
 
+  /* Auto-apertura de modales + pre-completado de campos detectados por la IA */
+  function execFormAction(action) {
+    const mod = (action && action.modulo) || '';
+    const c = (action && action.campos) || {};
+    const d = G.store.data || {};
+    const setVal = (sel, val) => {
+      if (val === undefined || val === null || val === '') return;
+      const el = document.querySelector(sel);
+      if (el) { el.value = val; try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {} }
+    };
+    const findId = (list, name, keyFn) => {
+      if (!name) return '';
+      const n = String(name).toLowerCase().trim();
+      const hit = (list || []).find(x => keyFn(x).toLowerCase().trim() === n);
+      return hit ? hit.id : '';
+    };
+    const clientId = findId((d.contacts || []).filter(x => x.type === 'cliente'), c.cliente, x => x.name);
+    const workId = findId(d.works, c.obra, x => x.name);
+    const empId = findId(d.employees, c.empleado, x => ((x.firstName || '') + ' ' + (x.lastName || '')).trim());
+    const nombre = c.nombre || '';
+
+    try {
+      switch (mod) {
+        case 'empleado': {
+          if (G.actions.employee) G.actions.employee();
+          const fn = c.nombre ? (c.apellido ? c.nombre : String(c.nombre).split(/\s+/)[0]) : '';
+          const ln = c.apellido || (c.nombre ? String(c.nombre).split(/\s+/).slice(1).join(' ') : '');
+          setVal('#fFirst', fn);
+          setVal('#fLast', ln);
+          break;
+        }
+        case 'obra':
+          if (G.actions.work) G.actions.work(null, { clientId });
+          setVal('#fName', nombre);
+          break;
+        case 'cliente':
+          if (G.actions.client) G.actions.client();
+          setVal('#fName', nombre);
+          break;
+        case 'presupuesto':
+          if (G.actions.budget) G.actions.budget(null, { name: nombre || c.concepto || '', clientId, workId });
+          break;
+        case 'gasto':
+          if (G.actions.expense) G.actions.expense({ type: c.obra ? 'obra' : 'general', workId: workId || undefined, amount: c.monto || undefined, description: c.concepto || c.categoria || '', category: c.categoria || undefined });
+          break;
+        case 'ingreso':
+          if (G.actions.income) G.actions.income({ amount: c.monto || undefined, concept: c.concepto || '' });
+          break;
+        case 'jornada':
+          if (G.actions.attendance) G.actions.attendance({ employeeId: empId, workId });
+          if (c.horas) setVal('[data-k="hours"]', c.horas);
+          break;
+      }
+    } catch (e) { /* si algo falla, el modal ya quedó abierto */ }
+  }
+
   function setOpen(v) {
     document.getElementById('aiPanel').hidden = !v;
     if (v) { refreshGreeting(); input.focus(); }
@@ -255,6 +311,7 @@
       .then(r => r.json())
       .then(data => {
         pend.innerHTML = renderText(data.reply || data.error || 'Sin respuesta.');
+        if (data.action) execFormAction(data.action);
         speak(data.reply || data.error || '');
         const acts = parseActions(data.reply || '');
         if (acts.length) {

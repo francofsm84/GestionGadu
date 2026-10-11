@@ -39,7 +39,7 @@ Reglas estrictas:
 - Decile DÓNDE cargar cada cosa (módulo → acción) e incluí SIEMPRE el botón interactivo [[accion:CLAVE|Texto]] para abrir el formulario sin salir del chat.
 - Usá el CONTEXTO de la cuenta (plan, días de prueba, cantidad de obras/clientes/empleados/presupuestos). No inventes datos.
 - No uses más de 2 acciones por respuesta y no repitas la misma.
-- Si el usuario pide registrar una jornada/asistencia (ej. "anotá a Juan en la obra X"), usá la herramienta "registrar_jornada" SOLO cuando el empleado y la obra sean inequívocos (un único candidato en el contexto). Si hay nombres repetidos o faltan datos, NO adivines: respondé con una pregunta aclaratoria (ej. "Encontré a dos empleados: Juan Pérez y Juan Maldonado. ¿A cuál te referís y en qué obra?").`;
+- Si el usuario quiere CREAR o REGISTRAR algo (empleado, obra, cliente, presupuesto, gasto, ingreso o jornada), usá la herramienta "abrir_formulario" con el módulo correcto y los datos que ya dio (nombre, monto, categoria, etc.). Si la información es ambigua o incompleta (nombres repetidos, faltan datos clave), NO adivines: respondé con una pregunta aclaratoria.`;
 
 const ADMIN_PROMPT = `Sos el "COO Virtual" de GADU, el copiloto de gestión de la plataforma SaaS para el Super Administrador.
 
@@ -68,63 +68,32 @@ function fallbackText() {
 function tools() {
   return [{
     functionDeclarations: [{
-      name: "registrar_jornada",
-      description: "Registra la jornada laboral de un empleado en una obra para un día (asistencia). Solo usar cuando el usuario dio el nombre del empleado Y de la obra de forma clara; si hay ambigüedad, NO llamar y preguntar.",
+      name: "abrir_formulario",
+      description: "Abrir el formulario de creación de GADU con los datos que el usuario ya mencionó, para que él termine de completar y confirme. Usar cuando el usuario quiere crear/registrar: empleado, obra, cliente, presupuesto, gasto, ingreso o jornada.",
       parameters: {
         type: "OBJECT",
         properties: {
-          employeeName: { type: "STRING", description: "Nombre del empleado tal como lo dio el usuario" },
-          workName: { type: "STRING", description: "Nombre de la obra" },
-          date: { type: "STRING", description: "Fecha YYYY-MM-DD (por defecto hoy)" },
-          hours: { type: "NUMBER", description: "Horas trabajadas (por defecto 8)" },
+          modulo: { type: "STRING", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada"], description: "Qué formulario abrir" },
+          campos: {
+            type: "OBJECT",
+            description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, cliente, obra, empleado, monto (número), concepto, categoria, horas (número).",
+            properties: {
+              nombre: { type: "STRING" },
+              apellido: { type: "STRING" },
+              cliente: { type: "STRING" },
+              obra: { type: "STRING" },
+              empleado: { type: "STRING" },
+              monto: { type: "NUMBER" },
+              concepto: { type: "STRING" },
+              categoria: { type: "STRING" },
+              horas: { type: "NUMBER" },
+            },
+          },
         },
-        required: ["employeeName", "workName"],
+        required: ["modulo"],
       },
     }],
   }];
-}
-
-async function ejecutarJornada(args, supabaseUrl, anonKey, auth, userId) {
-  const empName = String(args.employeeName || "").toLowerCase().trim();
-  const workName = String(args.workName || "").toLowerCase().trim();
-  const date = args.date || new Date().toISOString().slice(0, 10);
-  const hours = Number(args.hours) || 8;
-
-  const adRes = await fetch(`${supabaseUrl}/rest/v1/app_data?select=data&user_id=eq.${userId}`, {
-    headers: { apikey: anonKey, Authorization: auth },
-  });
-  if (!adRes.ok) return { ok: false, error: `no pude leer los datos (${adRes.status})` };
-  const rows = await adRes.json();
-  const data = (rows && rows[0] && rows[0].data) || {};
-  const employees = data.employees || [];
-  const works = data.works || [];
-
-  const matchEmp = employees.filter(e => {
-    const full = ((e.firstName || "") + " " + (e.lastName || "")).toLowerCase().trim();
-    return full === empName || (e.firstName || "").toLowerCase().trim() === empName || (e.lastName || "").toLowerCase().trim() === empName;
-  });
-  const matchWork = works.filter(w => (w.name || "").toLowerCase().trim() === workName);
-
-  if (matchEmp.length !== 1) {
-    return { ok: false, ambiguedad: true, motivo: "empleado", opciones: employees.map(e => ((e.firstName || "") + " " + (e.lastName || "")).trim()).slice(0, 10) };
-  }
-  if (matchWork.length !== 1) {
-    return { ok: false, ambiguedad: true, motivo: "obra", opciones: works.map(w => w.name || "").slice(0, 10) };
-  }
-
-  const emp = matchEmp[0];
-  const work = matchWork[0];
-  const attendance = data.attendance || [];
-  attendance.push({ id: crypto.randomUUID(), employeeId: emp.id, date, status: "presente", hours: [{ workId: work.id, hours }], notes: "" });
-  data.attendance = attendance;
-
-  const wr = await fetch(`${supabaseUrl}/rest/v1/app_data?on_conflict=user_id`, {
-    method: "POST",
-    headers: { apikey: anonKey, Authorization: auth, "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id: userId, data, updated_at: new Date().toISOString() }),
-  });
-  if (!wr.ok) { const eb = await wr.text(); return { ok: false, error: `no pude guardar (${wr.status}: ${eb.slice(0, 200)})` }; }
-  return { ok: true, empleado: emp.firstName + " " + emp.lastName, obra: work.name, date, hours };
 }
 
 serve(async (req) => {
@@ -223,27 +192,18 @@ serve(async (req) => {
       } catch (e) { ultimoError = String(e); console.error(`[ai-assistant] ${modelo} excepción:`, e); }
     }
 
-    // 2) Si hay llamada a herramienta, ejecutarla y confirmar en lenguaje natural
-    if (functionCall && functionCall.name === "registrar_jornada") {
-      let toolResult;
-      try {
-        toolResult = await ejecutarJornada(functionCall.args || {}, supabaseUrl, anonKey, auth, userId);
-        console.log("[ai-assistant] registrar_jornada →", JSON.stringify(toolResult));
-      } catch (e) {
-        toolResult = { ok: false, error: String(e) };
-        console.error("[ai-assistant] error ejecutando jornada:", e);
-      }
-      for (const modelo of modelos) {
-        try {
-          const data = await callGemini(modelo, [
-            { role: "user", parts: [{ text: userText }] },
-            { role: "model", parts: [{ functionCall }] },
-            { role: "function", parts: [{ functionResponse: { name: "registrar_jornada", response: toolResult } }] },
-          ]);
-          const t = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (t) { reply = t; console.log(`[ai-assistant] confirmó con ${modelo}`); break; }
-        } catch (e) { console.error(`[ai-assistant] ${modelo} excepción confirmación:`, e); }
-      }
+    // 2) Si hay llamada a "abrir_formulario", devolver la acción para que el frontend
+    //    abra el modal y pre-complete los campos (confirmación por voz/texto).
+    let action = null;
+    if (functionCall && functionCall.name === "abrir_formulario") {
+      const args = functionCall.args || {};
+      const modulo = args.modulo;
+      const campos = args.campos || {};
+      action = { modulo, campos };
+      console.log("[ai-assistant] abrir_formulario →", JSON.stringify(action));
+      const etiquetas = { empleado: "Empleados", obra: "Obras", cliente: "Clientes", presupuesto: "Presupuestos", gasto: "Gastos", ingreso: "Ingresos", jornada: "Jornada" };
+      const resumen = Object.entries(campos).map(([k, v]) => `${k}: ${v}`).join(", ");
+      reply = `¡De acuerdo! Abrí el formulario de ${etiquetas[modulo] || modulo}${resumen ? " con " + resumen : ""}. Completá lo que falta o confirmá la carga.`;
     }
 
     if (!reply) {
@@ -253,7 +213,7 @@ serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ reply }), {
+    return new Response(JSON.stringify({ reply, action }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
