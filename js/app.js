@@ -542,8 +542,13 @@
       'Continuar con Google</button>' +
       '<div class="login-divider"><span>o con email</span></div>' +
       '<div id="regFields" hidden>' +
-      '<input class="input" id="fFullName" placeholder="Nombre completo" autocomplete="name">' +
-      '<input class="input" id="fTel" placeholder="Teléfono / Obra (opcional)" autocomplete="tel">' +
+      '<input class="input" id="fNombre" placeholder="Nombre" autocomplete="given-name">' +
+      '<input class="input" id="fApellido" placeholder="Apellido" autocomplete="family-name">' +
+      '<input class="input" id="fTel" placeholder="Teléfono / Celular" inputmode="tel" autocomplete="tel">' +
+      '<input class="input" id="fDir" placeholder="Dirección / Ubicación (buscá en el mapa)" autocomplete="off">' +
+      '<select class="select" id="fTipo">' +
+      '<option>Contratista</option><option>Oficio / particular</option><option>Empresa constructora</option><option>Otro</option>' +
+      '</select>' +
       '</div>' +
       '<input class="input" id="fEmail" type="email" placeholder="Correo electrónico" autocomplete="email">' +
       '<input class="input" id="fPass" type="password" placeholder="Contraseña" autocomplete="current-password">' +
@@ -566,7 +571,43 @@
       host.querySelector('#fPass').setAttribute('autocomplete', (m === 'register' ? 'new-password' : 'current-password'));
       setMsg('', false);
     };
-    host.querySelectorAll('.auth-tab').forEach(t => t.addEventListener('click', () => setMode(t.dataset.mode)));
+
+    /* Dirección con Google Maps (autocomplete) para el registro */
+    const placeData = { direccion: '', lat: null, lng: null };
+    const mapsKey = (G.config && G.config.googleMapsKey) || '';
+    let mapsInit = false;
+    const attachDirAutocomplete = () => {
+      if (mapsInit || !mapsKey) return;
+      mapsInit = true;
+      const input = host.querySelector('#fDir');
+      const attach = () => {
+        try {
+          if (!window.google || !window.google.maps || !window.google.maps.places) return;
+          const ac = new google.maps.places.Autocomplete(input, { types: ['address'] });
+          ac.addListener('place_changed', () => {
+            const place = ac.getPlace();
+            if (place && place.geometry) {
+              placeData.direccion = place.formatted_address || input.value;
+              placeData.lat = String(place.geometry.location.lat());
+              placeData.lng = String(place.geometry.location.lng());
+            } else {
+              placeData.direccion = input.value; placeData.lat = placeData.lng = null;
+            }
+          });
+        } catch (e) {}
+      };
+      if (window.google && window.google.maps) attach();
+      else {
+        const s = document.createElement('script');
+        s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(mapsKey) + '&libraries=places';
+        s.async = true; s.onload = attach;
+        document.head.appendChild(s);
+      }
+    };
+    host.querySelectorAll('.auth-tab').forEach(t => t.addEventListener('click', () => {
+      setMode(t.dataset.mode);
+      if (t.dataset.mode === 'register') attachDirAutocomplete();
+    }));
     host.querySelector('#btnGoogle').addEventListener('click', () => {
       try { G.auth.signInWithGoogle(); }
       catch (err) { setMsg('No se pudo abrir Google: ' + ((err && err.message) || err), true); }
@@ -575,22 +616,37 @@
       const email = host.querySelector('#fEmail').value.trim();
       const pass = host.querySelector('#fPass').value;
       if (!email || !pass) { setMsg('Completá email y contraseña.', true); return; }
+      let meta = null;
+      if (authMode === 'register') {
+        const nombre = host.querySelector('#fNombre').value.trim();
+        const apellido = host.querySelector('#fApellido').value.trim();
+        const tel = host.querySelector('#fTel').value.trim();
+        const dir = placeData.direccion || host.querySelector('#fDir').value.trim();
+        const tipo = host.querySelector('#fTipo').value;
+        if (!nombre) { setMsg('Ingresá tu nombre.', true); return; }
+        if (!apellido) { setMsg('Ingresá tu apellido.', true); return; }
+        if (tel.replace(/\D/g, '').length < 6) { setMsg('Ingresá un teléfono válido (al menos 6 números).', true); return; }
+        if (!dir) { setMsg('Buscá y seleccioná tu dirección en el mapa.', true); return; }
+        if (mapsKey && (!placeData.lat || !placeData.lng)) { setMsg('Seleccioná una dirección sugerida por Google Maps.', true); return; }
+        meta = {
+          nombre, apellido, full_name: (nombre + ' ' + apellido).trim(),
+          telefono: tel, direccion: dir, latitud: placeData.lat, longitud: placeData.lng,
+          perfil_tipo: tipo,
+        };
+      }
       const btn = host.querySelector('#btnSubmit');
       btn.disabled = true;
       setMsg('', false);
       try {
-        if (authMode === 'register') {
-          const nombre = host.querySelector('#fFullName').value.trim();
-          const tel = host.querySelector('#fTel').value.trim();
-          await G.auth.signup(email, pass, { full_name: nombre || null, telefono: tel || null });
-        } else {
-          await G.auth.login(email, pass);
-        }
+        if (authMode === 'register') await G.auth.signup(email, pass, meta);
+        else await G.auth.login(email, pass);
         await startApp();
       } catch (err) {
         const m = (err && err.message) || String(err);
         if (m === 'CONFIRMA_EMAIL') setMsg('Te enviamos un correo de confirmación. Verificá tu casilla y volvé a entrar.', false);
         else if (m === 'DB_ERROR' || /database error/i.test(m)) setMsg('Ocurrió un error al crear tu cuenta. Por favor intenta de nuevo o contacta a soporte.', true);
+        else if (/already registered|already exists|email already/i.test(m)) setMsg('Ese correo ya está registrado. Probá iniciar sesión.', true);
+        else if (/password.{0,20}(length|weak|short|6)/i.test(m)) setMsg('La contraseña debe tener al menos 6 caracteres.', true);
         else if (/invalid login credentials/i.test(m)) setMsg('Email o contraseña incorrectos.', true);
         else setMsg(m, true);
         btn.disabled = false;
@@ -598,7 +654,7 @@
       }
     };
     host.querySelector('#btnSubmit').addEventListener('click', submit);
-    ['fFullName', 'fTel', 'fEmail', 'fPass'].forEach(id => {
+    ['fNombre', 'fApellido', 'fTel', 'fDir', 'fEmail', 'fPass'].forEach(id => {
       const el = host.querySelector('#' + id);
       if (el) el.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
     });
