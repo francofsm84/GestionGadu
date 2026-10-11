@@ -15,6 +15,12 @@ Aplicación web **100% local y offline** para centralizar las finanzas, el avanc
    ```
    y entrá a `http://localhost:8000`. Funciona sin internet y sin instalar nada (usa el Node que ya tenés).
 
+## Publicación en internet (GitHub + Vercel)
+
+- Repositorio: **https://github.com/francofsm84/GestionGadu** (rama `main`).
+- Para publicar en Vercel: entrá a **vercel.com** → *Add New… → Project* → *Import* el repositorio `GestionGadu` → *Deploy* (no necesita build: es un sitio estático, `vercel.json` ya está incluido). Después cada `git push` actualiza el sitio automáticamente.
+- Para actualizar la app desde la PC: `git add -A`, `git commit -m "cambios"` y `git push`.
+
 ## Módulos
 
 | Módulo | Qué incluye |
