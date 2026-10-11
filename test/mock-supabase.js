@@ -24,6 +24,8 @@ function newUser(email, password, extra) {
     ultima_conexion: null, created_at: new Date().toISOString(),
     trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(),
     telefono: null, direccion: null, nacionalidad: null, rubro: null, onboarding_completo: false,
+    latitud: null, longitud: null, localidad: null, empresa_constructora: null, rubro_principal: null,
+    perfil_tipo: null, obras_simultaneas: null, tamano_equipo: null,
   };
   Object.assign(u, extra || {});
   users.set(email, u);

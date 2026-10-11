@@ -7,6 +7,11 @@
   'use strict';
   const G = root.GADU = root.GADU || {};
 
+  /* Configuración de integraciones. Pegá tu API key de Google Maps
+     (con Maps JavaScript API y Places API habilitados) para activar
+     el autocompletado de direcciones en el onboarding. */
+  G.config = { googleMapsKey: '' };
+
   const ROLES = ['super_admin', 'admin', 'gestor_obra', 'contador'];
   let profile = null;
   let planes = [];
@@ -97,13 +102,24 @@
   /* ¿El usuario debe completar el onboarding? (nuevo en Plan Free sin perfil) */
   function needsOnboarding() {
     if (!profile) return false;
+    if (isAdmin()) return false;   // los administradores nunca pasan por onboarding
     if (profile.plan_id !== 'free') return false;
     return !profile.onboarding_completo;
   }
 
+  /* ¿La cuenta está bloqueada? Los administradores NUNCA se bloquean. */
+  function isLocked() {
+    if (!profile) return false;
+    if (isAdmin()) return false;   // excepción absoluta
+    if (profile.estado_cuenta === 'suspendido') return true;
+    const st = profile.subscription_status || 'trialing';
+    if (st === 'expired' || st === 'past_due' || st === 'canceled') return true;
+    return trialDaysLeft() === 0;
+  }
+
   G.api = api;
   G.plan = {
-    ROLES, load, isAdmin, currentPlan, worksActive, employeesCount, limitFor, wouldExceed, checkLimit, log, trialDaysLeft, needsOnboarding,
+    ROLES, load, isAdmin, currentPlan, worksActive, employeesCount, limitFor, wouldExceed, checkLimit, log, trialDaysLeft, needsOnboarding, isLocked,
     get profile() { return profile; },
     get planes() { return planes; },
   };

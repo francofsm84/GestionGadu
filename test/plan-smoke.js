@@ -22,6 +22,22 @@ G.store.load();
     if (!(tdl >= 0 && tdl <= 14)) throw new Error('trialDaysLeft inválido: ' + tdl);
     console.log('roles/planes OK · isAdmin=true · 4 planes · prueba ' + tdl + ' días');
 
+    // EXCEPCIÓN ABSOLUTA: un admin suspendido/en mora/prueba vencida NUNCA se bloquea
+    await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent(UID), {
+      estado_cuenta: 'suspendido', subscription_status: 'past_due', plan_id: 'free',
+      onboarding_completo: false, trial_ends_at: new Date(Date.now() - 86400000).toISOString(),
+    });
+    await P.load();
+    if (!P.isAdmin()) throw new Error('admin debería seguir siendo admin');
+    if (P.isLocked()) throw new Error('CRÍTICO: un admin fue bloqueado');
+    if (P.needsOnboarding()) throw new Error('CRÍTICO: a un admin le pidieron onboarding');
+    console.log('excepción admin OK · suspendido/past_due/prueba vencida no lo bloquean');
+    await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent(UID), {
+      estado_cuenta: 'activo', subscription_status: 'active', plan_id: 'pro',
+      trial_ends_at: new Date(Date.now() + 14 * 86400000).toISOString(),
+    });
+    await P.load();
+
     // Límite con plan free (1 obra activa)
     await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent(UID), { plan_id: 'free' });
     await P.load();
@@ -70,11 +86,17 @@ G.store.load();
 
     // Onboarding obligatorio (Plan Free sin perfil)
     if (!P.needsOnboarding()) throw new Error('usuario free sin perfil debería requerir onboarding');
-    await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent('u-sininv@test.com'), { telefono: '3547', direccion: 'Alta Gracia', nacionalidad: 'Argentina', empresa: 'Mi Empresa', rubro: 'General', onboarding_completo: true });
+    await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent('u-sininv@test.com'), {
+      telefono: '+54 3547 123456', direccion: 'Av. Belgrano 123, Alta Gracia', latitud: '-31.66', longitud: '-64.43',
+      localidad: 'Argentina · Alta Gracia', empresa_constructora: 'Mi Empresa', rubro_principal: 'General',
+      perfil_tipo: 'Contratista', obras_simultaneas: 2, tamano_equipo: '2 a 5 personas', onboarding_completo: true,
+    });
     await P.load();
     if (P.needsOnboarding()) throw new Error('onboarding completado debería liberar el acceso');
-    if (P.profile.telefono !== '3547' || P.profile.rubro !== 'General') throw new Error('datos de perfil no persistieron');
-    console.log('onboarding OK · bloquea hasta completar perfil y persiste los datos');
+    if (P.profile.telefono !== '+54 3547 123456' || P.profile.rubro_principal !== 'General' || P.profile.latitud !== '-31.66' || P.profile.perfil_tipo !== 'Contratista') {
+      throw new Error('datos de perfil enriquecidos no persistieron');
+    }
+    console.log('onboarding OK · bloquea hasta completar perfil y persiste teléfono/dirección/lat-lng/rubro/perfil');
 
     console.log('✔ PLAN SMOKE TEST PASADO');
     process.exit(0);

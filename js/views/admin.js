@@ -16,13 +16,13 @@
   function userColumns(u, planes) {
     return [
       u.email || '',
-      u.empresa || '',
+      u.empresa_constructora || u.empresa || '',
       ROL_LABEL[u.rol] || u.rol || '',
       (planes.find(p => p.id === u.plan_id) || {}).nombre || u.plan_id || '',
       STATUS_LABEL[u.subscription_status] || u.subscription_status || '',
       u.telefono || '',
       u.direccion || '',
-      u.nacionalidad || '',
+      u.localidad || u.nacionalidad || '',
       (u.created_at || '').slice(0, 10),
     ];
   }
@@ -162,7 +162,7 @@
     const planOpts = planes.map(p => '<option value="' + p.id + '"' + (u.plan_id === p.id ? ' selected' : '') + '>' + p.nombre + '</option>').join('');
     const rolOpts = G.plan.ROLES.map(r => '<option value="' + r + '"' + (u.rol === r ? ' selected' : '') + '>' + (ROL_LABEL[r] || r) + '</option>').join('');
     return '<tr data-uid="' + u.user_id + '">' +
-      '<td><strong>' + UI.escapeHtml(u.email || '—') + '</strong><br><span class="muted small">' + UI.escapeHtml(u.empresa || '—') + '</span></td>' +
+      '<td><strong>' + UI.escapeHtml(u.email || '—') + '</strong><br><span class="muted small">' + UI.escapeHtml(u.empresa_constructora || u.empresa || '—') + '</span></td>' +
       '<td><select class="select" data-sel="rol" data-uid="' + u.user_id + '">' + rolOpts + '</select></td>' +
       '<td><select class="select" data-sel="plan_id" data-uid="' + u.user_id + '">' + planOpts + '</select></td>' +
       '<td>' + UI.chip(STATUS_LABEL[u.subscription_status] || u.subscription_status, u.subscription_status === 'active' ? 'success' : (u.subscription_status === 'past_due' ? 'danger' : 'warning')) + '</td>' +

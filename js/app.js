@@ -350,13 +350,17 @@
   function planInfo() {
     const p = G.plan.profile;
     if (!p) return { label: 'Plan', tone: 'neutral', locked: false };
+    /* EXCEPCIÓN ABSOLUTA: los administradores NUNCA se bloquean */
+    if (G.plan.isAdmin()) return { label: 'Administrador · Acceso total', tone: 'success', locked: false };
     const planName = G.plan.currentPlan().nombre;
     const st = p.subscription_status || 'trialing';
-    if (p.estado_cuenta === 'suspendido') return { label: 'Suspendido', tone: 'danger', locked: true };
+    if (G.plan.isLocked()) {
+      return p.estado_cuenta === 'suspendido'
+        ? { label: 'Suspendido', tone: 'danger', locked: true }
+        : { label: 'Suscripción vencida', tone: 'danger', locked: true };
+    }
     if (st === 'active') return { label: 'Plan ' + planName, tone: 'success', locked: false };
-    if (st === 'expired' || st === 'past_due' || st === 'canceled') return { label: 'Suscripción vencida', tone: 'danger', locked: true };
     const days = G.plan.trialDaysLeft();
-    if (days === 0) return { label: 'Prueba vencida', tone: 'danger', locked: true };
     return { label: planName + ' · Prueba' + (days !== null ? ' (Quedan ' + days + ' día' + (days !== 1 ? 's' : '') + ')' : ''), tone: 'info', locked: false };
   }
 
@@ -389,7 +393,11 @@
   /* ---------- Onboarding obligatorio (Plan Free) ---------- */
   function renderOnboarding() {
     const prof = G.plan.profile || {};
-    const opts = ['Albañilería', 'Electricidad', 'Plomería', 'Gas', 'Pintura', 'Carpintería', 'Techos', 'General', 'Otro'];
+    const rubros = ['Albañilería', 'Electricidad', 'Plomería', 'Gas', 'Pintura', 'Carpintería', 'Techos', 'General', 'Otro'];
+    const perfiles = ['Contratista', 'Oficio / particular', 'Empresa constructora', 'Otro'];
+    const equipos = ['Solo yo', '2 a 5 personas', '6 a 15 personas', 'Más de 15'];
+    /* Dirección: se completa por Google Maps (autocomplete) si hay API key */
+    const placeData = { direccion: prof.direccion || '', lat: prof.latitud || null, lng: prof.longitud || null };
     const overlay = document.createElement('div');
     overlay.className = 'onboard-overlay';
     overlay.innerHTML =
@@ -398,12 +406,19 @@
       '<h2>Completá tu perfil</h2>' +
       '<p class="muted" style="margin-bottom:14px">Un paso más para activar tu <b>Plan Free</b> y empezar a usar GADU.</p>' +
       '<div class="grid-form">' +
-      '<div class="field"><label>Teléfono / Celular *</label><input class="input" id="oPhone" value="' + UI.escapeHtml(prof.telefono || '') + '" placeholder="+54 9 3547 …"></div>' +
-      '<div class="field"><label>Dirección / Ubicación *</label><input class="input" id="oDir" value="' + UI.escapeHtml(prof.direccion || '') + '" placeholder="Calle, barrio, ciudad"></div>' +
-      '<div class="field"><label>Nacionalidad / Localidad *</label><input class="input" id="oLoc" value="' + UI.escapeHtml(prof.nacionalidad || '') + '" placeholder="Ej.: Argentina · Alta Gracia"></div>' +
-      '<div class="field"><label>Empresa / Constructora *</label><input class="input" id="oEmp" value="' + UI.escapeHtml(prof.empresa || '') + '" placeholder="Nombre de tu emprendimiento"></div>' +
-      '<div class="field span-2"><label>Rubro principal *</label><select class="select" id="oRubro">' +
-      opts.map(r => '<option' + (prof.rubro === r ? ' selected' : '') + '>' + r + '</option>').join('') +
+      '<div class="field"><label>Teléfono / Celular *</label><input class="input" id="oPhone" value="' + UI.escapeHtml(prof.telefono || '') + '" placeholder="+54 9 3547 …" inputmode="tel"></div>' +
+      '<div class="field"><label>Localidad / Nacionalidad *</label><input class="input" id="oLoc" value="' + UI.escapeHtml(prof.localidad || prof.nacionalidad || '') + '" placeholder="Ej.: Argentina · Alta Gracia"></div>' +
+      '<div class="field span-2"><label>Dirección / Ubicación *</label><input class="input" id="oDir" value="' + UI.escapeHtml(prof.direccion || '') + '" placeholder="Buscá y seleccioná tu dirección…" autocomplete="off"></div>' +
+      '<div class="field span-2"><label>Empresa / Constructora *</label><input class="input" id="oEmp" value="' + UI.escapeHtml(prof.empresa_constructora || prof.empresa || '') + '" placeholder="Nombre de tu emprendimiento"></div>' +
+      '<div class="field"><label>Rubro principal *</label><select class="select" id="oRubro">' +
+      rubros.map(r => '<option' + ((prof.rubro_principal || prof.rubro) === r ? ' selected' : '') + '>' + r + '</option>').join('') +
+      '</select></div>' +
+      '<div class="field"><label>Tipo de perfil *</label><select class="select" id="oPerfil">' +
+      perfiles.map(p => '<option' + (prof.perfil_tipo === p ? ' selected' : '') + '>' + p + '</option>').join('') +
+      '</select></div>' +
+      '<div class="field"><label>Obras simultáneas (habitual) *</label><input class="input" type="number" id="oObras" min="1" max="100" value="' + (prof.obras_simultaneas || 1) + '"></div>' +
+      '<div class="field"><label>Tamaño del equipo *</label><select class="select" id="oEquipo">' +
+      equipos.map(e => '<option' + (prof.tamano_equipo === e ? ' selected' : '') + '>' + e + '</option>').join('') +
       '</select></div>' +
       '</div>' +
       '<p class="form-hint" id="oMsg" style="margin-top:10px"></p>' +
@@ -411,20 +426,71 @@
       '</div>';
     document.body.appendChild(overlay);
     const setMsg = (m, err) => { const el = document.getElementById('oMsg'); el.textContent = m || ''; el.style.color = err ? 'var(--danger)' : 'var(--muted)'; };
-    document.getElementById('oSave').addEventListener('click', async () => {
-      const vals = {
-        telefono: document.getElementById('oPhone').value.trim(),
-        direccion: document.getElementById('oDir').value.trim(),
-        nacionalidad: document.getElementById('oLoc').value.trim(),
-        empresa: document.getElementById('oEmp').value.trim(),
-        rubro: document.getElementById('oRubro').value,
+
+    /* Google Maps Places Autocomplete (si hay API key) */
+    const mapsKey = (G.config && G.config.googleMapsKey) || '';
+    if (mapsKey) {
+      const attach = () => {
+        try {
+          if (!window.google || !window.google.maps || !window.google.maps.places) return;
+          const input = document.getElementById('oDir');
+          const ac = new google.maps.places.Autocomplete(input, { types: ['address'] });
+          ac.addListener('place_changed', () => {
+            const place = ac.getPlace();
+            if (place && place.geometry) {
+              placeData.direccion = place.formatted_address || input.value;
+              placeData.lat = String(place.geometry.location.lat());
+              placeData.lng = String(place.geometry.location.lng());
+              setMsg('✓ Dirección seleccionada: ' + placeData.direccion, false);
+            } else {
+              placeData.direccion = input.value;
+              placeData.lat = placeData.lng = null;
+              setMsg('Seleccioná una dirección sugerida del mapa.', true);
+            }
+          });
+        } catch (e) {}
       };
-      if (!vals.telefono || !vals.direccion || !vals.nacionalidad || !vals.empresa) {
-        setMsg('Completá todos los campos obligatorios.', true); return;
+      if (window.google && window.google.maps) { attach(); }
+      else {
+        const s = document.createElement('script');
+        s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(mapsKey) + '&libraries=places';
+        s.async = true; s.onload = attach;
+        document.head.appendChild(s);
       }
+    } else {
+      document.getElementById('oDir').addEventListener('input', () => { placeData.direccion = document.getElementById('oDir').value; });
+    }
+
+    document.getElementById('oSave').addEventListener('click', async () => {
+      const telefono = document.getElementById('oPhone').value.trim();
+      const localidad = document.getElementById('oLoc').value.trim();
+      const empresa = document.getElementById('oEmp').value.trim();
+      const direccion = placeData.direccion || document.getElementById('oDir').value.trim();
+      /* Validación de teléfono: al menos 6 dígitos */
+      const digitos = telefono.replace(/\D/g, '');
+      if (digitos.length < 6) { setMsg('Ingresá un teléfono válido (al menos 6 números).', true); return; }
+      if (!localidad) { setMsg('Ingresá tu localidad / nacionalidad.', true); return; }
+      if (!empresa) { setMsg('Ingresá el nombre de tu empresa o constructora.', true); return; }
+      if (!direccion) { setMsg('Seleccioná tu dirección en el mapa.', true); return; }
+      if (mapsKey && (!placeData.lat || !placeData.lng)) { setMsg('Seleccioná una dirección sugerida por Google Maps.', true); return; }
+      const vals = {
+        telefono,
+        localidad,
+        direccion,
+        latitud: placeData.lat || null,
+        longitud: placeData.lng || null,
+        empresa_constructora: empresa,
+        empresa: empresa,                         // backward-compat
+        rubro_principal: document.getElementById('oRubro').value,
+        rubro: document.getElementById('oRubro').value,
+        perfil_tipo: document.getElementById('oPerfil').value,
+        obras_simultaneas: Math.max(1, Math.min(100, UI.readNum(document.getElementById('oObras')))),
+        tamano_equipo: document.getElementById('oEquipo').value,
+        onboarding_completo: true,
+      };
       try {
         const uid = G.auth.getSession().userId;
-        await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent(uid), Object.assign(vals, { onboarding_completo: true }));
+        await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent(uid), vals);
         await G.plan.load();
         UI.toast('✅ Perfil guardado · Plan Free activado', 'success');
         overlay.remove();
