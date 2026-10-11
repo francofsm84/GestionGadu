@@ -1,13 +1,12 @@
 // ============================================================
-// GADU · Asistente de IA (Supabase Edge Function)
+// GADU · Asistente de IA (Supabase Edge Function) — Google Gemini
 // Ruta: /functions/v1/ai-assistant
 // Variables de entorno (secrets):
-//   AI_API_BASE_URL  · ej. https://api.openai.com/v1  o  https://api.freellmapi.com/v1
-//   AI_API_KEY       · clave de la pasarela (se guarda SOLO en el servidor)
-//   AI_MODEL         · (opcional) modelo, ej. gpt-4o-mini
+//   GEMINI_API_KEY · clave de Google AI Studio (https://aistudio.google.com/apikey)
+//   GEMINI_MODEL   · (opcional) modelo, por defecto gemini-3.8-flash
 // Despliegue:
-//   supabase functions deploy ai-assistant --no-verify-jwt
-//   supabase secrets set AI_API_BASE_URL=... AI_API_KEY=... AI_MODEL=...
+//   supabase functions deploy ai-assistant
+//   supabase secrets set GEMINI_API_KEY=... --project-ref kalqvykomlfwxmsdaipf
 // ============================================================
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -58,27 +57,25 @@ serve(async (req) => {
       });
     }
 
-    const base = Deno.env.get("AI_API_BASE_URL") || "https://api.openai.com/v1";
-    const key = Deno.env.get("AI_API_KEY");
-    const model = Deno.env.get("AI_MODEL") || "gpt-4o-mini";
+    const key = Deno.env.get("GEMINI_API_KEY");
+    const model = Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash";
     if (!key) {
       return new Response(JSON.stringify({ reply: fallbackText() }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // 2) Llamada a la pasarela compatible con OpenAI
-    const aiRes = await fetch(`${base}/chat/completions`, {
+    // 2) Llamada a Google Gemini (generateContent)
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    const aiRes = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: `Contexto de mi cuenta:\n${context || "sin contexto"}\n\nMi consulta:\n${message}` },
+        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents: [
+          { role: "user", parts: [{ text: `Contexto de mi cuenta:\n${context || "sin contexto"}\n\nMi consulta:\n${message}` }] },
         ],
-        temperature: 0.4,
-        max_tokens: 700,
+        generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
       }),
     });
 
@@ -89,7 +86,7 @@ serve(async (req) => {
     }
 
     const data = await aiRes.json();
-    const reply = data?.choices?.[0]?.message?.content || fallbackText();
+    const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || fallbackText();
     return new Response(JSON.stringify({ reply }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
