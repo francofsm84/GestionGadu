@@ -191,8 +191,9 @@
         headers: headers(true),
         body: JSON.stringify(body),
       });
+      if (!res.ok) console.error('[ensureUserProfile] falló con status', res.status);
       return res.ok;
-    } catch (e) { return false; }
+    } catch (e) { console.error('[ensureUserProfile] error:', e); return false; }
   }
 
   /* ---------- Inicio de sesión con Google (OAuth) ---------- */
