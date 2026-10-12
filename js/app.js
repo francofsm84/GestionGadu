@@ -408,6 +408,12 @@
     document.body.insertBefore(d, document.body.firstChild);
   }
 
+  /* Logo según el tema: blanco puro en fondos oscuros */
+  function logoUrl() {
+    const dark = (document.documentElement.dataset.theme || '') === 'dark';
+    return dark ? 'logo-white.png' : 'logo.png';
+  }
+
   /* ---------- Onboarding obligatorio (Plan Free) ---------- */
   function renderOnboarding() {
     const prof = G.plan.profile || {};
@@ -422,7 +428,7 @@
     overlay.className = 'onboard-overlay';
     overlay.innerHTML =
       '<div class="onboard-card">' +
-      '<img src="logo.png" alt="GADU" class="login-logo" style="width:120px">' +
+      '<img src="' + logoUrl() + '" alt="GADU" class="login-logo" style="width:120px">' +
       '<h2>Completá tu perfil</h2>' +
       '<p class="muted" style="margin-bottom:14px">Un paso más para activar tu <b>Plan Free</b> y empezar a usar GADU.</p>' +
       '<div class="grid-form">' +
@@ -580,7 +586,7 @@
     host.id = 'loginRoot';
     host.innerHTML =
       '<div class="login-wrap"><div class="login-card login-card-center">' +
-      '<img src="logo.png" alt="GADU Construye" class="login-logo">' +
+      '<img src="' + logoUrl() + '" alt="GADU Construye" class="login-logo">' +
       '<p class="login-slogan">Tu gestión, perfecta</p>' +
       '<div class="auth-tabs">' +
       '<button type="button" class="auth-tab active" data-mode="login">Iniciar sesión</button>' +
