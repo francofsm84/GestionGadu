@@ -74,7 +74,7 @@ const server = http.createServer(async (req, res) => {
     const inv = invitaciones.get(b.email);
     const u = newUser(b.email, b.password, inv ? { rol: inv.rol, plan_id: inv.plan_id, empresa: inv.empresa } : {});
     if (inv) invitaciones.delete(b.email);   // vinculación: consume la invitación
-    send(res, 200, { session: { access_token: 'tok-' + b.email, refresh_token: 'rt-' + b.email }, user: { id: u.id, email: u.email } });
+    send(res, 200, { access_token: 'tok-' + b.email, refresh_token: 'rt-' + b.email, user: { id: u.id, email: u.email } });
     return;
   }
   if (url === '/auth/v1/token') {

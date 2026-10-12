@@ -32,7 +32,7 @@ const server = http.createServer(async (req, res) => {
     if (users.has(b.email)) { send(res, 400, { msg: 'User already registered' }); return; }
     const u = { id: 'u-' + b.email, email: b.email, password: b.password, plan: 'prueba', trial_end: new Date(Date.now() + 14 * 86400000).toISOString() };
     users.set(b.email, u);
-    send(res, 200, { session: { access_token: 'tok-' + b.email, refresh_token: 'rt-' + b.email }, user: { id: u.id, email: u.email } });
+    send(res, 200, { access_token: 'tok-' + b.email, refresh_token: 'rt-' + b.email, user: { id: u.id, email: u.email } });
     return;
   }
   if (url === '/auth/v1/token') {

@@ -99,10 +99,10 @@
       if (/database error saving new user/i.test(msg)) throw new Error('DB_ERROR');
       throw new Error(msg);
     }
-    if (!j.session) throw new Error('CONFIRMA_EMAIL');
+    if (!j || !j.access_token) throw new Error('CONFIRMA_EMAIL');
     setSession({
-      accessToken: j.session.access_token,
-      refreshToken: j.session.refresh_token,
+      accessToken: j.access_token,
+      refreshToken: j.refresh_token,
       email: j.user && j.user.email,
       userId: j.user && j.user.id,
     });
