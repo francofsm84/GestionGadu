@@ -112,7 +112,7 @@
       '<div class="ai-log" id="aiLog"></div>' +
       '<div class="ai-foot"><button class="ai-mic" id="aiMic" title="Dictar por voz" aria-label="Dictar por voz">🎙️</button>' +
       '<input class="input" id="aiInput" placeholder="Preguntame… (o tocá el micrófono y dictá)">' +
-      '<button class="btn btn-primary btn-sm" id="aiSend">Enviar</button></div>' +
+      '<button class="ai-send" id="aiSend" title="Enviar">➤</button></div>' +
       '</div>';
     document.body.appendChild(host);
     log = document.getElementById('aiLog');
@@ -131,10 +131,9 @@
     window.addEventListener('hashchange', refreshGreeting);
   }
 
-  /* Dictado por voz (Web Speech API) con debounce de silencio (2.5s) */
-  let silenceTimer = null;
+  /* Dictado por voz (Web Speech API) — estilo "pulsar para hablar":
+     el texto se rellena en el input pero NUNCA se envía solo. */
   function stopRec() {
-    clearTimeout(silenceTimer);
     if (rec) { try { rec.stop(); } catch (e) {} }
   }
   function toggleMic() {
@@ -144,10 +143,10 @@
       if (G.ui && G.ui.toast) G.ui.toast('Tu navegador no soporta dictado por voz. Probá con Chrome o Edge.', 'error');
       return;
     }
-    if (listening) { stopRec(); return; }
+    if (listening) { stopRec(); return; }   // 2ª pulsación = dejar de escuchar (sin enviar)
     rec = new SR();
     rec.lang = 'es-ES';
-    rec.interimResults = true;   // muestra lo que va diciendo en vivo
+    rec.interimResults = true;   // muestra en vivo
     rec.continuous = true;       // no corta en pausas breves
     rec.onstart = () => { listening = true; mic.classList.add('ai-mic-on'); };
     rec.onresult = (e) => {
@@ -161,8 +160,6 @@
         else interims.push(t);
       }
       input.value = finals.concat(interims).join(' ').replace(/\s+/g, ' ').trim();
-      clearTimeout(silenceTimer);
-      silenceTimer = setTimeout(() => { stopRec(); }, 2500);
     };
     rec.onerror = (e) => {
       if (e.error === 'no-speech' || e.error === 'aborted') { /* ignorar: es normal */ }
@@ -172,8 +169,7 @@
     rec.onend = () => {
       listening = false;
       mic.classList.remove('ai-mic-on');
-      clearTimeout(silenceTimer);
-      if (input.value.trim()) send();
+      /* NO se envía automáticamente: el envío es manual con el botón ➤ */
     };
     try { rec.start(); } catch (e) { listening = false; mic.classList.remove('ai-mic-on'); }
   }

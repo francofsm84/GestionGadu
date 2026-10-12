@@ -769,6 +769,8 @@ body.no-session .app { display: none; }
 .ai-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .ai-foot { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--border-soft); }
 .ai-foot .input { flex: 1; min-width: 0; }
+.ai-send { flex: none; width: 40px; height: 40px; border: none; border-radius: 50%; background: var(--primary); color: var(--on-primary); font-size: 18px; cursor: pointer; display: grid; place-items: center; }
+.ai-send:hover { filter: brightness(1.06); }
 .ai-mic { flex: none; width: 38px; height: 38px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 10px; cursor: pointer; font-size: 18px; display: grid; place-items: center; }
 .ai-mic:hover { border-color: var(--primary); }
 .ai-mic-on { color: #ef4444; border-color: #ef4444; animation: ai-pulse 1s ease-in-out infinite; }
