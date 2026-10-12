@@ -164,21 +164,16 @@
 
   /* Canjea un código: extiende el acceso 90 días y desbloquea la app */
   async function canjearCodigo(code) {
+    /* Validación rápida en cliente (solo UX) */
     if (!validarCodigo(code)) return { ok: false, error: 'Código incorrecto o vencido' };
-    const sess = G.auth.getSession();
-    const uid = sess ? sess.userId : null;
-    if (!uid) return { ok: false, error: 'Sin sesión activa' };
-    const nuevaFecha = new Date(Date.now() + 90 * 86400000).toISOString();
     try {
-      await api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent(uid), {
-        trial_ends_at: nuevaFecha,
-        trial_end: nuevaFecha,
-        paid_until: nuevaFecha,
-        subscription_status: 'active',
-        estado_cuenta: 'activo',
-      });
-      await load();   // recargar perfil para reflejar el nuevo vencimiento
-      return { ok: true, vencimiento: nuevaFecha };
+      /* Canje real: RPC security-definer (valida y actualiza en el servidor) */
+      const res = await api('POST', '/rpc/canjear_codigo', { p_codigo: String(code).trim().toUpperCase() });
+      if (res && res.ok) {
+        await load();   // recargar perfil para reflejar el nuevo vencimiento
+        return { ok: true, vencimiento: res.vencimiento };
+      }
+      return { ok: false, error: (res && res.error) || 'Código incorrecto o vencido' };
     } catch (e) {
       return { ok: false, error: 'No se pudo activar: ' + ((e && e.message) || e) };
     }
