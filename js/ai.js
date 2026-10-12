@@ -186,6 +186,12 @@
     return div;
   }
 
+  /* Tarjeta de éxito con tilde verde: confirmación visual de carga completada */
+  function successCard(text) {
+    return '<div class="ai-success"><span class="ai-success-ico">✔</span>' +
+      '<div class="ai-success-txt"><b>¡Listo! Carga completada</b><br>' + text + '</div></div>';
+  }
+
   let host = null, log = null, input = null, busy = false, builtMode = null, rec = null, listening = false, voiceOn = true, speaking = false;
   let finalText = '', persistedFinal = '', lastSendAt = 0, silenceTimer = null, shouldListen = false;
   let chatHistory = [];   // últimas interacciones (seguimiento multi-paso en el chat)
@@ -254,13 +260,9 @@
     try { input.value = finalText || ''; } catch (e) {}
   }
 
-  /* Debounce de silencio: si no llegan resultados durante 6s, se suelta el
-     micrófono automáticamente (SIN enviar). 6s permite pausas naturales al
-     hablar sin cortar la captura. */
-  function resetSilenceTimer() {
-    clearTimeout(silenceTimer);
-    silenceTimer = setTimeout(() => { if (listening) stopRec(); }, 6000);
-  }
+  /* Escucha CONTINUA: el micrófono permanece abierto hasta que el usuario
+     presione el botón de envío (➤) o el propio micrófono. Sin auto-corte por
+     silencio: las pausas naturales no interrumpen la captura. */
 
   /* Construye la transcripción desde una lista de {isFinal, transcript}.
      Reconstruye DESDE CERO: el interino se SOBRESCRIBE, nunca se concatena. */
@@ -288,7 +290,7 @@
     rec.lang = 'es-ES';
     rec.interimResults = true;   // muestra en vivo
     rec.continuous = true;       // no corta en pausas breves
-    rec.onstart = () => { listening = true; mic.classList.add('ai-mic-on'); resetSilenceTimer(); };
+    rec.onstart = () => { listening = true; mic.classList.add('ai-mic-on'); };
     rec.onresult = (e) => {
       const items = [];
       for (let i = 0; i < e.results.length; i++) items.push({ isFinal: e.results[i].isFinal, transcript: e.results[i][0].transcript });
@@ -296,7 +298,6 @@
       /* conserva lo transcrito en sesiones previas (auto-reinicio) sin duplicar */
       finalText = (persistedFinal + (persistedFinal && bt.final ? ' ' : '') + bt.final).trim();
       input.value = (finalText + (bt.interim ? ' ' + bt.interim : '')).replace(/\s+/g, ' ').trim();
-      resetSilenceTimer();
     };
     rec.onerror = (e) => {
       if (e.error === 'no-speech' || e.error === 'aborted') { /* ignorar: es normal */ }
@@ -665,15 +666,15 @@
       if (nombre) return { modulo, campos: { nombre } };
       return { modulo, campos: {} };
     }
-    /* 2) Gastos/ingresos con monto */
+    /* 2) Gastos/ingresos: con monto se ejecuta, sin monto se guía en el chat */
     const kind = /gasto|gast[ée]|pagu[ée]|compr[ée]|comprar/.test(t) ? 'gasto'
       : /ingreso|cobr[ée]|cobro|anticipo|adelanto|certificaci/.test(t) ? 'ingreso'
       : null;
     if (!kind) return null;
     const m = t.match(/(\d{1,3}(?:[.,]\d{3})+|\d{4,})(?:[.,]\d+)?/);
-    if (!m) return null;
+    if (!m) return { modulo: kind, campos: {} };   // sin monto → pedir datos en el chat
     const monto = Number(m[0].replace(/\./g, '').replace(',', '.'));
-    if (!(monto > 0)) return null;
+    if (!(monto > 0)) return { modulo: kind, campos: {} };
     const campos = { monto };
     if (kind === 'gasto') {
       const cat = t.match(/(material|combustible|nafta|mano de obra|jornal|flete|subcontrat|sueldo)/);
@@ -763,9 +764,8 @@
         if (data.action) setFocus(data.action.modulo, data.action.campos);
         const res = data.action ? execFormAction(data.action) : null;
         if (res && res.saved) {
-          const txt = '✅ Listo, guardé ' + res.label;
-          pend.innerHTML = renderText(txt);
-          speak(txt);
+          pend.innerHTML = successCard(res.label);
+          speak('¡Listo! Guardé ' + res.label);
           if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
         } else {
           if (!streamedText) pend.innerHTML = renderText(replyText);
@@ -798,12 +798,14 @@
         if (local) {
           const res = execFormAction(local);
           if (res && res.saved) {
-            const txt = '✅ Listo, guardé ' + res.label;
-            pend.innerHTML = renderText(txt);
-            speak(txt);
+            pend.innerHTML = successCard(res.label);
+            speak('¡Listo! Guardé ' + res.label);
             if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
           } else {
-            pend.innerHTML = renderText('Entendí tu pedido (' + local.modulo + '), abrí el formulario para que confirmes.');
+            const faltante = local.modulo === 'gasto' ? 'Decime el monto y la categoría (ej. "gasto de 5000 en nafta").'
+              : local.modulo === 'ingreso' ? 'Decime el monto (ej. "ingreso de 10000").'
+              : 'Decime el nombre y los datos que puedas (ej. "empleado Juan Pérez").';
+            pend.innerHTML = renderText('Entendí tu pedido (' + local.modulo + '). ' + faltante);
           }
         } else {
           pend.innerHTML = (err && err.name === 'AbortError')
