@@ -36,6 +36,14 @@
   }
 
   function render(view) {
+    /* Guard defensivo: dispara el getter de datos (auto-seed) y valida
+       colecciones ANTES de calcular, evitando "Cannot read properties of
+       null (reading 'incomes')" durante la carga inicial. */
+    const d = S.data;
+    if (!d || !Array.isArray(d.incomes) || !Array.isArray(d.works) || !Array.isArray(d.expenses)) {
+      view.innerHTML = UI.emptyState('activity', 'Cargando tus datos…', '');
+      return;
+    }
     const range = periodRange();
     const t = S.totalsBetween(range.from, range.to);
     const works = S.data.works;
