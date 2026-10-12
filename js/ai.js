@@ -139,6 +139,25 @@
     /* Al cancelar/dejar de escuchar, descartar el interino y dejar solo lo definitivo */
     try { input.value = finalText || ''; } catch (e) {}
   }
+
+  /* Construye la transcripción desde una lista de {isFinal, transcript}.
+     Reconstruye DESDE CERO: el interino se SOBRESCRIBE, nunca se concatena. */
+  function buildTranscript(items) {
+    let transcriptFinal = '', transcriptInterim = '';
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      const t = (it.transcript || '').trim();
+      if (!t) continue;
+      if (it.isFinal) transcriptFinal += (transcriptFinal ? ' ' : '') + t;
+      else transcriptInterim = t;   // asignar (sobrescribir)
+    }
+    return {
+      final: transcriptFinal,
+      interim: transcriptInterim,
+      combined: (transcriptFinal + ' ' + transcriptInterim).replace(/\s+/g, ' ').trim(),
+    };
+  }
+
   function toggleMic() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const mic = document.getElementById('aiMic');
@@ -153,17 +172,11 @@
     rec.continuous = true;       // no corta en pausas breves
     rec.onstart = () => { listening = true; finalText = ''; mic.classList.add('ai-mic-on'); };
     rec.onresult = (e) => {
-      /* Reconstruir DESDE CERO en cada disparo: nunca leer input.value ni usar += sobre él */
-      let transcriptFinal = '', transcriptInterim = '';
-      for (let i = 0; i < e.results.length; i++) {
-        const r = e.results[i];
-        const t = (r[0].transcript || '').trim();
-        if (!t) continue;
-        if (r.isFinal) transcriptFinal += (transcriptFinal ? ' ' : '') + t;
-        else transcriptInterim = t;   // asignar (sobrescribir) el interino
-      }
-      finalText = transcriptFinal;
-      input.value = (transcriptFinal + ' ' + transcriptInterim).replace(/\s+/g, ' ').trim();
+      const items = [];
+      for (let i = 0; i < e.results.length; i++) items.push({ isFinal: e.results[i].isFinal, transcript: e.results[i][0].transcript });
+      const bt = buildTranscript(items);
+      finalText = bt.final;
+      input.value = bt.combined;
     };
     rec.onerror = (e) => {
       if (e.error === 'no-speech' || e.error === 'aborted') { /* ignorar: es normal */ }
@@ -586,5 +599,5 @@
     try { build(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript };
 })(typeof window !== 'undefined' ? window : globalThis);
