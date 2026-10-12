@@ -39,6 +39,53 @@
     'admin-export': () => { if (G.actions.adminTab) G.actions.adminTab('usuarios'); },
   };
 
+  /* Pasos guiados por módulo (flujo conversacional 100% dentro del chat) */
+  const WIZARD_STEPS = {
+    empleado: [
+      { key: 'nombre', ask: 'Dale, ¿cómo se llama el empleado? (ej. "Jorge Pérez")' },
+      { key: 'oficio', ask: '¿Cuál es su oficio?', buttons: ['Albañil', 'Pintor', 'Plomero', 'Electricista', 'Carpintero', 'Yesero', 'Herrero'] },
+      { key: 'tarifa', ask: '¿Cuánto cobra por hora? (ej. 1500, o tocá Saltear)', optional: true },
+    ],
+    cliente: [
+      { key: 'nombre', ask: '¿Cómo se llama el cliente? (ej. "Ángel Cámara")' },
+      { key: 'telefono', ask: '¿Su teléfono? (o tocá Saltear)', optional: true },
+      { key: 'direccion', ask: '¿Su dirección? (o tocá Saltear)', optional: true },
+    ],
+    socio: [
+      { key: 'nombre', ask: '¿Cómo se llama el socio?' },
+    ],
+    obra: [
+      { key: 'nombre', ask: '¿Cómo se llama la obra? (ej. "Casa de Norma")' },
+      { key: 'ubicacion', ask: '¿Dónde queda la obra? (o tocá Saltear)', optional: true },
+      { key: 'presupuesto', ask: '¿Cuál es el presupuesto total? (ej. 100000, o Saltear)', optional: true },
+    ],
+    gasto: [
+      { key: 'monto', ask: '¿De cuánto es el gasto? (ej. 5000)' },
+      { key: 'categoria', ask: '¿Qué categoría es?', buttons: ['Materiales', 'Combustible', 'Mano de obra', 'Flete', 'Subcontrato', 'Otro'] },
+      { key: 'obra', ask: '¿A qué obra corresponde? (o tocá Saltear si es gasto general)', optional: true },
+    ],
+    ingreso: [
+      { key: 'monto', ask: '¿De cuánto es el ingreso? (ej. 10000)' },
+      { key: 'concepto', ask: '¿Qué concepto? (Cobro, Adelanto, Certificación… o Saltear)', optional: true },
+      { key: 'obra', ask: '¿A qué obra corresponde? (o tocá Saltear)', optional: true },
+    ],
+    presupuesto: [
+      { key: 'nombre', ask: '¿Cómo se llama el presupuesto? (ej. "Reforma cocina")' },
+      { key: 'monto', ask: '¿Cuál es el monto total? (ej. 80000, o Saltear)', optional: true },
+      { key: 'obra', ask: '¿Para qué obra es? (o tocá Saltear)', optional: true },
+    ],
+    herramienta: [
+      { key: 'nombre', ask: '¿Qué herramienta cargamos? (ej. "Amoladora")' },
+      { key: 'categoria', ask: '¿Qué tipo es?', buttons: ['Herramienta eléctrica', 'Herramienta manual', 'Maquinaria', 'Otro'] },
+      { key: 'costo', ask: '¿Cuánto costó? (ej. 12000, o Saltear)', optional: true },
+    ],
+  };
+  /* Campos mínimos para poder guardar cada módulo */
+  const WIZARD_REQUIRED = {
+    empleado: ['nombre'], cliente: ['nombre'], socio: ['nombre'], obra: ['nombre'],
+    gasto: ['monto'], ingreso: ['monto'], presupuesto: ['nombre'], herramienta: ['nombre'],
+  };
+
   /* Modo dinámico según la vista actual: #/admin → COO Virtual · resto → Capataz Digital */
   function currentMode() { return location.hash.indexOf('#/admin') === 0 ? 'admin' : 'usuario'; }
   function isAdminMode() { return currentMode() === 'admin'; }
@@ -195,6 +242,7 @@
   let host = null, log = null, input = null, busy = false, builtMode = null, rec = null, listening = false, voiceOn = true, speaking = false;
   let finalText = '', persistedFinal = '', lastSendAt = 0, silenceTimer = null, shouldListen = false;
   let chatHistory = [];   // últimas interacciones (seguimiento multi-paso en el chat)
+  let pendingOp = null;   // operación guiada en curso: { modulo, campos, idx }
   let voicePref = null;
   /* Memoria de sesión: última obra/cliente tratado, para que los comandos
      consecutivos se apliquen sin volver a preguntar. */
@@ -237,6 +285,16 @@
     document.body.appendChild(host);
     log = document.getElementById('aiLog');
     input = document.getElementById('aiInput');
+    /* Botones del flujo guiado (wizard): delegación de clicks */
+    log.addEventListener('click', (e) => {
+      const b = e.target && e.target.closest ? e.target.closest('[data-wiz]') : null;
+      if (!b) return;
+      const v = b.dataset.wiz;
+      if (v === '__cancel__') cancelWizard();
+      else if (v === '__skip__') wizardAdvance('', true);
+      else if (v === '__continue__') { if (pendingOp) wizardAskNext(); }
+      else wizardAdvance(v, false);
+    });
     document.getElementById('aiFab').addEventListener('click', toggle);
     document.getElementById('aiClose').addEventListener('click', () => setOpen(false));
     document.getElementById('aiSend').addEventListener('click', send);
@@ -564,6 +622,20 @@
         S.add('incomes', { workId, clientId: null, date: today, amount, concept: c.concepto || 'Cobro', incomeKind: 'pago', method: (S.METODOS && S.METODOS[0]) || 'Efectivo', reference: '', notes: '' });
         return { ok: true, label: 'ingreso de $' + amount + ' en ' + (workName(workId) || c.obra) };
       }
+      if (mod === 'presupuesto') {
+        const name = c.nombre || c.concepto || '';
+        if (!name) return null;
+        const workId = c.obra ? findId(d.works, c.obra, x => x.name) : autoWorkId();
+        const total = Number(c.monto) || Number(c.presupuesto) || 0;
+        S.add('budgets', { code: (S.nextCode ? S.nextCode('PR', 'budgets') : ''), clientId: null, workId: workId || null, name, date: today, validUntil: '', status: 'borrador', items: [], discount: 0, subtotal: total, total, notes: '' });
+        return { ok: true, label: 'presupuesto ' + name };
+      }
+      if (mod === 'herramienta') {
+        const name = c.nombre || '';
+        if (!name) return null;
+        S.add('assets', { name, category: c.categoria || 'Herramienta', purchaseDate: today, cost: Number(c.monto) || Number(c.costo) || 0, status: 'operativo', supplierId: null, notes: c.ubicacion ? 'En: ' + c.ubicacion : '', maintenance: [] });
+        return { ok: true, label: 'herramienta ' + name };
+      }
     } catch (e) { return null; }
     return null;
   }
@@ -675,7 +747,7 @@
   function localIntent(text) {
     const t = String(text || '').toLowerCase();
     /* 1) Crear entidades: "crear/cargar empleado|obra|cliente|socio|presupuesto [nombre]" */
-    const crear = t.match(/(?:crear|crea|agregar|alta de|nueva|nuevo|cargar|carga|cárgame|cargame|cargá)\s+(?:un |una |el |la |a )?(empleado|obra|cliente|socio|presupuesto)\b/i);
+    const crear = t.match(/(?:crear|crea|agregar|alta de|nueva|nuevo|cargar|carga|cárgame|cargame|cargá)\s+(?:un |una |el |la |a )?(empleado|obra|cliente|socio|presupuesto|herramienta)\b/i);
     if (crear) {
       const modulo = crear[1];
       const resto = t.slice(t.indexOf(crear[0]) + crear[0].length).trim();
@@ -767,6 +839,104 @@
     log.scrollTop = log.scrollHeight;
   }
 
+  /* ---------- Flujo guiado (wizard) 100% en el chat ---------- */
+  function isCompleteWizard(modulo, campos) {
+    const req = WIZARD_REQUIRED[modulo];
+    if (!req) return true;   // módulo sin pasos guiados → flujo normal
+    const c = campos || {};
+    return req.every(k => c[k] !== undefined && c[k] !== null && String(c[k]).trim() !== '');
+  }
+  function isQuery(text) {
+    return /^(cu[aá]nto|c[uó]mo|d[oó]nde|cu[aá]l|cu[aá]ndo|qu[eé] es|mostrame|mostráme|ver|muestrame)/i.test(String(text || '').trim());
+  }
+
+  function wizardBubble(html) {
+    const pend = bubble(html, 'bot');
+    log.appendChild(pend);
+    log.scrollTop = log.scrollHeight;
+    return pend;
+  }
+  function wizardAskStep() {
+    const op = pendingOp;
+    if (!op) return;
+    const steps = WIZARD_STEPS[op.modulo] || [];
+    const s = steps[op.idx];
+    if (!s) { finishWizard(); return; }
+    const pend = wizardBubble('🤖 ' + s.ask);
+    const wrap = document.createElement('div');
+    wrap.className = 'ai-actions';
+    (s.buttons || []).forEach(lb => {
+      const b = document.createElement('button');
+      b.className = 'btn btn-soft btn-sm'; b.textContent = lb;
+      b.dataset.wiz = lb; wrap.appendChild(b);
+    });
+    if (s.optional) {
+      const sk = document.createElement('button');
+      sk.className = 'btn btn-soft btn-sm'; sk.textContent = 'Saltear';
+      sk.dataset.wiz = '__skip__'; wrap.appendChild(sk);
+    }
+    const cx = document.createElement('button');
+    cx.className = 'btn btn-soft btn-sm'; cx.textContent = 'Cancelar';
+    cx.dataset.wiz = '__cancel__'; wrap.appendChild(cx);
+    pend.appendChild(wrap);
+  }
+  function wizardAskNext() {
+    const op = pendingOp;
+    if (!op) return;
+    const steps = WIZARD_STEPS[op.modulo] || [];
+    while (op.idx < steps.length) {
+      const cand = steps[op.idx];
+      if (!op.campos[cand.key]) break;
+      op.idx++;
+    }
+    if (op.idx >= steps.length) { finishWizard(); return; }
+    wizardAskStep();
+  }
+  function wizardAdvance(answer, skip) {
+    const op = pendingOp;
+    if (!op) return;
+    const steps = WIZARD_STEPS[op.modulo] || [];
+    const s = steps[op.idx];
+    if (s && !skip && answer) op.campos[s.key] = String(answer).trim();
+    op.idx++;
+    wizardAskNext();
+  }
+  function startWizard(modulo, campos) {
+    pendingOp = { modulo, campos: campos || {}, idx: 0 };
+    wizardAskNext();
+  }
+  function finishWizard() {
+    const op = pendingOp;
+    pendingOp = null;
+    if (!op) return;
+    const res = execFormAction({ modulo: op.modulo, campos: op.campos });
+    if (res && res.saved) {
+      wizardBubble(successCard(res.label));
+      speak('¡Listo! Guardé ' + res.label);
+      if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
+      rememberTurn('asistente', 'guardado ' + res.label);
+    } else {
+      wizardBubble('No pude guardar el/la ' + op.modulo + ' porque me faltan datos. Decime qué falta y lo completo.');
+      rememberTurn('asistente', 'faltan datos para ' + op.modulo);
+    }
+  }
+  function cancelWizard() {
+    const op = pendingOp;
+    pendingOp = null;
+    wizardBubble('✋ Operación cancelada. Si querés retomarla, decime de nuevo qué cargar.');
+    if (op) rememberTurn('asistente', 'cancelado ' + op.modulo);
+  }
+  function askContinueOrCancel() {
+    const op = pendingOp;
+    if (!op) return;
+    const pend = wizardBubble('Estás a mitad de cargar <b>' + op.modulo + '</b>. ¿Querés continuar o lo cancelamos?');
+    const wrap = document.createElement('div');
+    wrap.className = 'ai-actions';
+    const c = document.createElement('button'); c.className = 'btn btn-soft btn-sm'; c.textContent = 'Continuar'; c.dataset.wiz = '__continue__'; wrap.appendChild(c);
+    const x = document.createElement('button'); x.className = 'btn btn-soft btn-sm'; x.textContent = 'Cancelar'; x.dataset.wiz = '__cancel__'; wrap.appendChild(x);
+    pend.appendChild(wrap);
+  }
+
   /* Llamada a la Edge Function en modo streaming (SSE): el texto llega por
      chunks y se renderiza palabra por palabra vía onChunk. */
   async function callAI(payload, onChunk) {
@@ -827,6 +997,19 @@
     input.value = '';
     finalText = '';
     log.appendChild(bubble(renderText(msg), 'user'));
+    log.scrollTop = log.scrollHeight;
+
+    /* ===== 1) Operación guiada en curso (wizard): responder / cancelar / continuar ===== */
+    if (pendingOp) {
+      const mt = msg.toLowerCase();
+      if (/^(cancelar|cancela|salir|salí|nada|me arrepentí|para|basta|olvidalo|olvídalo|chau|no quiero)\b/.test(mt)) cancelWizard();
+      else if (/^(seguir|continuar|continuemos|dale|sí|si)\b/.test(mt)) wizardAskNext();
+      else if (isQuery(msg)) askContinueOrCancel();
+      else wizardAdvance(msg, false);
+      busy = false;
+      return;
+    }
+
     const pend = bubble('Pensando…', 'bot');
     log.appendChild(pend);
     log.scrollTop = log.scrollHeight;
@@ -838,6 +1021,26 @@
     if (sq) {
       const found = searchStore(sq);
       if (found.length) { handleSearchResults(sq, found, pend); return; }
+    }
+    /* ===== 2) Creación guiada universal: la carga se resuelve 100% en el chat ===== */
+    const li = localIntent(msg);
+    if (li && WIZARD_STEPS[li.modulo]) {
+      rememberTurn('usuario', msg);
+      if (isCompleteWizard(li.modulo, li.campos)) {
+        const res = execFormAction(li);
+        if (res && res.saved) {
+          pend.innerHTML = successCard(res.label);
+          speak('¡Listo! Guardé ' + res.label);
+          if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
+          rememberTurn('asistente', 'guardado ' + res.label);
+          busy = false;
+          log.scrollTop = log.scrollHeight;
+          return;
+        }
+      }
+      startWizard(li.modulo, li.campos);
+      busy = false;
+      return;
     }
     const payload = { message: msg, context: context(), mode: isAdminMode() ? 'admin' : 'usuario' };
     rememberTurn('usuario', msg);
@@ -909,5 +1112,5 @@
     try { build(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED };
 })(typeof window !== 'undefined' ? window : globalThis);
