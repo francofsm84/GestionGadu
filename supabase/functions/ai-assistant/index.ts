@@ -172,6 +172,7 @@ serve(async (req) => {
           let streamed = false;
 
           const providers = [
+            { name: "deepseek", key: Deno.env.get("DEEPSEEK_API_KEY"), model: Deno.env.get("DEEPSEEK_MODEL") || "deepseek-chat" },
             { name: "groq", key: Deno.env.get("GROQ_API_KEY"), model: Deno.env.get("GROQ_MODEL") || "llama-3.3-70b-versatile" },
             { name: "gemini", key: Deno.env.get("GEMINI_API_KEY"), model: Deno.env.get("GEMINI_MODEL") || "gemini-3.5-flash" },
             { name: "openrouter", key: Deno.env.get("OPENROUTER_API_KEY"), model: Deno.env.get("OPENROUTER_MODEL") || "meta-llama/llama-3.3-70b-instruct" },
@@ -222,8 +223,13 @@ serve(async (req) => {
                   if (streamed) break;
                 }
               } else {
-                // Groq / OpenRouter: API compatible con OpenAI (streaming de texto)
-                const baseUrl = prov.name === "groq" ? "https://api.groq.com/openai/v1" : "https://openrouter.ai/api/v1";
+                // DeepSeek / Groq / OpenRouter: API compatible con OpenAI (streaming de texto)
+                const baseUrls: Record<string, string> = {
+                  deepseek: "https://api.deepseek.com",
+                  groq: "https://api.groq.com/openai/v1",
+                  openrouter: "https://openrouter.ai/api/v1",
+                };
+                const baseUrl = baseUrls[prov.name] || "https://api.groq.com/openai/v1";
                 const headers: Record<string, string> = { "Content-Type": "application/json", "Authorization": `Bearer ${prov.key}` };
                 if (prov.name === "openrouter") {
                   headers["HTTP-Referer"] = "https://gestiongadu.vercel.app";
