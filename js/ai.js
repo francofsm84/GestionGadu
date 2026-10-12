@@ -107,7 +107,7 @@
   }
 
   let host = null, log = null, input = null, busy = false, builtMode = null, rec = null, listening = false, voiceOn = true, speaking = false;
-  let finalText = '', lastSendAt = 0, silenceTimer = null;
+  let finalText = '', lastSendAt = 0, silenceTimer = null, shouldListen = false;
   let voicePref = null;
   /* Memoria de sesión: última obra/cliente tratado, para que los comandos
      consecutivos se apliquen sin volver a preguntar. */
@@ -154,6 +154,7 @@
   /* Dictado por voz (Web Speech API) — estilo "pulsar para hablar":
      el texto se rellena en el input pero NUNCA se envía solo. */
   function stopRec() {
+    shouldListen = false;   // evita que onend reinicie la escucha
     if (rec) { try { rec.stop(); } catch (e) {} }
     clearTimeout(silenceTimer);
     /* Al cancelar/dejar de escuchar, descartar el interino y dejar solo lo definitivo */
@@ -186,19 +187,15 @@
     };
   }
 
-  function toggleMic() {
+  function startRecognition() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const mic = document.getElementById('aiMic');
-    if (!SR) {
-      if (G.ui && G.ui.toast) G.ui.toast('Tu navegador no soporta dictado por voz. Probá con Chrome o Edge.', 'error');
-      return;
-    }
-    if (listening) { stopRec(); return; }   // 2ª pulsación = dejar de escuchar (sin enviar)
+    if (!SR) return;
     rec = new SR();
     rec.lang = 'es-ES';
     rec.interimResults = true;   // muestra en vivo
     rec.continuous = true;       // no corta en pausas breves
-    rec.onstart = () => { listening = true; finalText = ''; mic.classList.add('ai-mic-on'); };
+    rec.onstart = () => { listening = true; mic.classList.add('ai-mic-on'); resetSilenceTimer(); };
     rec.onresult = (e) => {
       const items = [];
       for (let i = 0; i < e.results.length; i++) items.push({ isFinal: e.results[i].isFinal, transcript: e.results[i][0].transcript });
@@ -213,12 +210,33 @@
       stopRec();
     };
     rec.onend = () => {
-      listening = false;
       clearTimeout(silenceTimer);
-      mic.classList.remove('ai-mic-on');
-      /* NO se envía automáticamente: el envío es manual con el botón ➤ */
+      if (shouldListen) {
+        /* El navegador cortó la sesión (continuous no siempre funciona en móvil):
+           reiniciar la escucha conservando lo ya transcrito. */
+        listening = false;
+        mic.classList.remove('ai-mic-on');
+        setTimeout(() => { if (shouldListen) startRecognition(); }, 150);
+      } else {
+        listening = false;
+        mic.classList.remove('ai-mic-on');
+        /* NO se envía automáticamente: el envío es manual con el botón ➤ */
+      }
     };
     try { rec.start(); } catch (e) { listening = false; mic.classList.remove('ai-mic-on'); }
+  }
+
+  function toggleMic() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const mic = document.getElementById('aiMic');
+    if (!SR) {
+      if (G.ui && G.ui.toast) G.ui.toast('Tu navegador no soporta dictado por voz. Probá con Chrome o Edge.', 'error');
+      return;
+    }
+    if (listening) { stopRec(); return; }   // 2ª pulsación = dejar de escuchar (sin enviar)
+    shouldListen = true;
+    finalText = '';
+    startRecognition();
   }
 
   /* Deduplicación de emergencia: elimina palabras consecutivas repetidas y
@@ -595,9 +613,19 @@
   }
 
   /* Intents locales de respaldo: si la IA no responde (pico/timeout),
-     interpretamos la orden con patrones simples (monto + gasto/ingreso). */
+     interpretamos la orden con patrones simples. */
   function localIntent(text) {
     const t = String(text || '').toLowerCase();
+    /* 1) Crear entidades: "crear empleado/obra/cliente ..." → abre el formulario */
+    const crear = t.match(/(?:crear|crea|agregar|alta de|nueva|nuevo)\s+(empleado|obra|cliente|socio|presupuesto)\b/i);
+    if (crear) {
+      const modulo = crear[1];
+      const resto = t.slice(t.indexOf(crear[0]) + crear[0].length).trim();
+      const nombre = resto.replace(/^(que se llame|llamado|llamada|de nombre|de)\s+/i, '').trim();
+      if (nombre) return { modulo, campos: { nombre } };
+      return { modulo, campos: {} };
+    }
+    /* 2) Gastos/ingresos con monto */
     const kind = /gasto|gast[ée]|pagu[ée]|compr[ée]|comprar/.test(t) ? 'gasto'
       : /ingreso|cobr[ée]|cobro|anticipo|adelanto|certificaci/.test(t) ? 'ingreso'
       : null;
@@ -702,7 +730,7 @@
         /* Respaldo local: si la IA falla (pico/timeout), interpretamos la orden
            y ejecutamos la acción más probable sin romper la experiencia. */
         const local = localIntent(msg);
-        if (local && local.campos && local.campos.monto > 0) {
+        if (local) {
           const res = execFormAction(local);
           if (res && res.saved) {
             const txt = '✅ Listo, guardé ' + res.label;
@@ -710,7 +738,7 @@
             speak(txt);
             if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
           } else {
-            pend.innerHTML = renderText('Entendí tu pedido, pero necesito que confirmes unos datos en el formulario.');
+            pend.innerHTML = renderText('Entendí tu pedido (' + local.modulo + '), abrí el formulario para que confirmes.');
           }
         } else {
           pend.innerHTML = (err && err.name === 'AbortError')
