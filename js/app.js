@@ -102,6 +102,16 @@
       const lbl = a.querySelector('.nav-label');
       a.title = collapsed && lbl ? lbl.textContent : '';
     });
+    /* Orientación de la flecha del botón de colapsar: << (abierto) · >> (colapsado) */
+    const bc = document.getElementById('btnCollapse');
+    if (bc) {
+      const ico = bc.querySelector('[data-icon]');
+      if (ico) {
+        const key = collapsed ? 'chevrons-right' : 'chevrons-left';
+        ico.setAttribute('data-icon', key);
+        ico.innerHTML = UI.icon(key, 18);
+      }
+    }
   }
 
   /* Cierra el menú lateral desplegable (móvil). Idempotente y sin efecto en
