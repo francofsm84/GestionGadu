@@ -21,9 +21,13 @@ S.startEmpty();
 const obra = S.add('works', { name: 'Norma Molina', code: 'OB-1', clientId: null, location: '', status: 'activa', budgetTotal: 0, advanceFisico: 0, startDate: S.todayISO(), endDate: '', description: '' });
 
 console.log('== 1) Cobertura universal de pasos guiados ==');
-['empleado', 'cliente', 'socio', 'obra', 'gasto', 'ingreso', 'presupuesto', 'herramienta'].forEach(m => {
+['empleado', 'cliente', 'socio', 'obra', 'gasto', 'ingreso', 'presupuesto', 'herramienta', 'jornada'].forEach(m => {
   okk(!!AI.WIZARD_STEPS[m] && AI.WIZARD_STEPS[m].length > 0, 'wizard de ' + m);
 });
+const sinOpcional = ['empleado', 'cliente', 'socio', 'obra', 'gasto', 'ingreso', 'presupuesto', 'herramienta', 'jornada'].every(m =>
+  AI.WIZARD_STEPS[m].every(s => !s.optional)
+);
+okk(sinOpcional, 'ningún paso es opcional (sin "Saltear")');
 
 console.log('== 2) Detección de intención (localIntent) ==');
 okk(JSON.stringify(AI.localIntent('cargar herramienta amoladora')) === JSON.stringify({ modulo: 'herramienta', campos: { nombre: 'amoladora' } }), 'detecta herramienta');
@@ -31,13 +35,16 @@ okk(JSON.stringify(AI.localIntent('nuevo presupuesto reforma cocina')) === JSON.
 okk(JSON.stringify(AI.localIntent('cargar un gasto')) === JSON.stringify({ modulo: 'gasto', campos: {} }), 'gasto sin monto → guiado');
 
 console.log('== 3) Completitud mínima por módulo (validación estricta) ==');
-okk(AI.isCompleteWizard('empleado', { nombre: 'Jorge' }) === true, 'empleado con nombre → completo');
+okk(AI.isCompleteWizard('empleado', { nombre: 'Jorge' }) === false, 'empleado sin oficio → incompleto');
+okk(AI.isCompleteWizard('empleado', { nombre: 'Jorge', oficio: 'Albañil' }) === true, 'empleado con nombre y oficio → completo');
 okk(AI.isCompleteWizard('gasto', {}) === false, 'gasto vacío → incompleto');
 okk(AI.isCompleteWizard('gasto', { monto: 5000 }) === false, 'gasto SOLO con monto → incompleto (falta categoría y obra)');
 okk(AI.isCompleteWizard('gasto', { monto: 5000, categoria: 'Materiales', obra: 'X' }) === true, 'gasto completo → listo');
 okk(AI.isCompleteWizard('ingreso', { monto: 10000 }) === false, 'ingreso sin obra → incompleto');
 okk(AI.isCompleteWizard('obra', { nombre: 'X' }) === true, 'obra con nombre → completo');
 okk(AI.isCompleteWizard('presupuesto', { nombre: 'X' }) === false, 'presupuesto sin obra → incompleto');
+okk(AI.isCompleteWizard('jornada', { empleado: 'X', obra: 'Y', horas: 8 }) === true, 'jornada completa → listo');
+okk(AI.isCompleteWizard('jornada', { empleado: 'X' }) === false, 'jornada incompleta → retiene');
 
 console.log('== 5) Guardado estricto: sin obra no se guarda como general ==');
 const otra = S.add('works', { name: 'Obra Dos', code: 'OB-2', clientId: null, location: '', status: 'activa', budgetTotal: 0, advanceFisico: 0, startDate: S.todayISO(), endDate: '', description: '' });
@@ -62,6 +69,14 @@ const r3 = AI.execFormAction({ modulo: 'empleado', campos: { nombre: 'Jorge el F
 okk(r3 && r3.saved === true, 'empleado con oficio guarda');
 const e = S.data.employees.find(x => x.firstName === 'Jorge');
 okk(!!e && e.notes === 'Oficio: Albañil' && e.hourlyRate === 1500, 'empleado con oficio y tarifa persistidos');
+const rSinOficio = AI.execFormAction({ modulo: 'empleado', campos: { nombre: 'Pepe' } });
+okk(rSinOficio && rSinOficio.saved === false, 'empleado SIN oficio → NO guarda (retiene)');
+const r4 = AI.execFormAction({ modulo: 'jornada', campos: { empleado: 'Jorge el Flaco', obra: 'Norma Molina', horas: 8 } });
+okk(r4 && r4.saved === true, 'jornada guarda directo');
+const j = S.data.attendance.find(x => x.employeeId === e.id);
+okk(!!j && j.hours[0].hours === 8 && j.hours[0].workId === obra.id, 'jornada con empleado, obra y horas correctas');
+const rSinJ = AI.execFormAction({ modulo: 'jornada', campos: { empleado: 'Jorge el Flaco' } });
+okk(rSinJ && rSinJ.saved === false, 'jornada incompleta → NO guarda');
 
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }

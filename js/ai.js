@@ -39,25 +39,26 @@
     'admin-export': () => { if (G.actions.adminTab) G.actions.adminTab('usuarios'); },
   };
 
-  /* Pasos guiados por módulo (flujo conversacional 100% dentro del chat) */
+  /* Pasos guiados por módulo — TODOS obligatorios en secuencia, sin "Saltear".
+     Los campos secundarios aceptan la respuesta "no sé" para continuar. */
   const WIZARD_STEPS = {
     empleado: [
       { key: 'nombre', ask: 'Dale, ¿cómo se llama el empleado? (ej. "Jorge Pérez")' },
       { key: 'oficio', ask: '¿Cuál es su oficio?', buttons: ['Albañil', 'Pintor', 'Plomero', 'Electricista', 'Carpintero', 'Yesero', 'Herrero'] },
-      { key: 'tarifa', ask: '¿Cuánto cobra por hora? (ej. 1500, o tocá Saltear)', optional: true },
+      { key: 'tarifa', ask: '¿Cuánto cobra por hora? (ej. 1500; si no sabés, decime "no sé")' },
     ],
     cliente: [
       { key: 'nombre', ask: '¿Cómo se llama el cliente? (ej. "Ángel Cámara")' },
-      { key: 'telefono', ask: '¿Su teléfono? (o tocá Saltear)', optional: true },
-      { key: 'direccion', ask: '¿Su dirección? (o tocá Saltear)', optional: true },
+      { key: 'telefono', ask: '¿Su teléfono? (si no lo tenés, decime "no sé")' },
+      { key: 'direccion', ask: '¿Su dirección? (si no la sabés, decime "no sé")' },
     ],
     socio: [
       { key: 'nombre', ask: '¿Cómo se llama el socio?' },
     ],
     obra: [
       { key: 'nombre', ask: '¿Cómo se llama la obra? (ej. "Casa de Norma")' },
-      { key: 'ubicacion', ask: '¿Dónde queda la obra? (o tocá Saltear)', optional: true },
-      { key: 'presupuesto', ask: '¿Cuál es el presupuesto total? (ej. 100000, o Saltear)', optional: true },
+      { key: 'ubicacion', ask: '¿Dónde queda la obra? (si no sabés, decime "no sé")' },
+      { key: 'presupuesto', ask: '¿Cuál es el presupuesto total? (ej. 100000; si no sabés, decime "no sé")' },
     ],
     gasto: [
       { key: 'monto', ask: '¿De cuánto es el gasto? (ej. 5000)' },
@@ -66,25 +67,31 @@
     ],
     ingreso: [
       { key: 'monto', ask: '¿De cuánto es el ingreso? (ej. 10000)' },
-      { key: 'concepto', ask: '¿Qué concepto? (Cobro, Adelanto, Certificación… o Saltear)', optional: true },
+      { key: 'concepto', ask: '¿Qué concepto? (Cobro, Adelanto, Certificación…; si no sabés, decime "no sé")' },
       { key: 'obra', ask: '¿A qué obra corresponde?', worksList: true },
     ],
     presupuesto: [
       { key: 'nombre', ask: '¿Cómo se llama el presupuesto? (ej. "Reforma cocina")' },
-      { key: 'monto', ask: '¿Cuál es el monto total? (ej. 80000, o Saltear)', optional: true },
+      { key: 'monto', ask: '¿Cuál es el monto total? (ej. 80000; si no sabés, decime "no sé")' },
       { key: 'obra', ask: '¿Para qué obra es?', worksList: true },
     ],
     herramienta: [
       { key: 'nombre', ask: '¿Qué herramienta cargamos? (ej. "Amoladora")' },
       { key: 'categoria', ask: '¿Qué tipo es?', buttons: ['Herramienta eléctrica', 'Herramienta manual', 'Maquinaria', 'Otro'] },
-      { key: 'costo', ask: '¿Cuánto costó? (ej. 12000, o Saltear)', optional: true },
+      { key: 'costo', ask: '¿Cuánto costó? (ej. 12000; si no sabés, decime "no sé")' },
+    ],
+    jornada: [
+      { key: 'empleado', ask: '¿A qué empleado le cargamos la jornada?', empsList: true },
+      { key: 'obra', ask: '¿En qué obra trabajó?', worksList: true },
+      { key: 'horas', ask: '¿Cuántas horas trabajó? (ej. 8)' },
     ],
   };
-  /* Campos mínimos para poder guardar cada módulo (validación estricta) */
+  /* Campos CLAVE obligatorios: sin ellos NUNCA se guarda (ni tilde verde) */
   const WIZARD_REQUIRED = {
-    empleado: ['nombre'], cliente: ['nombre'], socio: ['nombre'], obra: ['nombre'],
+    empleado: ['nombre', 'oficio'], cliente: ['nombre'], socio: ['nombre'], obra: ['nombre'],
     gasto: ['monto', 'categoria', 'obra'], ingreso: ['monto', 'obra'],
-    presupuesto: ['nombre', 'obra'], herramienta: ['nombre'],
+    presupuesto: ['nombre', 'obra'], herramienta: ['nombre', 'categoria'],
+    jornada: ['empleado', 'obra', 'horas'],
   };
 
   /* Modo dinámico según la vista actual: #/admin → COO Virtual · resto → Capataz Digital */
@@ -310,9 +317,8 @@
       if (!b) return;
       const v = b.dataset.wiz;
       if (v === '__cancel__') cancelWizard();
-      else if (v === '__skip__') wizardAdvance('', true);
       else if (v === '__continue__') { if (pendingOp) wizardAskNext(); }
-      else wizardAdvance(v, false);
+      else wizardAdvance(v);
     });
     document.getElementById('aiFab').addEventListener('click', toggle);
     document.getElementById('aiClose').addEventListener('click', () => setOpen(false));
@@ -647,9 +653,10 @@
         const fn = c.apellido ? c.nombre : (full.split(/\s+/)[0] || '');
         const ln = c.apellido || full.split(/\s+/).slice(1).join(' ');
         if (!fn) return null;
+        if (!c.oficio) return null;   // oficio obligatorio (validación estricta)
         if (G.plan && G.plan.checkLimit && G.plan.checkLimit('empleados') === false) return null;
-        S.add('employees', { firstName: fn, lastName: ln, phone: c.telefono || '', paymentData: '', hourlyRate: Number(c.tarifa) || 0, active: true, notes: c.oficio ? 'Oficio: ' + c.oficio : '', photo: null });
-        return { ok: true, label: 'empleado ' + (fn + ' ' + ln).trim() + (c.oficio ? ' (' + c.oficio + ')' : '') };
+        S.add('employees', { firstName: fn, lastName: ln, phone: c.telefono || '', paymentData: '', hourlyRate: Number(c.tarifa) || 0, active: true, notes: 'Oficio: ' + c.oficio, photo: null });
+        return { ok: true, label: 'empleado ' + (fn + ' ' + ln).trim() + ' (' + c.oficio + ')' };
       }
       if (mod === 'obra') {
         const name = c.nombre || '';
@@ -682,6 +689,14 @@
         if (!name) return null;
         S.add('assets', { name, category: c.categoria || 'Herramienta', purchaseDate: today, cost: Number(c.monto) || Number(c.costo) || 0, status: 'operativo', supplierId: null, notes: c.ubicacion ? 'En: ' + c.ubicacion : '', maintenance: [] });
         return { ok: true, label: 'herramienta ' + name };
+      }
+      if (mod === 'jornada') {
+        const empId = c.empleado ? findId(d.employees, c.empleado, x => ((x.firstName || '') + ' ' + (x.lastName || '')).trim()) : null;
+        const workId = c.obra ? findId(d.works, c.obra, x => x.name) : null;
+        const horas = Number(c.horas);
+        if (!empId || !workId || !(horas > 0)) return null;   // empleado, obra y horas obligatorios
+        S.add('attendance', { employeeId: empId, date: today, status: 'presente', hours: [{ workId, hours: horas }], notes: '' });
+        return { ok: true, label: 'jornada de ' + c.empleado + ' (' + horas + 'h en ' + c.obra + ')' };
       }
     } catch (e) { return null; }
     return null;
@@ -725,6 +740,7 @@
     'new-ingreso': 'cargar un ingreso',
     'new-presupuesto': 'cargar un presupuesto',
     'herramientas': 'cargar una herramienta',
+    'new-jornada': 'cargar una jornada',
   };
   function firePill(k) {
     const cmd = PILL_COMMANDS[k];
@@ -811,7 +827,7 @@
   function localIntent(text) {
     const t = String(text || '').toLowerCase();
     /* 1) Crear entidades: "crear/cargar empleado|obra|cliente|socio|presupuesto [nombre]" */
-    const crear = t.match(/(?:crear|crea|agregar|alta de|nueva|nuevo|cargar|carga|cárgame|cargame|cargá)\s+(?:un |una |el |la |a )?(empleado|obra|cliente|socio|presupuesto|herramienta)\b/i);
+    const crear = t.match(/(?:crear|crea|agregar|alta de|nueva|nuevo|cargar|carga|cárgame|cargame|cargá)\s+(?:un |una |el |la |a )?(empleado|obra|cliente|socio|presupuesto|herramienta|jornada)\b/i);
     if (crear) {
       const modulo = crear[1];
       const resto = t.slice(t.indexOf(crear[0]) + crear[0].length).trim();
@@ -927,7 +943,7 @@
     const s = steps[op.idx];
     if (!s) { finishWizard(); return; }
 
-    /* Botones dinámicos con las obras activas REALES del store */
+    /* Botones dinámicos con entidades REALES del store (obras / empleados) */
     let buttons = s.buttons || [];
     if (s.worksList) {
       const obras = ((G.store.data && G.store.data.works) || []).filter(w => w.status === 'activa');
@@ -942,6 +958,19 @@
         return;
       }
       buttons = obras.map(w => w.name);
+    } else if (s.empsList) {
+      const emps = ((G.store.data && G.store.data.employees) || []).filter(e => e.active !== false);
+      if (!emps.length) {
+        const pend = wizardBubble('⚠️ Todavía no tenés empleados cargados. Primero creá uno: decime <b>"crear un empleado"</b> y empezamos por ahí.');
+        const wrap = document.createElement('div');
+        wrap.className = 'ai-actions';
+        const cx = document.createElement('button');
+        cx.className = 'btn btn-soft btn-sm'; cx.textContent = 'Cancelar';
+        cx.dataset.wiz = '__cancel__'; wrap.appendChild(cx);
+        pend.appendChild(wrap);
+        return;
+      }
+      buttons = emps.map(e => ((e.firstName || '') + ' ' + (e.lastName || '')).trim());
     }
 
     const pend = wizardBubble('🤖 ' + s.ask);
@@ -952,11 +981,7 @@
       b.className = 'btn btn-soft btn-sm'; b.textContent = lb;
       b.dataset.wiz = lb; wrap.appendChild(b);
     });
-    if (s.optional) {
-      const sk = document.createElement('button');
-      sk.className = 'btn btn-soft btn-sm'; sk.textContent = 'Saltear';
-      sk.dataset.wiz = '__skip__'; wrap.appendChild(sk);
-    }
+    /* Sin botón "Saltear": todos los pasos se responden (o se cancela) */
     const cx = document.createElement('button');
     cx.className = 'btn btn-soft btn-sm'; cx.textContent = 'Cancelar';
     cx.dataset.wiz = '__cancel__'; wrap.appendChild(cx);
@@ -968,18 +993,27 @@
     const steps = WIZARD_STEPS[op.modulo] || [];
     while (op.idx < steps.length) {
       const cand = steps[op.idx];
-      if (!op.campos[cand.key]) break;
+      if (!(cand.key in op.campos)) break;   // el paso ya fue respondido
       op.idx++;
     }
     if (op.idx >= steps.length) { finishWizard(); return; }
     wizardAskStep();
   }
-  function wizardAdvance(answer, skip) {
+  function wizardAdvance(answer) {
     const op = pendingOp;
     if (!op) return;
     const steps = WIZARD_STEPS[op.modulo] || [];
     const s = steps[op.idx];
-    if (s && !skip && answer) op.campos[s.key] = String(answer).trim();
+    if (!s) { finishWizard(); return; }
+    const val = String(answer || '').trim();
+    const clave = (WIZARD_REQUIRED[op.modulo] || []).includes(s.key);
+    const noSe = /^(no se|no sé|no tengo|no lo se|no lo sé|nada|paso|no)$/i.test(val);
+    /* Campos CLAVE vacíos → insistir sin avanzar; secundarios aceptan "no sé" */
+    if (!val || (clave && noSe)) {
+      wizardBubble('🤖 Necesito ese dato para poder continuar. ' + s.ask);
+      return;
+    }
+    op.campos[s.key] = noSe ? '' : val;
     op.idx++;
     wizardAskNext();
   }
@@ -1155,6 +1189,9 @@
             b.className = 'btn btn-soft btn-sm';
             b.textContent = a.label;
             b.addEventListener('click', () => {
+              /* PROHIBIDO abrir formularios manuales: las claves new-* arrancan
+                 el flujo guiado en el chat; el resto solo navega a vistas */
+              if (PILL_COMMANDS[a.clave]) { firePill(a.clave); return; }
               const fn = ACTION_KEYS[a.clave];
               if (fn) { fn(); setOpen(false); }
             });
