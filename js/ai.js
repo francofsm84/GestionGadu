@@ -242,15 +242,34 @@
       return vs.filter(v => /^es/i.test(v.lang));
     } catch (e) { return []; }
   }
+  /* Puntúa la voz: nativas (Argentina/España/México/Latam) primero */
+  function voiceRank(v) {
+    const l = (v.lang || '').toLowerCase();
+    if (/es[-_]ar/.test(l)) return 0;
+    if (/es[-_]es/.test(l)) return 1;
+    if (/es[-_]mx|es[-_]419/.test(l)) return 2;
+    if (/es[-_]us/.test(l)) return 3;
+    return 4;
+  }
+  /* Género inferido del nombre de la voz (para el selector) */
+  function voiceGender(v) {
+    const n = (v.name || '').toLowerCase();
+    if (/(helena|laura|sabina|paulina|monica|soledad|esperanza|maria|marta|carmen|luciana|valentina|sara|female|mujer)/.test(n)) return 'Femenina';
+    if (/(pablo|jorge|diego|carlos|juan|miguel|andres|raul|javier|pedro|male|hombre)/.test(n)) return 'Masculina';
+    return '';
+  }
   function voiceLabel(v) {
-    return (v.name || '').replace(/Microsoft |Google /gi, '').replace(/\s*\(.*\)/, '').trim() || v.lang || 'Voz';
+    const base = (v.name || '').replace(/Microsoft |Google /gi, '').replace(/\s*\(.*\)/, '').trim() || v.lang || 'Voz';
+    const g = voiceGender(v);
+    return base + (g ? ' · ' + g : '');
   }
   function populateVoices() {
     const sel = document.getElementById('aiVoiceSel');
     if (!sel) return;
-    const vs = spanishVoices();
+    let vs = spanishVoices();
     if (!vs.length) { sel.hidden = true; return; }
     sel.hidden = false;
+    vs = vs.slice().sort((a, b) => voiceRank(a) - voiceRank(b) || (a.name || '').localeCompare(b.name || ''));
     sel.innerHTML = vs.map(v =>
       '<option value="' + esc(v.name) + '"' + (v.name === voicePref ? ' selected' : '') + '>' + esc(voiceLabel(v)) + '</option>'
     ).join('');
@@ -291,10 +310,10 @@
       u.lang = 'es-ES';
       u.rate = 1.0;
       u.pitch = 1.0;
-      const voices = window.speechSynthesis.getVoices();
+      const voices = spanishVoices().slice().sort((a, b) => voiceRank(a) - voiceRank(b));
       let es = null;
       if (voicePref) es = voices.find(v => v.name === voicePref);
-      if (!es) es = voices.find(v => /es[-_]AR/i.test(v.lang)) || voices.find(v => /es[-_]ES/i.test(v.lang)) || voices.find(v => /^es/i.test(v.lang));
+      if (!es) es = voices[0] || null;   // mejor voz nativa disponible
       if (es) u.voice = es;
       u.onstart = () => { speaking = true; updateStopBtn(); };
       u.onend = () => { speaking = false; updateStopBtn(); };
