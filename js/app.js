@@ -440,6 +440,12 @@
     return dark ? 'logo-dark.png?v=3' : 'logo.png?v=3';
   }
 
+  /* Oculta la pantalla de carga (splash) cuando la app ya renderizó */
+  function hideSplash() {
+    const s = document.getElementById('splash');
+    if (s) { s.classList.add('hide'); setTimeout(() => { try { s.remove(); } catch (e) {} }, 350); }
+  }
+
   /* ---------- Onboarding obligatorio (Plan Free) ---------- */
   function renderOnboarding() {
     const prof = G.plan.profile || {};
@@ -615,6 +621,7 @@
        con brillo adaptativo (notebooks que oscurecen el contenido oscuro) */
     try { document.documentElement.dataset.theme = 'light'; } catch (e) {}
     document.body.classList.add('no-session');
+    hideSplash();
     const prev = document.getElementById('loginRoot');
     if (prev) prev.remove();
     const host = document.createElement('div');
@@ -819,6 +826,7 @@
     S.load();
     applyTheme(S.data.settings.theme || 'dark');
     document.body.classList.remove('no-session');
+    hideSplash();
     const lr = document.getElementById('loginRoot');
     if (lr) lr.remove();
 
