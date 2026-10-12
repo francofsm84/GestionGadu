@@ -111,3 +111,26 @@ js/views/agenda.js         · directorio de contactos
 ```
 
 Tecnología: HTML + CSS + JavaScript puro (ES6), sin frameworks ni dependencias.
+
+## Pruebas y verificación (antes de desplegar)
+
+Para validar todo el sistema con **un solo comando**, desde la carpeta del proyecto ejecutá:
+
+```bash
+node test/run-all.js
+```
+
+Corre las **7 pruebas** de punta a punta (incluida la que usa el mock de Supabase) y termina con `✅ TODAS LAS PRUEBAS PASARON` si todo está en verde:
+
+| Prueba | Qué valida |
+|---|---|
+| `store-smoke` | Finanzas, obras, empleados, seguros, herramientas y CRUD |
+| `sync-smoke` | Sincronización y aislamiento de datos por usuario |
+| `ai-smoke` | Sanitización del dictado por voz (deduplicación y tope de longitud) |
+| `gadux-scenario` | Flujo operativo completo + balance del Dashboard |
+| `gadux-simulation` | Simulación STT (interim/final) y QA integral |
+| `css-check` | Que todas las clases CSS existan |
+| `plan-smoke` | Planes, blindaje admin, invitaciones y onboarding (con mock) |
+
+Para correr una prueba individual: `node test/store-smoke.js`, `node test/sync-smoke.js`, etc.
+
