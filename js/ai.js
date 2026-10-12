@@ -91,6 +91,7 @@
   }
 
   let host = null, log = null, input = null, busy = false, builtMode = null, rec = null, listening = false, voiceOn = true, speaking = false;
+  let finalText = '', lastSendAt = 0;
   let voicePref = null;
   try { voicePref = localStorage.getItem('gadu_ai_voice') || null; } catch (e) {}
 
@@ -148,7 +149,7 @@
     rec.lang = 'es-ES';
     rec.interimResults = true;   // muestra en vivo
     rec.continuous = true;       // no corta en pausas breves
-    rec.onstart = () => { listening = true; mic.classList.add('ai-mic-on'); };
+    rec.onstart = () => { listening = true; finalText = ''; mic.classList.add('ai-mic-on'); };
     rec.onresult = (e) => {
       /* Reconstruir SIEMPRE desde e.results y unir con espacios (evita "cargamecargame") */
       const finals = [], interims = [];
@@ -159,6 +160,7 @@
         if (r.isFinal) finals.push(t);
         else interims.push(t);
       }
+      finalText = finals.join(' ');   // solo lo DEFINITIVO
       input.value = finals.concat(interims).join(' ').replace(/\s+/g, ' ').trim();
     };
     rec.onerror = (e) => {
@@ -502,11 +504,19 @@
   }
 
   function send() {
-    const msg = prepareMessage(input.value);
+    /* Anti-spam: evita reintentos inmediatos en cadena (saturación/eco) */
+    if (Date.now() - lastSendAt < 1200) {
+      if (G.ui && G.ui.toast) G.ui.toast('Esperá un segundo antes de enviar de nuevo.', 'info');
+      return;
+    }
+    /* Descartar el interino: enviar solo el texto DEFINITIVO (o lo tipeado manual) */
+    const msg = prepareMessage(finalText || input.value);
     if (!msg || busy) return;
+    lastSendAt = Date.now();
     if (listening) stopRec();   // detener el micrófono al enviar
     busy = true;
     input.value = '';
+    finalText = '';
     log.appendChild(bubble(renderText(msg), 'user'));
     const pend = bubble('Pensando…', 'bot');
     log.appendChild(pend);
