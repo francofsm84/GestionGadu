@@ -138,9 +138,8 @@
     return txt;
   }
 
-  /* Botones de opciones inline para pasos guiados: si la IA pregunta por
-     oficio/obra/categoría, se agregan botoncitos que envían la selección. */
-  function addInlineOptions(hostEl, replyText) {
+  /* Devuelve las opciones inline para pasos guiados (puro, testeable) */
+  function inlineOptionsFor(replyText) {
     const t = String(replyText || '').toLowerCase();
     const opts = [];
     if (/(oficio|profesi[oó]n|qu[eé] hace|rubro)/.test(t)) {
@@ -151,6 +150,13 @@
       const works = (G.store.data && G.store.data.works) || [];
       works.slice(0, 6).forEach(w => opts.push({ label: w.name, send: 'obra ' + w.name }));
     }
+    return opts;
+  }
+
+  /* Botones de opciones inline: si la IA pregunta por oficio/obra/categoría,
+     se agregan botoncitos que envían la selección sin salir del chat. */
+  function addInlineOptions(hostEl, replyText) {
+    const opts = inlineOptionsFor(replyText);
     if (!opts.length) return;
     const wrap = document.createElement('div');
     wrap.className = 'ai-actions';
@@ -165,6 +171,12 @@
       wrap.appendChild(b);
     });
     hostEl.appendChild(wrap);
+  }
+
+  /* Registra cada turno para el seguimiento multi-paso (máx. 8 entradas) */
+  function rememberTurn(role, text) {
+    chatHistory.push(role + ': ' + text);
+    if (chatHistory.length > 8) chatHistory.shift();
   }
 
   function bubble(html, who) {
@@ -726,8 +738,7 @@
     const sess = G.auth.getSession();
     if (!sess) { pend.innerHTML = 'Necesitás iniciar sesión para usar el asistente.'; busy = false; return; }
     const payload = { message: msg, context: context(), mode: isAdminMode() ? 'admin' : 'usuario' };
-    chatHistory.push('usuario: ' + msg);
-    if (chatHistory.length > 8) chatHistory.shift();
+    rememberTurn('usuario', msg);
     let streamedText = '';
 
     callAI(payload, (chunk) => {
@@ -765,8 +776,7 @@
           pend.appendChild(wrap);
         }
         /* Historial + opciones inline para continuar la conversación en pasos */
-        chatHistory.push('asistente: ' + replyText.slice(0, 140));
-        if (chatHistory.length > 8) chatHistory.shift();
+        rememberTurn('asistente', replyText.slice(0, 140));
         addInlineOptions(pend, replyText);
       })
       .catch((err) => {
@@ -796,5 +806,5 @@
     try { build(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn };
 })(typeof window !== 'undefined' ? window : globalThis);
