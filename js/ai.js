@@ -668,6 +668,30 @@
     addGreeting();
   }
 
+  /* Pills de bienvenida → comando conversacional (inicia el flujo guiado
+     en el chat, sin redirigir a módulos externos) */
+  const PILL_COMMANDS = {
+    'new-obra': 'cargar una obra',
+    'new-empleado': 'cargar un empleado',
+    'new-cliente': 'cargar un cliente',
+    'new-gasto': 'cargar un gasto',
+    'new-ingreso': 'cargar un ingreso',
+    'new-presupuesto': 'cargar un presupuesto',
+    'herramientas': 'cargar una herramienta',
+  };
+  function firePill(k) {
+    const cmd = PILL_COMMANDS[k];
+    if (cmd) {
+      finalText = '';
+      input.value = cmd;
+      send();   // arranca la conversación guiada dentro del chat
+      return;
+    }
+    /* Pills administrativos: conservan la navegación original */
+    const fn = ACTION_KEYS[k];
+    if (fn) { fn(); setOpen(false); }
+  }
+
   function addGreeting() {
     const pillsAdmin = [
       { k: 'admin-metrics', e: '📊', l: 'Métricas MRR/ARR' },
@@ -697,10 +721,7 @@
       '<div class="ai-actions">' + pills.map(p => '<button class="btn btn-soft btn-sm" data-act="' + p.k + '">' + p.e + ' ' + p.l + '</button>').join('') + '</div>',
       'bot');
     log.appendChild(bot);
-    log.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
-      const fn = ACTION_KEYS[b.dataset.act];
-      if (fn) { fn(); setOpen(false); }
-    }));
+    log.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => firePill(b.dataset.act)));
   }
 
   /* Bienvenida de primera vez (Capataz Digital) */
@@ -717,10 +738,7 @@
       '<div class="ai-actions">' + pills.map(p => '<button class="btn btn-soft btn-sm" data-act="' + p.k + '">' + p.e + ' ' + p.l + '</button>').join('') + '</div>',
       'bot');
     log.appendChild(bot);
-    log.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
-      const fn = ACTION_KEYS[b.dataset.act];
-      if (fn) { fn(); setOpen(false); }
-    }));
+    log.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => firePill(b.dataset.act)));
   }
 
   function maybeWelcome() {
