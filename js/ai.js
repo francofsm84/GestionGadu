@@ -560,9 +560,10 @@
     log.scrollTop = log.scrollHeight;
     const sess = G.auth.getSession();
     if (!sess) { pend.innerHTML = 'Necesitás iniciar sesión para usar el asistente.'; busy = false; return; }
-    /* Timeout: evita que la UI se congele si la Edge Function se satura */
+    /* Timeout amplio: la Edge Function tiene cadena de modelos de respaldo;
+       30s cubre esa latencia sin dejar la UI en "Pensando…" indefinido. */
     const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 15000);
+    const to = setTimeout(() => ctrl.abort(), 30000);
     fetch(G.auth.SUPABASE_URL + '/functions/v1/ai-assistant', {
       method: 'POST',
       headers: {
@@ -573,7 +574,10 @@
       body: JSON.stringify({ message: msg, context: context(), mode: isAdminMode() ? 'admin' : 'usuario' }),
       signal: ctrl.signal,
     })
-      .then(r => r.json())
+      .then(async r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
       .then(data => {
         const replyText = data.reply || data.error || 'Sin respuesta.';
         const res = data.action ? execFormAction(data.action) : null;

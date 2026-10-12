@@ -159,22 +159,34 @@ serve(async (req) => {
 
     const callGemini = async (modelo, contents) => {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`;
-      const aiRes = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemPrompt }] },
-          contents,
-          tools: tools(),
-          generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
-        }),
-      });
-      if (!aiRes.ok) {
-        const errBody = await aiRes.text();
-        console.error(`[ai-assistant] ${modelo} falló (${aiRes.status}): ${errBody.slice(0, 400)}`);
+      // Timeout por modelo: evita que un modelo colgado bloquee toda la cadena
+      // de respaldo y deje al usuario en "Pensando…" indefinido.
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12000);
+      try {
+        const aiRes = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: systemPrompt }] },
+            contents,
+            tools: tools(),
+            generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
+          }),
+          signal: controller.signal,
+        });
+        if (!aiRes.ok) {
+          const errBody = await aiRes.text();
+          console.error(`[ai-assistant] ${modelo} falló (${aiRes.status}): ${errBody.slice(0, 400)}`);
+          return null;
+        }
+        return await aiRes.json();
+      } catch (e) {
+        console.error(`[ai-assistant] ${modelo} timeout/error:`, e);
         return null;
+      } finally {
+        clearTimeout(timer);
       }
-      return await aiRes.json();
     };
 
     let reply = "";
