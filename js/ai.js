@@ -221,6 +221,7 @@
       '<button class="ai-fab" id="aiFab" title="Asistente GADU" aria-label="Asistente GADU">' +
       ROBOT_SVG +
       '</button>' +
+      '<div class="ai-fab-tip" id="aiFabTip">¡Hola! Soy GADU, tu capataz digital. ¿Qué querés gestionar hoy?</div>' +
       '<div class="ai-panel" id="aiPanel" hidden>' +
       '<div class="ai-head"><span class="ai-head-logo">' + ROBOT_SVG + '</span>' +
       '<div class="ai-head-txt"><strong>Asistente GADU</strong><span class="muted small" id="aiSub">Te guío paso a paso</span></div>' +
@@ -248,6 +249,18 @@
     input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
     addGreeting();
     window.addEventListener('hashchange', refreshGreeting);
+
+    /* Burbuja de saludo del robot: aparece sola al cargar la app y se oculta
+       sola o al tocar el robot / abrir el chat. */
+    const tip = document.getElementById('aiFabTip');
+    const hideTip = () => { try { tip.classList.remove('show'); } catch (e) {} };
+    if (tip) {
+      tip.addEventListener('click', hideTip);
+      const fabBtn = document.getElementById('aiFab');
+      if (fabBtn) fabBtn.addEventListener('click', hideTip);
+      setTimeout(() => { try { tip.classList.add('show'); } catch (e) {} }, 1200);
+      setTimeout(hideTip, 9000);
+    }
   }
 
   /* Dictado por voz (Web Speech API) — estilo "pulsar para hablar":
@@ -370,20 +383,22 @@
 
   /* Texto a voz (Text-to-Speech) */
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  /* Solo voces de español LATINOAMERICANO (excluye España: es-ES) */
   function spanishVoices() {
     try {
       const vs = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
-      return vs.filter(v => /^es/i.test(v.lang));
+      const latam = /^es[-_](ar|419|la|mx|us|cl|co|pe|ve|ec|cr|py|uy|bo|ni|pa|do|hn|sv|gt|pr|cu)$/i;
+      return vs.filter(v => latam.test(v.lang));
     } catch (e) { return []; }
   }
-  /* Puntúa la voz: nativas (Argentina/España/México/Latam) primero */
+  /* Ranking latino: Argentina primero, luego Latam neutro/México, luego el resto */
   function voiceRank(v) {
     const l = (v.lang || '').toLowerCase();
-    if (/es[-_]ar/.test(l)) return 0;
-    if (/es[-_]es/.test(l)) return 1;
-    if (/es[-_]mx|es[-_]419/.test(l)) return 2;
+    if (/es[-_]ar/.test(l)) return 0;          // rioplatense (Argentina)
+    if (/es[-_](419|la)/.test(l)) return 1;    // latino neutro
+    if (/es[-_]mx/.test(l)) return 2;          // México
     if (/es[-_]us/.test(l)) return 3;
-    return 4;
+    return 4;                                  // resto de LATAM (cl, co, pe…)
   }
   /* Género inferido del nombre de la voz (para el selector) */
   function voiceGender(v) {
@@ -441,7 +456,7 @@
         .trim();
       if (!clean) return;
       const u = new SpeechSynthesisUtterance(clean);
-      u.lang = 'es-ES';
+      u.lang = 'es-419';   // español latinoamericano
       u.rate = 1.0;
       u.pitch = 1.0;
       const voices = spanishVoices().slice().sort((a, b) => voiceRank(a) - voiceRank(b));
@@ -568,6 +583,8 @@
 
   function setOpen(v) {
     document.getElementById('aiPanel').hidden = !v;
+    const tip = document.getElementById('aiFabTip');
+    if (tip) { try { tip.classList.remove('show'); } catch (e) {} }
     if (v) { refreshGreeting(); input.focus(); }
     else { stopVoice(); }   // cierre limpio: cancela TTS y libera el micrófono
   }
