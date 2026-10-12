@@ -104,6 +104,8 @@
     });
   }
 
+  /* Cierra el menú lateral desplegable (móvil). Idempotente y sin efecto en
+     escritorio (donde el sidebar es fijo y no lleva la clase .open). */
   function closeMobileSidebar() {
     const sb = document.getElementById('sidebar');
     const bd = document.getElementById('backdrop');
