@@ -492,17 +492,18 @@ tr.row-overdue td { background: var(--danger-soft); }
 .toast-info .icon { color: var(--info); }
 
 /* ---------- Tarjetas de contactos / activos / socios ---------- */
-.cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(265px, 1fr)); gap: 14px; }
+.cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; min-width: 0; max-width: 100%; }
 .contact-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 15px; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow-sm);
+  min-width: 0; width: 100%; overflow-wrap: break-word;
 }
 .contact-head { display: flex; gap: 11px; align-items: center; }
 .contact-info { flex: 1; min-width: 0; }
 .contact-info strong { display: block; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .contact-info span { font-size: 12px; color: var(--muted); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .contact-chips { display: flex; gap: 6px; flex-wrap: wrap; }
-.contact-address { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: flex-start; }
+.contact-address { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: flex-start; min-width: 0; overflow-wrap: anywhere; }
 .contact-actions { display: flex; gap: 6px; border-top: 1px solid var(--border-soft); padding-top: 10px; margin-top: 2px; }
 .contact-actions .spacer { flex: 1; }
 
