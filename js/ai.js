@@ -245,10 +245,37 @@
   let chatHistory = [];   // últimas interacciones (seguimiento multi-paso en el chat)
   let pendingOp = null;   // operación guiada en curso: { modulo, campos, idx }
   let voicePref = null;
+  let currentUid = null;  // usuario autenticado dueño de la memoria del agente
   /* Memoria de sesión: última obra/cliente tratado, para que los comandos
      consecutivos se apliquen sin volver a preguntar. */
   let sessionFocus = null;   // { obra: 'Nombre', cliente: 'Nombre' }
-  try { voicePref = localStorage.getItem('gadu_ai_voice') || null; } catch (e) {}
+
+  /* ---------- Aislamiento por usuario ---------- */
+  /* ID del usuario autenticado en la sesión actual */
+  function getUid() {
+    try {
+      const s = G.auth && G.auth.getSession ? G.auth.getSession() : null;
+      return (s && ((s.user && s.user.id) || s.userId)) || null;
+    } catch (e) { return null; }
+  }
+  /* Clave de almacenamiento segregada por usuario */
+  function prefKey(k) { return k + '_' + (currentUid || 'anon'); }
+  /* Al cambiar de usuario, el agente borra su memoria (historial, foco, wizard,
+     voz) y carga el contexto limpio del usuario entrante. */
+  function syncUser() {
+    const uid = getUid();
+    if (uid === currentUid) return false;
+    currentUid = uid;
+    chatHistory = [];
+    sessionFocus = null;
+    pendingOp = null;
+    finalText = '';
+    persistedFinal = '';
+    try { voicePref = localStorage.getItem(prefKey('gadu_ai_voice')) || null; } catch (e) { voicePref = null; }
+    try { if (log) { log.innerHTML = ''; addGreeting(); } } catch (e) {}
+    try { populateVoices(); } catch (e) {}
+    return true;
+  }
 
   /* Robot futurista animado (SVG inline): flota y parpadea vía CSS */
   const ROBOT_SVG = '<svg class="ai-robot" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
@@ -503,7 +530,7 @@
   }
   function onVoiceChange(e) {
     voicePref = e.target.value;
-    try { localStorage.setItem('gadu_ai_voice', voicePref); } catch (er) {}
+    try { localStorage.setItem(prefKey('gadu_ai_voice'), voicePref); } catch (er) {}
     try { speak('Hola, soy tu asistente GADU. Esta es mi voz.'); } catch (er) {}
   }
 
@@ -686,7 +713,7 @@
     document.getElementById('aiPanel').hidden = !v;
     const tip = document.getElementById('aiFabTip');
     if (tip) { try { tip.classList.remove('show'); } catch (e) {} }
-    if (v) { refreshGreeting(); input.focus(); }
+    if (v) { syncUser(); refreshGreeting(); input.focus(); }
     else { stopVoice(); }   // cierre limpio: cancela TTS y libera el micrófono
   }
   function toggle() { setOpen(document.getElementById('aiPanel').hidden); }
@@ -771,8 +798,7 @@
   }
 
   function maybeWelcome() {
-    let k = 'gadu_ai_onboarded';
-    try { const s = G.auth.getSession(); if (s && s.userId) k += '_' + s.userId; } catch (e) {}
+    const k = prefKey('gadu_ai_onboarded');
     let first = false;
     try { if (!localStorage.getItem(k)) { localStorage.setItem(k, 'true'); first = true; } } catch (e) {}
     if (!first) return;
@@ -1053,6 +1079,7 @@
       if (G.ui && G.ui.toast) G.ui.toast('Esperá un segundo antes de enviar de nuevo.', 'info');
       return;
     }
+    syncUser();   // aislamiento por usuario: si cambió la cuenta, memoria limpia
     /* Descartar el interino: enviar solo el texto DEFINITIVO (o lo tipeado manual) */
     const msg = prepareMessage(finalText || input.value);
     if (!msg || busy) return;
@@ -1174,8 +1201,8 @@
   }
 
   function init() {
-    try { build(); maybeWelcome(); } catch (e) {}
+    try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref };
 })(typeof window !== 'undefined' ? window : globalThis);
