@@ -437,7 +437,7 @@
   /* Logo según el tema: blanco puro en fondos oscuros */
   function logoUrl() {
     const dark = (document.documentElement.dataset.theme || '') === 'dark';
-    return dark ? 'logo-dark.png' : 'logo.png';
+    return dark ? 'logo-dark.png?v=3' : 'logo.png?v=3';
   }
 
   /* ---------- Onboarding obligatorio (Plan Free) ---------- */
