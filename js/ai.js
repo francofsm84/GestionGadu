@@ -193,6 +193,13 @@
     return deduped.join(' ');
   }
 
+  /* Mensaje final listo para enviar: limpieza + tope de longitud (anti-consultas gigantes) */
+  function prepareMessage(input) {
+    let msg = cleanInput(input);
+    if (msg.length > 400) msg = msg.slice(0, 400);
+    return msg;
+  }
+
   /* Texto a voz (Text-to-Speech) */
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function spanishVoices() {
@@ -495,9 +502,8 @@
   }
 
   function send() {
-    let msg = cleanInput(input.value);
+    const msg = prepareMessage(input.value);
     if (!msg || busy) return;
-    if (msg.length > 400) msg = msg.slice(0, 400);   // tope anti-consultas gigantes
     if (listening) stopRec();   // detener el micrófono al enviar
     busy = true;
     input.value = '';
@@ -562,5 +568,5 @@
     try { build(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true) };
+  G.ai = { init, open: () => setOpen(true), cleanInput, prepareMessage };
 })(typeof window !== 'undefined' ? window : globalThis);
