@@ -871,7 +871,7 @@ body.no-session .app { display: none; }
   .ai-fab { right: 20px; bottom: calc(20px + env(safe-area-inset-bottom)); width: 64px; height: 64px; }
   .ai-panel { width: calc(100vw - 32px); max-height: 80dvh; bottom: 85px; right: 16px; left: 16px; margin: auto; }
   .ai-mic { width: 60px; height: 60px; font-size: 24px; }
-  .ai-voice-sel { display: none; }   /* cabecera limpia: la mejor voz latina se elige automáticamente */
+  .ai-voice-sel { max-width: 96px; }   /* selector de voz compacto en móvil */
   .ai-fab-tip { right: 92px; bottom: calc(30px + env(safe-area-inset-bottom)); max-width: 200px; }
   /* Espacio inferior para que el botón flotante no tape las tarjetas */
   .view { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }

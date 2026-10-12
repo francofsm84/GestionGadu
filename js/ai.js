@@ -459,28 +459,47 @@
     if (/es[-_]us/.test(l)) return 3;
     return 4;                                  // resto de LATAM (cl, co, pe…)
   }
-  /* Género inferido del nombre de la voz (para el selector) */
+  /* Género inferido del nombre de la voz (listas ampliadas de voces latinas) */
   function voiceGender(v) {
     const n = (v.name || '').toLowerCase();
-    if (/(helena|laura|sabina|paulina|monica|soledad|esperanza|maria|marta|carmen|luciana|valentina|sara|female|mujer)/.test(n)) return 'Femenina';
-    if (/(pablo|jorge|diego|carlos|juan|miguel|andres|raul|javier|pedro|male|hombre)/.test(n)) return 'Masculina';
+    if (/(helena|laura|sabina|paulina|monica|soledad|esperanza|maria|marta|carmen|luciana|valentina|sara|camila|rosa|ana|gabriela|isabela|ximena|veronica|andrea|mariana|cecilia|paloma|penelope|frida|josefina|female|mujer|femenina)/.test(n)) return 'Femenina';
+    if (/(pablo|jorge|diego|carlos|juan|miguel|andres|raul|javier|pedro|gonzalo|alonso|enrique|rodrigo|leonardo|matias|emiliano|sergio|ramon|guillermo|bruno|male|hombre|masculina)/.test(n)) return 'Masculina';
     return '';
   }
+  /* Etiqueta descriptiva: "Español latino · Femenina — Argentina · Sabina" */
   function voiceLabel(v) {
-    const base = (v.name || '').replace(/Microsoft |Google /gi, '').replace(/\s*\(.*\)/, '').trim() || v.lang || 'Voz';
     const g = voiceGender(v);
-    return base + (g ? ' · ' + g : '');
+    const l = (v.lang || '').toLowerCase();
+    const region = /es[-_]ar/.test(l) ? 'Argentina'
+      : /es[-_]mx/.test(l) ? 'México'
+      : /es[-_]us/.test(l) ? 'EE.UU.'
+      : /es[-_]co/.test(l) ? 'Colombia'
+      : /es[-_]cl/.test(l) ? 'Chile'
+      : /es[-_]pe/.test(l) ? 'Perú'
+      : /es[-_](419|la)/.test(l) ? 'Latino neutro' : '';
+    const short = (v.name || '')
+      .replace(/Microsoft |Google |Online|Natural|Spanish|Español|español/gi, '')
+      .replace(/\s*\([^)]*\)/g, '')
+      .replace(/\s+/g, ' ').trim();
+    let s = 'Español latino' + (g ? ' · ' + g : '');
+    if (region || short) s += ' — ' + (region || '') + (region && short ? ' · ' : '') + short;
+    return s;
   }
   function populateVoices() {
     const sel = document.getElementById('aiVoiceSel');
     if (!sel) return;
-    let vs = spanishVoices();
+    const vs = spanishVoices();
     if (!vs.length) { sel.hidden = true; return; }
     sel.hidden = false;
-    vs = vs.slice().sort((a, b) => voiceRank(a) - voiceRank(b) || (a.name || '').localeCompare(b.name || ''));
-    sel.innerHTML = vs.map(v =>
-      '<option value="' + esc(v.name) + '"' + (v.name === voicePref ? ' selected' : '') + '>' + esc(voiceLabel(v)) + '</option>'
-    ).join('');
+    const rank = (a, b) => voiceRank(a) - voiceRank(b) || (a.name || '').localeCompare(b.name || '');
+    const fem = vs.filter(v => voiceGender(v) === 'Femenina').sort(rank);
+    const masc = vs.filter(v => voiceGender(v) === 'Masculina').sort(rank);
+    const otros = vs.filter(v => !voiceGender(v)).sort(rank);
+    const opt = v => '<option value="' + esc(v.name) + '"' + (v.name === voicePref ? ' selected' : '') + '>' + esc(voiceLabel(v)) + '</option>';
+    sel.innerHTML =
+      (fem.length ? '<optgroup label="👩 Femeninas">' + fem.map(opt).join('') + '</optgroup>' : '') +
+      (masc.length ? '<optgroup label="👨 Masculinas">' + masc.map(opt).join('') + '</optgroup>' : '') +
+      (otros.length ? '<optgroup label="Otras voces latinas">' + otros.map(opt).join('') + '</optgroup>' : '');
   }
   function onVoiceChange(e) {
     voicePref = e.target.value;
@@ -1158,5 +1177,5 @@
     try { build(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel };
 })(typeof window !== 'undefined' ? window : globalThis);
