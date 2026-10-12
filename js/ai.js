@@ -43,6 +43,16 @@
   function currentMode() { return location.hash.indexOf('#/admin') === 0 ? 'admin' : 'usuario'; }
   function isAdminMode() { return currentMode() === 'admin'; }
 
+  /* Registra la última obra/cliente tratado para el contexto de sesión */
+  function setFocus(mod, campos) {
+    const c = campos || {};
+    if (!sessionFocus) sessionFocus = {};
+    if (c.obra) sessionFocus.obra = c.obra;
+    if (c.cliente) sessionFocus.cliente = c.cliente;
+    if (mod === 'obra' && c.nombre) sessionFocus.obra = c.nombre;
+    if ((mod === 'cliente' || mod === 'socio') && c.nombre) sessionFocus.cliente = c.nombre;
+  }
+
   function context() {
     const d = G.store.data || {};
     const p = G.plan.profile;
@@ -65,6 +75,12 @@
     if (emps.length) s += ' Empleados: ' + emps.slice(0, 12).map(e => ((e.firstName || '') + ' ' + (e.lastName || '')).trim()).join(', ') + '.';
     const clis = (d.contacts || []).filter(c => c.type === 'cliente');
     if (clis.length) s += ' Clientes: ' + clis.slice(0, 12).map(c => c.name).join(', ') + '.';
+    if (sessionFocus && (sessionFocus.obra || sessionFocus.cliente)) {
+      s += ' Foco actual de la sesión:';
+      if (sessionFocus.obra) s += ' obra "' + sessionFocus.obra + '"';
+      if (sessionFocus.cliente) s += (sessionFocus.obra ? ' y' : '') + ' cliente "' + sessionFocus.cliente + '"';
+      s += '. Si el próximo comando no especifica otra obra/cliente, aplicalo a esa entidad.';
+    }
     return s;
   }
 
@@ -93,6 +109,9 @@
   let host = null, log = null, input = null, busy = false, builtMode = null, rec = null, listening = false, voiceOn = true, speaking = false;
   let finalText = '', lastSendAt = 0, silenceTimer = null;
   let voicePref = null;
+  /* Memoria de sesión: última obra/cliente tratado, para que los comandos
+     consecutivos se apliquen sin volver a preguntar. */
+  let sessionFocus = null;   // { obra: 'Nombre', cliente: 'Nombre' }
   try { voicePref = localStorage.getItem('gadu_ai_voice') || null; } catch (e) {}
 
   function build() {
@@ -385,6 +404,7 @@
           company: '', phone: c.telefono || '', whatsapp: '', email: '',
           address: c.direccion || '', notes: '', photo: null,
         });
+        setFocus(mod, { nombre: name });
         return { ok: true, label: (tipo === 'socio' ? 'socio ' : 'cliente ') + name };
       }
       if (mod === 'empleado') {
@@ -402,6 +422,7 @@
         if (G.plan && G.plan.checkLimit && G.plan.checkLimit('obras') === false) return null;
         const clientId = c.cliente ? findId((d.contacts || []).filter(x => x.type === 'cliente'), c.cliente, x => x.name) : null;
         S.add('works', { name, code: (S.nextCode ? S.nextCode('OB', 'works') : ''), clientId: clientId || null, location: '', status: 'activa', budgetTotal: 0, advanceFisico: 0, startDate: today, endDate: '', description: '' });
+        setFocus(mod, { nombre: name });
         return { ok: true, label: 'obra ' + name };
       }
       if (mod === 'ingreso') {
@@ -649,6 +670,7 @@
     callAI(payload)
       .then(data => {
         const replyText = data.reply || data.error || 'Sin respuesta.';
+        if (data.action) setFocus(data.action.modulo, data.action.campos);
         const res = data.action ? execFormAction(data.action) : null;
         if (res && res.saved) {
           const txt = '✅ Listo, guardé ' + res.label;
