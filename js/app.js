@@ -380,13 +380,38 @@
     overlay.className = 'lock-overlay';
     overlay.innerHTML =
       '<div class="lock-card">' +
-      '<span class="lock-ico">🔒</span>' +
-      '<h2>' + (pi.label === 'Suspendido' ? 'Tu cuenta está suspendida' : 'Tu período de prueba terminó') + '</h2>' +
-      '<p>Tus datos están guardados y seguros. Para seguir usando GADU, escribinos por WhatsApp y te activamos el plan al instante.</p>' +
-      '<a class="btn btn-primary" href="https://wa.me/5493547469000?text=' + encodeURIComponent('Hola! Quiero activar mi plan de GADU. Mi email: ' + (sess ? sess.email : '')) + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 16) + 'Activar por WhatsApp</a>' +
+      '<img src="' + logoUrl() + '" alt="GADU" class="login-logo" style="width:120px">' +
+      '<h2>' + (pi.label === 'Suspendido' ? 'Tu cuenta está suspendida' : 'Tu prueba gratuita ha finalizado') + '</h2>' +
+      '<p>Has disfrutado de tus 45 días de acceso gratuito a GADU. Para continuar gestionando tus obras y finanzas, solicita un código de acceso por 90 días.</p>' +
+      '<div class="field" style="text-align:left"><input class="input" id="licCode" placeholder="Código (ej: GADU-90D-XXXX)" autocomplete="off" spellcheck="false"></div>' +
+      '<button class="btn btn-primary" id="licValidate">Validar Código</button>' +
+      '<p class="form-hint" id="licMsg" style="margin:8px 0"></p>' +
+      '<a class="btn" style="background:#16a34a;color:#fff" href="https://wa.me/5493547469000?text=' + encodeURIComponent('Hola, finalizó mi prueba gratuita de 45 días en GADU. Quiero adquirir un código de acceso por 90 días.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 16) + 'Comprar Pase de 90 Días por WhatsApp</a>' +
       '<button class="btn btn-ghost" id="lockLogout">Cerrar sesión</button>' +
       '</div>';
     document.body.appendChild(overlay);
+
+    const msgEl = overlay.querySelector('#licMsg');
+    const setMsg = (m, err) => { msgEl.textContent = m || ''; msgEl.style.color = err ? 'var(--danger)' : 'var(--success)'; };
+
+    overlay.querySelector('#licValidate').addEventListener('click', async () => {
+      const input = overlay.querySelector('#licCode');
+      const code = input.value.trim();
+      if (!code) { setMsg('Ingresá el código.', true); return; }
+      const btn = overlay.querySelector('#licValidate');
+      btn.disabled = true;
+      btn.textContent = 'Validando…';
+      const res = await G.plan.canjearCodigo(code);
+      if (res && res.ok) {
+        setMsg('✅ Código válido. Tenés 90 días más de acceso. Redirigiendo…', false);
+        setTimeout(() => location.reload(), 1200);
+      } else {
+        setMsg((res && res.error) || 'Código incorrecto o vencido', true);
+        btn.disabled = false;
+        btn.textContent = 'Validar Código';
+      }
+    });
+
     overlay.querySelector('#lockLogout').addEventListener('click', () => {
       G.auth.logout();
       S.attachUser(null);

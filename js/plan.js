@@ -143,9 +143,51 @@
     return trialDaysLeft() === 0;
   }
 
+  /* ============================================================
+     Licencias por código (extensión de 90 días) · Mock local
+     ============================================================ */
+  const CODIGOS_PRUEBA = ['GADU90-PRUEBA', 'GADU90-TEST', 'GADU90-DEMO'];
+
+  /* Mock: un código es válido si empieza con "GADU90-" / "GADU-90D-"
+     o coincide con la lista de prueba. */
+  function validarCodigo(code) {
+    const c = String(code || '').trim().toUpperCase();
+    if (!c) return false;
+    return c.indexOf('GADU90-') === 0 || c.indexOf('GADU-90D-') === 0 || CODIGOS_PRUEBA.indexOf(c) !== -1;
+  }
+
+  function diasRestantes() { return trialDaysLeft(); }
+  function fechaVencimiento() {
+    if (!profile) return null;
+    return profile.trial_ends_at || profile.trial_end || null;
+  }
+
+  /* Canjea un código: extiende el acceso 90 días y desbloquea la app */
+  async function canjearCodigo(code) {
+    if (!validarCodigo(code)) return { ok: false, error: 'Código incorrecto o vencido' };
+    const sess = G.auth.getSession();
+    const uid = sess ? sess.userId : null;
+    if (!uid) return { ok: false, error: 'Sin sesión activa' };
+    const nuevaFecha = new Date(Date.now() + 90 * 86400000).toISOString();
+    try {
+      await api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent(uid), {
+        trial_ends_at: nuevaFecha,
+        trial_end: nuevaFecha,
+        paid_until: nuevaFecha,
+        subscription_status: 'active',
+        estado_cuenta: 'activo',
+      });
+      await load();   // recargar perfil para reflejar el nuevo vencimiento
+      return { ok: true, vencimiento: nuevaFecha };
+    } catch (e) {
+      return { ok: false, error: 'No se pudo activar: ' + ((e && e.message) || e) };
+    }
+  }
+
   G.api = api;
   G.plan = {
     ROLES, load, isAdmin, currentPlan, worksActive, employeesCount, limitFor, wouldExceed, checkLimit, log, trialDaysLeft, needsOnboarding, isLocked,
+    validarCodigo, canjearCodigo, diasRestantes, fechaVencimiento,
     get profile() { return profile; },
     get planes() { return planes; },
   };
