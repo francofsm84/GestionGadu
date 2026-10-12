@@ -195,16 +195,28 @@
   let sessionFocus = null;   // { obra: 'Nombre', cliente: 'Nombre' }
   try { voicePref = localStorage.getItem('gadu_ai_voice') || null; } catch (e) {}
 
+  /* Robot futurista animado (SVG inline): flota y parpadea vía CSS */
+  const ROBOT_SVG = '<svg class="ai-robot" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+    '<path d="M32 14V7" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>' +
+    '<circle cx="32" cy="5.5" r="3.2" fill="currentColor"/>' +
+    '<rect x="7" y="26" width="5" height="10" rx="2.2" fill="currentColor"/>' +
+    '<rect x="52" y="26" width="5" height="10" rx="2.2" fill="currentColor"/>' +
+    '<rect x="11" y="13" width="42" height="36" rx="11" fill="currentColor"/>' +
+    '<ellipse class="ai-eye ai-detail" cx="25" cy="30" rx="5" ry="6"/>' +
+    '<ellipse class="ai-eye ai-detail" cx="39" cy="30" rx="5" ry="6"/>' +
+    '<rect class="ai-detail" x="24" y="39" width="16" height="3.5" rx="1.75"/>' +
+    '</svg>';
+
   function build() {
     if (document.getElementById('aiRoot')) return;
     host = document.createElement('div');
     host.id = 'aiRoot';
     host.innerHTML =
       '<button class="ai-fab" id="aiFab" title="Asistente GADU" aria-label="Asistente GADU">' +
-      '<img src="logo%20gadu%20blanco%20asistente%20ia.png" alt="Asistente GADU">' +
+      ROBOT_SVG +
       '</button>' +
       '<div class="ai-panel" id="aiPanel" hidden>' +
-      '<div class="ai-head"><span class="ai-head-logo"><img src="logo%20gadu%20blanco%20asistente%20ia.png" alt=""></span>' +
+      '<div class="ai-head"><span class="ai-head-logo">' + ROBOT_SVG + '</span>' +
       '<div class="ai-head-txt"><strong>Asistente GADU</strong><span class="muted small" id="aiSub">Te guío paso a paso</span></div>' +
       '<select class="ai-voice-sel" id="aiVoiceSel" title="Elegir voz" hidden></select>' +
       '<button class="icon-btn sm" id="aiVoice" title="Silenciar voz">🔊</button>' +
