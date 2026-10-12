@@ -543,15 +543,15 @@
         const ln = c.apellido || full.split(/\s+/).slice(1).join(' ');
         if (!fn) return null;
         if (G.plan && G.plan.checkLimit && G.plan.checkLimit('empleados') === false) return null;
-        S.add('employees', { firstName: fn, lastName: ln, phone: c.telefono || '', paymentData: '', hourlyRate: 0, active: true, notes: '', photo: null });
-        return { ok: true, label: 'empleado ' + (fn + ' ' + ln).trim() };
+        S.add('employees', { firstName: fn, lastName: ln, phone: c.telefono || '', paymentData: '', hourlyRate: Number(c.tarifa) || 0, active: true, notes: c.oficio ? 'Oficio: ' + c.oficio : '', photo: null });
+        return { ok: true, label: 'empleado ' + (fn + ' ' + ln).trim() + (c.oficio ? ' (' + c.oficio + ')' : '') };
       }
       if (mod === 'obra') {
         const name = c.nombre || '';
         if (!name) return null;
         if (G.plan && G.plan.checkLimit && G.plan.checkLimit('obras') === false) return null;
         const clientId = c.cliente ? findId((d.contacts || []).filter(x => x.type === 'cliente'), c.cliente, x => x.name) : null;
-        S.add('works', { name, code: (S.nextCode ? S.nextCode('OB', 'works') : ''), clientId: clientId || null, location: '', status: 'activa', budgetTotal: 0, advanceFisico: 0, startDate: today, endDate: '', description: '' });
+        S.add('works', { name, code: (S.nextCode ? S.nextCode('OB', 'works') : ''), clientId: clientId || null, location: c.ubicacion || c.direccion || '', status: 'activa', budgetTotal: Number(c.presupuesto) || 0, advanceFisico: 0, startDate: today, endDate: '', description: '' });
         setFocus(mod, { nombre: name });
         return { ok: true, label: 'obra ' + name };
       }
@@ -702,6 +702,71 @@
     return { modulo: kind, campos };
   }
 
+  /* Búsqueda inteligente: "buscame a X" / "¿dónde está X?" → consulta el store */
+  function searchIntent(text) {
+    const t = String(text || '').toLowerCase();
+    const m = t.match(/(?:buscame|buscame a|búscame|busca|buscar|dónde está|donde esta|dónde anda|donde anda|dónde quedó|donde quedo)\s+(.+)/i);
+    if (!m) return null;
+    const q = m[1].trim().replace(/[?.!¡¿]+$/g, '').replace(/^(la|el|a|un|una|los|las)\s+/i, '').toLowerCase();
+    if (q.length < 2 || q.split(/\s+/).length > 5) return null;
+    return q;
+  }
+
+  /* Busca en empleados, herramientas, contactos y obras del store */
+  function searchStore(q) {
+    const d = G.store.data || {};
+    const out = [];
+    const norm = s => String(s || '').toLowerCase();
+    const has = s => norm(s).includes(q);
+    (d.employees || []).forEach(e => {
+      const full = ((e.firstName || '') + ' ' + (e.lastName || '')).trim();
+      if (has(full) || has(e.notes)) {
+        out.push({ tipo: 'Empleado', nombre: full, detail: (e.hourlyRate ? '$' + e.hourlyRate + '/hora · ' : '') + (e.active ? 'activo' : 'inactivo') + (e.notes ? ' · ' + e.notes : ''), key: 'empleados' });
+      }
+    });
+    (d.assets || []).forEach(a => {
+      if (has(a.name) || has(a.notes)) {
+        out.push({ tipo: 'Herramienta', nombre: a.name, detail: (a.status || 'operativo') + (a.notes ? ' · ' + a.notes : ''), key: 'herramientas' });
+      }
+    });
+    (d.contacts || []).forEach(c => {
+      if (has(c.name)) {
+        out.push({ tipo: c.type === 'socio' ? 'Socio' : 'Cliente', nombre: c.name, detail: (c.phone ? c.phone + ' · ' : '') + (c.address || ''), key: c.type === 'socio' ? 'socios' : 'clientes' });
+      }
+    });
+    (d.works || []).forEach(w => {
+      if (has(w.name)) {
+        out.push({ tipo: 'Obra', nombre: w.name, detail: (w.status || '') + (w.location ? ' · ' + w.location : '') + (w.budgetTotal ? ' · presupuesto $' + w.budgetTotal : ''), key: 'obras' });
+      }
+    });
+    return out;
+  }
+
+  /* Renderiza los resultados de la búsqueda + botones de acceso directo */
+  function handleSearchResults(q, results, pend) {
+    rememberTurn('usuario', 'buscar ' + q);
+    let html = '🔍 Encontré <b>' + results.length + '</b> resultado' + (results.length > 1 ? 's' : '') + ' para "' + esc(q) + '":';
+    results.slice(0, 5).forEach(r => {
+      html += '<br>• <b>' + esc(r.nombre) + '</b> <span class="muted">(' + r.tipo + ')</span>' +
+        (r.detail ? '<br><span class="muted small">' + esc(r.detail) + '</span>' : '');
+    });
+    pend.innerHTML = html;
+    rememberTurn('asistente', 'encontré ' + results[0].nombre);
+    const wrap = document.createElement('div');
+    wrap.className = 'ai-actions';
+    [...new Set(results.map(r => r.key))].forEach(k => {
+      const b = document.createElement('button');
+      b.className = 'btn btn-soft btn-sm';
+      b.textContent = 'Ver ' + (k === 'herramientas' ? 'Herramientas' : k.charAt(0).toUpperCase() + k.slice(1));
+      b.addEventListener('click', () => { const fn = ACTION_KEYS[k]; if (fn) { fn(); setOpen(false); } });
+      wrap.appendChild(b);
+    });
+    pend.appendChild(wrap);
+    speak('Encontré ' + results.length + ' resultado' + (results.length > 1 ? 's' : '') + '.');
+    busy = false;
+    log.scrollTop = log.scrollHeight;
+  }
+
   /* Llamada a la Edge Function en modo streaming (SSE): el texto llega por
      chunks y se renderiza palabra por palabra vía onChunk. */
   async function callAI(payload, onChunk) {
@@ -767,6 +832,13 @@
     log.scrollTop = log.scrollHeight;
     const sess = G.auth.getSession();
     if (!sess) { pend.innerHTML = 'Necesitás iniciar sesión para usar el asistente.'; busy = false; return; }
+    /* Búsqueda local instantánea: "buscame a X" / "¿dónde está X?" → respuesta
+       inmediata desde el store con acceso directo (sin pasar por la IA) */
+    const sq = searchIntent(msg);
+    if (sq) {
+      const found = searchStore(sq);
+      if (found.length) { handleSearchResults(sq, found, pend); return; }
+    }
     const payload = { message: msg, context: context(), mode: isAdminMode() ? 'admin' : 'usuario' };
     rememberTurn('usuario', msg);
     let streamedText = '';
@@ -827,7 +899,7 @@
         } else {
           pend.innerHTML = (err && err.name === 'AbortError')
             ? '⏳ El asistente tardó más de lo esperado. Probá de nuevo en unos segundos.'
-            : '😅 Estoy con un pico de consultas. Podés seguir cargando desde los botones del menú.';
+            : '😅 Estoy con un pico de consultas. Probá de nuevo en un segundo y lo cargamos juntos acá en el chat.';
         }
       })
       .finally(() => { busy = false; log.scrollTop = log.scrollHeight; });
@@ -837,5 +909,5 @@
     try { build(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore };
 })(typeof window !== 'undefined' ? window : globalThis);
