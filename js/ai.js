@@ -130,7 +130,7 @@
   }
 
   /* Dictado por voz (Web Speech API) con debounce de silencio (2.5s) */
-  let silenceTimer = null, finalText = '';
+  let silenceTimer = null;
   function stopRec() {
     clearTimeout(silenceTimer);
     if (rec) { try { rec.stop(); } catch (e) {} }
@@ -147,32 +147,39 @@
     rec.lang = 'es-ES';
     rec.interimResults = true;   // muestra lo que va diciendo en vivo
     rec.continuous = true;       // no corta en pausas breves
-    finalText = '';
     rec.onstart = () => { listening = true; mic.classList.add('ai-mic-on'); };
     rec.onresult = (e) => {
-      let interim = '', fin = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
+      /* Reconstruir SIEMPRE desde e.results evita acumular/duplicar palabras */
+      let fin = '', inter = '';
+      for (let i = 0; i < e.results.length; i++) {
         const r = e.results[i];
         if (r.isFinal) fin += r[0].transcript;
-        else interim += r[0].transcript;
+        else inter += r[0].transcript;
       }
-      if (fin) finalText += fin + ' ';
-      input.value = (finalText + ' ' + interim).replace(/\s+/g, ' ').trim();
-      /* Debounce: reinicia el contador de silencio (2.5s) antes de enviar */
+      input.value = (fin + ' ' + inter).replace(/\s+/g, ' ').trim();
       clearTimeout(silenceTimer);
       silenceTimer = setTimeout(() => { stopRec(); }, 2500);
     };
     rec.onerror = (e) => {
       if (e.error === 'no-speech' || e.error === 'aborted') { /* ignorar: es normal */ }
       else if (G.ui && G.ui.toast) G.ui.toast('Error de dictado: ' + (e.error || 'desconocido'), 'error');
-      if (listening) stopRec();
+      stopRec();
     };
     rec.onend = () => {
       listening = false;
       mic.classList.remove('ai-mic-on');
-      if (input.value.trim()) send();   // al terminar (o por silencio), envía
+      clearTimeout(silenceTimer);
+      if (input.value.trim()) send();
     };
     try { rec.start(); } catch (e) { listening = false; mic.classList.remove('ai-mic-on'); }
+  }
+
+  /* Limpia y elimina palabras consecutivas repetidas antes de enviar */
+  function cleanInput(s) {
+    const words = String(s || '').replace(/\s+/g, ' ').trim().split(' ');
+    const out = [];
+    for (let i = 0; i < words.length; i++) if (words[i] !== out[out.length - 1]) out.push(words[i]);
+    return out.join(' ');
   }
 
   /* Texto a voz (Text-to-Speech) */
@@ -456,7 +463,7 @@
   }
 
   function send() {
-    const msg = (input.value || '').trim();
+    const msg = cleanInput(input.value);
     if (!msg || busy) return;
     busy = true;
     input.value = '';
@@ -466,6 +473,9 @@
     log.scrollTop = log.scrollHeight;
     const sess = G.auth.getSession();
     if (!sess) { pend.innerHTML = 'Necesitás iniciar sesión para usar el asistente.'; busy = false; return; }
+    /* Timeout: evita que la UI se congele si la Edge Function se satura */
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 15000);
     fetch(G.auth.SUPABASE_URL + '/functions/v1/ai-assistant', {
       method: 'POST',
       headers: {
@@ -474,6 +484,7 @@
         'Authorization': 'Bearer ' + sess.accessToken,
       },
       body: JSON.stringify({ message: msg, context: context(), mode: isAdminMode() ? 'admin' : 'usuario' }),
+      signal: ctrl.signal,
     })
       .then(r => r.json())
       .then(data => {
@@ -505,10 +516,12 @@
           pend.appendChild(wrap);
         }
       })
-      .catch(() => {
-        pend.innerHTML = '😅 No pude conectar con el asistente. Verificá que la Edge Function esté desplegada (' + G.auth.SUPABASE_URL + '/functions/v1/ai-assistant).';
+      .catch((err) => {
+        pend.innerHTML = (err && err.name === 'AbortError')
+          ? '⏳ El asistente tardó más de lo esperado. Probá de nuevo en unos segundos.'
+          : '😅 No pude conectar con el asistente. Verificá que la Edge Function esté desplegada (' + G.auth.SUPABASE_URL + '/functions/v1/ai-assistant).';
       })
-      .finally(() => { busy = false; log.scrollTop = log.scrollHeight; });
+      .finally(() => { clearTimeout(to); busy = false; log.scrollTop = log.scrollHeight; });
   }
 
   function init() {
