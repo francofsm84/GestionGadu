@@ -375,7 +375,6 @@
 
   function renderLock() {
     const pi = planInfo();
-    const sess = G.auth.getSession();
     const overlay = document.createElement('div');
     overlay.className = 'lock-overlay';
     overlay.innerHTML =
