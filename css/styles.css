@@ -452,6 +452,10 @@ canvas.chart { min-width: 0; max-width: 100%; }
 .alert-warning { background: var(--warning-soft); color: var(--warning); }
 .alert-info { background: var(--info-soft); color: var(--info); }
 .alert a { font-weight: 700; text-decoration: underline; color: inherit; }
+/* Alerta clickeable (ej. liquidaciones vencidas → Socios y reparto) */
+.alert-clickable { cursor: pointer; text-decoration: none; transition: filter .15s ease, transform .15s ease; }
+.alert-clickable:hover { filter: brightness(1.12); }
+.alert-clickable:active { transform: scale(.99); }
 
 /* ---------- Estado vacío ---------- */
 .empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 38px 16px; text-align: center; color: var(--muted); }

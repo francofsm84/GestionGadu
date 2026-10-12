@@ -174,9 +174,9 @@
       '</div>' +
       '<div class="stack">' +
       (ds.overdue.length
-        ? '<div class="alert alert-danger">' + UI.icon('alert-triangle', 16) +
+        ? '<a href="#/socios" class="alert alert-danger alert-clickable" title="Ir a Socios y reparto · Liquidaciones">' + UI.icon('alert-triangle', 16) +
           '<span><strong>' + ds.overdue.length + ' liquidación' + (ds.overdue.length > 1 ? 'es' : '') + ' vencida' + (ds.overdue.length > 1 ? 's' : '') + '</strong> · ' +
-          UI.fmtMoney(S.sum(ds.overdue.map(x => x.amount))) + ' sin pagar. <a href="#/socios">Resolver</a></span></div>'
+          UI.fmtMoney(S.sum(ds.overdue.map(x => x.amount))) + ' sin pagar. Resolver ' + UI.icon('chevron-right', 14) + '</span></a>'
         : '') +
       S.data.distributions.slice().sort((a, b) => a.date.localeCompare(b.date)).slice(-4).reverse().map(d => {
         const isOver = d.status === 'pendiente' && d.date < S.todayISO();
