@@ -107,7 +107,7 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
   try {
-    const { message, context, mode } = await req.json();
+    const { message, context, mode, stream } = await req.json();
     const auth = req.headers.get("authorization") || "";
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -160,6 +160,85 @@ serve(async (req) => {
       "gemini-3.8-flash",
       "gemini-flash-latest",
     ])];
+
+    // ---- Streaming (SSE): el texto se envía palabra por palabra ----
+    if (stream) {
+      const encoder = new TextEncoder();
+      const sseStream = new ReadableStream({
+        async start(controller) {
+          const send = (obj: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+          let functionCall = null;
+          let reply = "";
+          let streamed = false;
+
+          for (const modelo of modelos) {
+            try {
+              const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:streamGenerateContent?alt=sse`;
+              const aiRes = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+                body: JSON.stringify({
+                  system_instruction: { parts: [{ text: systemPrompt }] },
+                  contents: [{ role: "user", parts: [{ text: userText }] }],
+                  tools: tools(),
+                  generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
+                }),
+              });
+              if (!aiRes.ok || !aiRes.body) {
+                console.error(`[ai-assistant] ${modelo} stream HTTP ${aiRes.status}`);
+                continue;
+              }
+              const reader = aiRes.body.getReader();
+              const decoder = new TextDecoder();
+              let buf = "";
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buf += decoder.decode(value, { stream: true });
+                const lines = buf.split("\n");
+                buf = lines.pop() || "";
+                for (const line of lines) {
+                  const s = line.trim();
+                  if (!s.startsWith("data: ")) continue;
+                  const json = s.slice(6);
+                  if (json === "[DONE]") continue;
+                  try {
+                    const obj = JSON.parse(json);
+                    const part = obj?.candidates?.[0]?.content?.parts?.[0];
+                    if (!part) continue;
+                    if (part.functionCall) { functionCall = part.functionCall; continue; }
+                    const txt = part.text || "";
+                    if (txt) { reply += txt; streamed = true; send({ text: txt }); }
+                  } catch (e) { /* chunk inválido */ }
+                }
+              }
+              if (streamed) break;
+            } catch (e) {
+              console.error(`[ai-assistant] ${modelo} stream excepción:`, e);
+            }
+          }
+
+          let action = null;
+          if (functionCall && functionCall.name === "abrir_formulario") {
+            const args = functionCall.args || {};
+            action = { modulo: args.modulo, campos: args.campos || {} };
+            if (!reply) {
+              const etiquetas: Record<string, string> = { empleado: "Empleados", obra: "Obras", cliente: "Clientes", presupuesto: "Presupuestos", gasto: "Gastos", ingreso: "Ingresos", jornada: "Jornada" };
+              reply = `¡De acuerdo! Abrí el formulario de ${etiquetas[action.modulo] || action.modulo}. Completá lo que falta o confirmá la carga.`;
+              send({ text: reply });
+            }
+          }
+          if (!reply) { reply = fallbackText(); send({ text: reply }); }
+
+          send({ done: true, action, reply });
+          controller.close();
+        },
+      });
+
+      return new Response(sseStream, {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
+      });
+    }
 
     const callGemini = async (modelo, contents) => {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`;

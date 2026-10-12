@@ -644,33 +644,49 @@
     return { modulo: kind, campos };
   }
 
-  /* Llamada a la Edge Function: 2 intentos (1 reintento por fallo de red) con
-     timeout de 25s y backoff de 1s. Antes hacía 3×30s y dejaba al usuario
-     "pensando" casi 2 minutos. */
-  async function callAI(payload) {
+  /* Llamada a la Edge Function en modo streaming (SSE): el texto llega por
+     chunks y se renderiza palabra por palabra vía onChunk. */
+  async function callAI(payload, onChunk) {
     const sess = G.auth.getSession();
     const url = G.auth.SUPABASE_URL + '/functions/v1/ai-assistant';
-    let lastErr = null;
-    for (let i = 0; i < 2; i++) {
-      const ctrl = new AbortController();
-      const to = setTimeout(() => ctrl.abort(), 25000);
-      try {
-        const r = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'apikey': G.auth.SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + sess.accessToken },
-          body: JSON.stringify(payload),
-          signal: ctrl.signal,
-        });
-        clearTimeout(to);
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return await r.json();
-      } catch (e) {
-        clearTimeout(to);
-        lastErr = e;
-        if (i < 1) await new Promise(res => setTimeout(res, 1000));
+    payload.stream = true;
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 60000);   // streaming: margen amplio
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': G.auth.SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + sess.accessToken },
+        body: JSON.stringify(payload),
+        signal: ctrl.signal,
+      });
+      clearTimeout(to);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      if (!r.body) throw new Error('Sin respuesta');
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      let final = null;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop() || '';
+        for (const line of lines) {
+          const s = line.trim();
+          if (!s.startsWith('data: ')) continue;
+          try {
+            const obj = JSON.parse(s.slice(6));
+            if (obj.done) final = obj;
+            else if (obj.text && onChunk) onChunk(obj.text);
+          } catch (e) { /* chunk inválido */ }
+        }
       }
+      return final || { reply: '', action: null };
+    } catch (e) {
+      clearTimeout(to);
+      throw e;
     }
-    throw lastErr || new Error('Sin respuesta');
   }
 
   function send() {
@@ -694,10 +710,15 @@
     const sess = G.auth.getSession();
     if (!sess) { pend.innerHTML = 'Necesitás iniciar sesión para usar el asistente.'; busy = false; return; }
     const payload = { message: msg, context: context(), mode: isAdminMode() ? 'admin' : 'usuario' };
+    let streamedText = '';
 
-    callAI(payload)
+    callAI(payload, (chunk) => {
+      streamedText += chunk;
+      pend.innerHTML = renderText(streamedText);
+      log.scrollTop = log.scrollHeight;
+    })
       .then(data => {
-        const replyText = data.reply || data.error || 'Sin respuesta.';
+        const replyText = data.reply || streamedText || 'Sin respuesta.';
         if (data.action) setFocus(data.action.modulo, data.action.campos);
         const res = data.action ? execFormAction(data.action) : null;
         if (res && res.saved) {
@@ -706,10 +727,10 @@
           speak(txt);
           if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
         } else {
-          pend.innerHTML = renderText(replyText);
+          if (!streamedText) pend.innerHTML = renderText(replyText);
           speak(replyText);
         }
-        const acts = parseActions(data.reply || '');
+        const acts = parseActions(replyText);
         if (acts.length) {
           const wrap = document.createElement('div');
           wrap.className = 'ai-actions';
