@@ -129,7 +129,12 @@
     window.addEventListener('hashchange', refreshGreeting);
   }
 
-  /* Dictado por voz (Web Speech API) */
+  /* Dictado por voz (Web Speech API) con debounce de silencio (2.5s) */
+  let silenceTimer = null, finalText = '';
+  function stopRec() {
+    clearTimeout(silenceTimer);
+    if (rec) { try { rec.stop(); } catch (e) {} }
+  }
   function toggleMic() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const mic = document.getElementById('aiMic');
@@ -137,24 +142,35 @@
       if (G.ui && G.ui.toast) G.ui.toast('Tu navegador no soporta dictado por voz. Probá con Chrome o Edge.', 'error');
       return;
     }
-    if (listening) { if (rec) rec.stop(); return; }
+    if (listening) { stopRec(); return; }
     rec = new SR();
     rec.lang = 'es-ES';
-    rec.interimResults = false;
-    rec.continuous = false;
+    rec.interimResults = true;   // muestra lo que va diciendo en vivo
+    rec.continuous = true;       // no corta en pausas breves
+    finalText = '';
     rec.onstart = () => { listening = true; mic.classList.add('ai-mic-on'); };
     rec.onresult = (e) => {
-      let txt = '';
-      for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
-      input.value = input.value ? (input.value + ' ' + txt).trim() : txt;
+      let interim = '', fin = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) fin += r[0].transcript;
+        else interim += r[0].transcript;
+      }
+      if (fin) finalText += fin + ' ';
+      input.value = (finalText + ' ' + interim).replace(/\s+/g, ' ').trim();
+      /* Debounce: reinicia el contador de silencio (2.5s) antes de enviar */
+      clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(() => { stopRec(); }, 2500);
     };
     rec.onerror = (e) => {
-      if (G.ui && G.ui.toast) G.ui.toast('Error de dictado: ' + (e.error || 'desconocido'), 'error');
+      if (e.error === 'no-speech' || e.error === 'aborted') { /* ignorar: es normal */ }
+      else if (G.ui && G.ui.toast) G.ui.toast('Error de dictado: ' + (e.error || 'desconocido'), 'error');
+      if (listening) stopRec();
     };
     rec.onend = () => {
       listening = false;
       mic.classList.remove('ai-mic-on');
-      if (input.value.trim()) send();   // al terminar de hablar, envía automáticamente
+      if (input.value.trim()) send();   // al terminar (o por silencio), envía
     };
     try { rec.start(); } catch (e) { listening = false; mic.classList.remove('ai-mic-on'); }
   }
@@ -467,6 +483,7 @@
           const msg = '✅ Listo, guardé ' + res.label;
           pend.innerHTML = renderText(msg);
           speak(msg);
+          if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
         } else {
           pend.innerHTML = renderText(replyText);
           speak(replyText);

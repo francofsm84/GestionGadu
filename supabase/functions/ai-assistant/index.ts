@@ -39,7 +39,8 @@ Reglas estrictas:
 - Decile DÓNDE cargar cada cosa (módulo → acción) e incluí SIEMPRE el botón interactivo [[accion:CLAVE|Texto]] para abrir el formulario sin salir del chat.
 - Usá el CONTEXTO de la cuenta (plan, días de prueba, cantidad de obras/clientes/empleados/presupuestos). No inventes datos.
 - No uses más de 2 acciones por respuesta y no repitas la misma.
-- Si el usuario quiere CREAR o REGISTRAR algo (empleado, obra, cliente, presupuesto, gasto, ingreso o jornada), usá la herramienta "abrir_formulario" con el módulo correcto y los datos que ya dio (nombre, monto, categoria, etc.). Si la información es ambigua o incompleta (nombres repetidos, faltan datos clave), NO adivines: respondé con una pregunta aclaratoria.`;
+- Si el usuario quiere CREAR o REGISTRAR algo (empleado, obra, cliente, presupuesto, gasto, ingreso o jornada), usá la herramienta "abrir_formulario" con el módulo correcto y los datos que ya dio (nombre, monto, categoria, etc.).
+- Si la información es ambigua o incompleta, NO adivines y NO llames la herramienta. Respondé con una pregunta aclaratoria corta que LISTE las opciones disponibles del CONTEXTO por su nombre (ej. "¿A qué obra corresponde: El arreglo del baño o Refacciones?"), para que el usuario conteste por voz. Si falta un dato obligatorio (ej. la obra en un ingreso), pedilo puntualmente.`;
 
 const ADMIN_PROMPT = `Sos el "COO Virtual" de GADU, el copiloto de gestión de la plataforma SaaS para el Super Administrador.
 
