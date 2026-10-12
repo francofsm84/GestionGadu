@@ -62,17 +62,17 @@
     gasto: [
       { key: 'monto', ask: '¿De cuánto es el gasto? (ej. 5000)' },
       { key: 'categoria', ask: '¿Qué categoría es?', buttons: ['Materiales', 'Combustible', 'Mano de obra', 'Flete', 'Subcontrato', 'Otro'] },
-      { key: 'obra', ask: '¿A qué obra corresponde? (o tocá Saltear si es gasto general)', optional: true },
+      { key: 'obra', ask: '¿A qué obra corresponde?', worksList: true },
     ],
     ingreso: [
       { key: 'monto', ask: '¿De cuánto es el ingreso? (ej. 10000)' },
       { key: 'concepto', ask: '¿Qué concepto? (Cobro, Adelanto, Certificación… o Saltear)', optional: true },
-      { key: 'obra', ask: '¿A qué obra corresponde? (o tocá Saltear)', optional: true },
+      { key: 'obra', ask: '¿A qué obra corresponde?', worksList: true },
     ],
     presupuesto: [
       { key: 'nombre', ask: '¿Cómo se llama el presupuesto? (ej. "Reforma cocina")' },
       { key: 'monto', ask: '¿Cuál es el monto total? (ej. 80000, o Saltear)', optional: true },
-      { key: 'obra', ask: '¿Para qué obra es? (o tocá Saltear)', optional: true },
+      { key: 'obra', ask: '¿Para qué obra es?', worksList: true },
     ],
     herramienta: [
       { key: 'nombre', ask: '¿Qué herramienta cargamos? (ej. "Amoladora")' },
@@ -80,10 +80,11 @@
       { key: 'costo', ask: '¿Cuánto costó? (ej. 12000, o Saltear)', optional: true },
     ],
   };
-  /* Campos mínimos para poder guardar cada módulo */
+  /* Campos mínimos para poder guardar cada módulo (validación estricta) */
   const WIZARD_REQUIRED = {
     empleado: ['nombre'], cliente: ['nombre'], socio: ['nombre'], obra: ['nombre'],
-    gasto: ['monto'], ingreso: ['monto'], presupuesto: ['nombre'], herramienta: ['nombre'],
+    gasto: ['monto', 'categoria', 'obra'], ingreso: ['monto', 'obra'],
+    presupuesto: ['nombre', 'obra'], herramienta: ['nombre'],
   };
 
   /* Modo dinámico según la vista actual: #/admin → COO Virtual · resto → Capataz Digital */
@@ -506,6 +507,7 @@
       if (!window.speechSynthesis) return;
       stopRec();   // IMPORTANTE: detener el micrófono para no "escucharse a sí mismo"
       window.speechSynthesis.cancel();
+      try { window.speechSynthesis.resume(); } catch (er) {}   // evita quedar en pausa (bug de Chrome)
       const clean = String(text)
         .replace(/\[\[accion:[^\]]+\]\]/g, '')
         .replace(/\*\*(.+?)\*\*/g, '$1')
@@ -517,15 +519,19 @@
       u.lang = 'es-419';   // español latinoamericano
       u.rate = 1.0;
       u.pitch = 1.0;
+      u.volume = 1;
       const voices = spanishVoices().slice().sort((a, b) => voiceRank(a) - voiceRank(b));
       let es = null;
       if (voicePref) es = voices.find(v => v.name === voicePref);
-      if (!es) es = voices[0] || null;   // mejor voz nativa disponible
+      if (!es) es = voices[0] || null;   // mejor voz latina disponible
       if (es) u.voice = es;
       u.onstart = () => { speaking = true; updateStopBtn(); };
       u.onend = () => { speaking = false; updateStopBtn(); };
       u.onerror = () => { speaking = false; updateStopBtn(); };
-      window.speechSynthesis.speak(u);
+      /* Delay breve: deja asentar el cancel() y evita audios mudos/salteados */
+      setTimeout(() => {
+        try { window.speechSynthesis.speak(u); } catch (er) { speaking = false; updateStopBtn(); }
+      }, 80);
     } catch (e) { speaking = false; updateStopBtn(); }
   }
 
@@ -569,10 +575,14 @@
       if (mod === 'gasto') {
         const amount = Number(c.monto);
         if (!(amount > 0)) return null;
-        const desc = c.concepto || c.categoria || 'Gasto';
-        const cat = c.categoria || 'General';
+        const cat = c.categoria;
+        if (!cat) return null;   // categoría obligatoria (validación estricta)
+        const desc = c.concepto || cat;
         const autoId = autoWorkId();
         const workId = c.obra ? findId(d.works, c.obra, x => x.name) : autoId;
+        /* Validación estricta: si hay obras activas y el gasto no está asignado,
+           NO guardar como general en silencio → preguntar la obra en el chat */
+        if (!workId && (d.works || []).some(w => w.status === 'activa')) return null;
         const esObra = !!workId;
         S.add('expenses', {
           type: esObra ? 'obra' : 'general', workId: workId || null, date: today, amount,
@@ -880,10 +890,28 @@
     const steps = WIZARD_STEPS[op.modulo] || [];
     const s = steps[op.idx];
     if (!s) { finishWizard(); return; }
+
+    /* Botones dinámicos con las obras activas REALES del store */
+    let buttons = s.buttons || [];
+    if (s.worksList) {
+      const obras = ((G.store.data && G.store.data.works) || []).filter(w => w.status === 'activa');
+      if (!obras.length) {
+        const pend = wizardBubble('⚠️ Todavía no tenés obras activas. Primero creá una obra: decime <b>"crear una obra"</b> y empezamos por ahí.');
+        const wrap = document.createElement('div');
+        wrap.className = 'ai-actions';
+        const cx = document.createElement('button');
+        cx.className = 'btn btn-soft btn-sm'; cx.textContent = 'Cancelar';
+        cx.dataset.wiz = '__cancel__'; wrap.appendChild(cx);
+        pend.appendChild(wrap);
+        return;
+      }
+      buttons = obras.map(w => w.name);
+    }
+
     const pend = wizardBubble('🤖 ' + s.ask);
     const wrap = document.createElement('div');
     wrap.className = 'ai-actions';
-    (s.buttons || []).forEach(lb => {
+    buttons.forEach(lb => {
       const b = document.createElement('button');
       b.className = 'btn btn-soft btn-sm'; b.textContent = lb;
       b.dataset.wiz = lb; wrap.appendChild(b);
