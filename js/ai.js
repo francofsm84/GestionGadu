@@ -253,6 +253,8 @@
   let finalText = '', persistedFinal = '', lastSendAt = 0, silenceTimer = null, shouldListen = false;
   let chatHistory = [];   // últimas interacciones (seguimiento multi-paso en el chat)
   let pendingOp = null;   // operación guiada en curso: { modulo, campos, idx }
+  let pendingAdmin = null;   // acción de admin pendiente de confirmación: { uid, patch, label }
+  let adminWizard = null;    // alta express de usuarios en curso: { idx, campos }
   let voicePref = null;
   let currentUid = null;  // usuario autenticado dueño de la memoria del agente
   /* Memoria de sesión: última obra/cliente tratado, para que los comandos
@@ -315,6 +317,15 @@
     input = document.getElementById('aiInput');
     /* Botones del flujo guiado (wizard): delegación de clicks */
     log.addEventListener('click', (e) => {
+      const adm = e.target && e.target.closest ? e.target.closest('[data-adm]') : null;
+      if (adm) {
+        const k = adm.dataset.adm;
+        if (k === 'confirm') confirmAdminAction();
+        else if (k === 'cancel') cancelAdminAction();
+        else if (k === 'cancelwiz') { adminWizard = null; wizardBubble('✋ Alta cancelada.'); }
+        else if (k === 'wiz') adminWizardAdvance(adm.dataset.arg || '');
+        return;
+      }
       const b = e.target && e.target.closest ? e.target.closest('[data-wiz]') : null;
       if (!b) return;
       const v = b.dataset.wiz;
@@ -994,6 +1005,221 @@
     log.scrollTop = log.scrollHeight;
   }
 
+  /* ---------- COO Virtual (Super Admin): comandos conversacionales ---------- */
+  function esSuperAdmin() {
+    try { return !!(G.plan && G.plan.isAdmin && G.plan.isAdmin()); } catch (e) { return false; }
+  }
+  function normPlan(p) {
+    const v = String(p || '').toLowerCase();
+    if (/free/.test(v)) return 'free';
+    if (/pro/.test(v)) return 'pro';
+    if (/pyme/.test(v)) return 'pyme';
+    if (/empresa|enterprise/.test(v)) return 'empresa';
+    return v;
+  }
+  function planName(id) {
+    const p = ((G.plan && G.plan.planes) || []).find(x => x.id === id);
+    return p ? p.nombre : (id || 'Free');
+  }
+
+  /* Parser puro de comandos del COO (métricas, auditoría, plan, trial, estado, alta) */
+  function adminIntent(text) {
+    const t = String(text || '').toLowerCase();
+    if (!t) return null;
+    if (/(m[eé]tricas|mrr|arr|churn|cu[aá]nto factur|ingresos del saas|empresas activas|usuarios en prueba)/.test(t)) return { tipo: 'metricas' };
+    if (/(auditor[ií]a|errores recientes|registro de actividad|[uú]ltimos eventos)/.test(t)) return { tipo: 'auditoria' };
+    if (/(por vencer|pr[oó]ximas? a vencer|trials? que vencen|pruebas que vencen|licencias? por vencer|cuentas? por vencer)/.test(t)) return { tipo: 'vencer' };
+    if (/\b(registr[aá]|crear|nueva|alta de|invit[aá]|agreg[aá]|nuevo)[^.!?]*(usuario|empresa|cuenta|invitaci|cliente saas)/.test(t)) return { tipo: 'alta' };
+    const planM = t.match(/(?:cambi[aá]|cambiale|pon[eé]|pas[aá]|sub[ií]|baj[aá])(?:me|le)?\s+(?:el plan de|plan de|plan|a)?\s*(.+?)\s+a\s+(free|pro|pyme|empresa|enterprise)\b/i);
+    if (planM) return { tipo: 'plan', target: planM[1].trim(), plan: normPlan(planM[2]) };
+    const trialM = t.match(/\b(?:dale|d[aá]le|extend[eé]|sum[aá]|agreg[aá]|prorrog[aá])\s+(\d+)\s+d[ií]as(?:\s+m[aá]s)?\s*(?:a|para)?\s*(.+)/i);
+    if (trialM) return { tipo: 'trial', dias: Number(trialM[1]), target: trialM[2].trim() };
+    const estM = t.match(/\b(suspend[eé]|reactiv[aá]|activ[aá])\s+(?:a\s+)?(?:la cuenta de\s+)?(?:la empresa de\s+)?(.+)/i);
+    if (estM) return { tipo: 'estado', estado: /suspend/.test(estM[1]) ? 'suspendido' : 'activo', target: estM[2].trim() };
+    return null;
+  }
+
+  /* Busca la cuenta por nombre de empresa o email (parcial) */
+  async function findAdminUser(target) {
+    const q = String(target || '').toLowerCase().trim();
+    const rows = await G.api('GET', '/profiles?select=*&order=created_at.asc');
+    return (rows || []).find(u =>
+      String(u.email || '').toLowerCase().includes(q) ||
+      String(u.empresa_constructora || u.empresa || '').toLowerCase().includes(q)
+    ) || null;
+  }
+
+  function addAdminButtons(pend, pairs) {
+    const wrap = document.createElement('div');
+    wrap.className = 'ai-actions';
+    pairs.forEach(([k, label]) => {
+      const b = document.createElement('button');
+      b.className = 'btn btn-soft btn-sm';
+      b.textContent = label;
+      b.addEventListener('click', () => { const fn = ACTION_KEYS[k]; if (fn) { fn(); setOpen(false); } });
+      wrap.appendChild(b);
+    });
+    pend.appendChild(wrap);
+  }
+
+  /* Confirmación inline de cambios de cuenta (plan / trial / estado) */
+  function askAdminConfirm(uid, patch, label) {
+    pendingAdmin = { uid, patch, label };
+    const pend = wizardBubble('¿Confirmás? <b>' + label + '</b>');
+    const wrap = document.createElement('div');
+    wrap.className = 'ai-actions';
+    const okB = document.createElement('button');
+    okB.className = 'btn btn-soft btn-sm'; okB.textContent = '✔ Confirmar'; okB.dataset.adm = 'confirm';
+    wrap.appendChild(okB);
+    const noB = document.createElement('button');
+    noB.className = 'btn btn-soft btn-sm'; noB.textContent = 'Cancelar'; noB.dataset.adm = 'cancel';
+    wrap.appendChild(noB);
+    pend.appendChild(wrap);
+  }
+  async function confirmAdminAction() {
+    const a = pendingAdmin;
+    pendingAdmin = null;
+    if (!a) return;
+    try {
+      await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent(a.uid), a.patch);
+      try { if (G.plan && G.plan.log) G.plan.log('coo_' + a.label, a.uid); } catch (e) {}
+      wizardBubble(successCard(a.label));
+      speak('¡Listo! ' + a.label);
+      if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + a.label, 'success');
+    } catch (e) {
+      wizardBubble('⚠️ No pude aplicar el cambio: ' + esc(String((e && e.message) || e)));
+    }
+  }
+  function cancelAdminAction() {
+    pendingAdmin = null;
+    wizardBubble('✋ Operación cancelada.');
+  }
+
+  /* Alta express de usuarios (wizard del COO) */
+  const ADMIN_WIZARD_STEPS = [
+    { key: 'email', ask: '¿Cuál es el email de Google del nuevo usuario? (ej. usuario@gmail.com)' },
+    { key: 'empresa', ask: '¿Cuál es el nombre de fantasía de la empresa?' },
+    { key: 'plan', ask: '¿Qué plan le asignamos?', plansList: true },
+    { key: 'periodo', ask: '¿Cuántos días de prueba le damos? (ej. 30)' },
+  ];
+  function startAdminWizard() {
+    adminWizard = { idx: 0, campos: {} };
+    adminWizardAsk();
+  }
+  function adminWizardAsk() {
+    const s = ADMIN_WIZARD_STEPS[adminWizard.idx];
+    if (!s) { finishAdminWizard(); return; }
+    let buttons = [];
+    if (s.plansList) buttons = ((G.plan && G.plan.planes) || []).map(p => p.nombre);
+    const pend = wizardBubble('🤖 ' + s.ask);
+    const wrap = document.createElement('div');
+    wrap.className = 'ai-actions';
+    buttons.forEach(lb => {
+      const b = document.createElement('button');
+      b.className = 'btn btn-soft btn-sm'; b.textContent = lb;
+      b.dataset.adm = 'wiz'; b.dataset.arg = lb;
+      wrap.appendChild(b);
+    });
+    const cx = document.createElement('button');
+    cx.className = 'btn btn-soft btn-sm'; cx.textContent = 'Cancelar'; cx.dataset.adm = 'cancelwiz';
+    wrap.appendChild(cx);
+    pend.appendChild(wrap);
+  }
+  function adminWizardAdvance(val) {
+    if (!adminWizard) return;
+    const s = ADMIN_WIZARD_STEPS[adminWizard.idx];
+    if (!s) { finishAdminWizard(); return; }
+    const v = String(val || '').trim();
+    if (!v) { wizardBubble('🤖 Necesito ese dato para continuar. ' + s.ask); return; }
+    adminWizard.campos[s.key] = v;
+    adminWizard.idx++;
+    adminWizardAsk();
+  }
+  async function finishAdminWizard() {
+    const c = adminWizard.campos;
+    adminWizard = null;
+    try {
+      const plan = ((G.plan && G.plan.planes) || []).find(p => p.nombre === c.plan);
+      await G.api('POST', '/invitaciones', {
+        email: String(c.email || '').toLowerCase(),
+        rol: 'gestor_obra',
+        plan_id: plan ? plan.id : 'free',
+        empresa: c.empresa || '',
+        estado: 'pendiente',
+      });
+      try { if (G.plan && G.plan.log) G.plan.log('coo_invitacion', c.email + ' · ' + (plan ? plan.nombre : 'Free') + ' · prueba ' + c.periodo + 'd'); } catch (e) {}
+      wizardBubble(successCard('invitación para ' + c.email + ' (' + (plan ? plan.nombre : 'Free') + ', prueba ' + (c.periodo || '—') + ' días)'));
+      speak('¡Listo! Creé la invitación.');
+      if (G.ui && G.ui.toast) G.ui.toast('Invitación creada: ' + c.email, 'success');
+    } catch (e) {
+      wizardBubble('⚠️ No pude crear la invitación: ' + esc(String((e && e.message) || e)));
+    }
+  }
+
+  /* Ejecuta el comando del COO y renderiza tarjetas con botones en el chat */
+  async function handleAdminIntent(adm, pend) {
+    try {
+      if (adm.tipo === 'metricas') {
+        const m = await G.api('POST', '/rpc/metricas');
+        const pp = (m && m.por_plan && typeof m.por_plan === 'object') ? m.por_plan : {};
+        pend.innerHTML = '📊 <b>Métricas del SaaS</b><br>'
+          + '• <b>MRR</b> $' + (m.mrr || 0) + ' · <b>ARR</b> $' + (m.arr || 0) + '<br>'
+          + '• Usuarios: <b>' + (m.usuarios || 0) + '</b> (' + (m.activos || 0) + ' activos) · Obras: ' + (m.obras || 0) + '<br>'
+          + '• Conversión a pago: ' + (m.conversion != null ? m.conversion : 0) + '%<br>'
+          + '• Planes: Free ' + (pp.Free != null ? pp.Free : 0) + ' · Pro ' + (pp.Pro != null ? pp.Pro : 0) + ' · Pyme ' + (pp.Pyme != null ? pp.Pyme : 0) + ' · Empresa ' + (pp.Empresa != null ? pp.Empresa : 0);
+        addAdminButtons(pend, [['admin-metrics', '📊 Ver Métricas'], ['admin-users', '👥 Ver Usuarios']]);
+        return;
+      }
+      if (adm.tipo === 'auditoria') {
+        const rows = await G.api('GET', '/auditoria?select=*&order=fecha.desc&limit=8');
+        let h = '🧾 <b>Últimos eventos de auditoría</b>';
+        if (!rows || !rows.length) h += '<br><span class="muted">Sin registros.</span>';
+        else rows.slice(0, 8).forEach(a => {
+          h += '<br>• <span class="muted small">' + esc(String(a.fecha || '').slice(0, 16)) + '</span> <b>' + esc(a.accion || '') + '</b>' + (a.detalle ? ' — ' + esc(a.detalle) : '');
+        });
+        pend.innerHTML = h;
+        addAdminButtons(pend, [['admin-audit', '🧾 Ver Auditoría']]);
+        return;
+      }
+      if (adm.tipo === 'vencer') {
+        const rows = await G.api('GET', '/profiles?select=*&order=created_at.asc');
+        const ahora = Date.now();
+        const lista = (rows || [])
+          .filter(u => u.subscription_status === 'trialing' && (u.trial_ends_at || u.trial_end))
+          .map(u => ({ u, dias: Math.ceil((new Date(u.trial_ends_at || u.trial_end).getTime() - ahora) / 86400000) }))
+          .filter(x => x.dias <= 7)
+          .sort((a, b) => a.dias - b.dias);
+        let h = '⏳ <b>Cuentas en prueba por vencer (≤7 días)</b>';
+        if (!lista.length) h += '<br><span class="muted">Ninguna por vencer. Todo al día ✅</span>';
+        else lista.slice(0, 8).forEach(x => {
+          h += '<br>• <b>' + esc(x.u.empresa_constructora || x.u.empresa || x.u.email) + '</b> — quedan <b>' + x.dias + '</b> día' + (x.dias !== 1 ? 's' : '') + ' <span class="muted small">(' + esc(x.u.email || '') + ')</span>';
+        });
+        pend.innerHTML = h;
+        addAdminButtons(pend, [['admin-users', '👥 Ver Usuarios']]);
+        return;
+      }
+      if (adm.tipo === 'alta') { startAdminWizard(); return; }
+      /* plan / trial / estado: buscar la cuenta y pedir confirmación inline */
+      const u = await findAdminUser(adm.target);
+      if (!u) {
+        pend.innerHTML = '🔍 No encontré ninguna cuenta con "' + esc(adm.target) + '". Probá con el nombre de la empresa o parte del email.';
+        addAdminButtons(pend, [['admin-users', '👥 Ver Usuarios']]);
+        return;
+      }
+      const nom = u.empresa_constructora || u.empresa || u.email;
+      if (adm.tipo === 'plan') {
+        askAdminConfirm(u.user_id, { plan_id: adm.plan }, 'cambio de plan de ' + nom + ' → ' + planName(adm.plan));
+      } else if (adm.tipo === 'trial') {
+        const nueva = new Date(Date.now() + adm.dias * 86400000).toISOString();
+        askAdminConfirm(u.user_id, { trial_end: nueva, trial_ends_at: nueva }, 'prueba de ' + nom + ' extendida +' + adm.dias + ' días');
+      } else if (adm.tipo === 'estado') {
+        askAdminConfirm(u.user_id, { estado_cuenta: adm.estado }, (adm.estado === 'suspendido' ? 'suspensión de ' : 'activación de ') + nom);
+      }
+    } catch (e) {
+      pend.innerHTML = '⚠️ No pude ejecutar esa acción: ' + esc(String((e && e.message) || e));
+    }
+  }
+
   /* ---------- Flujo guiado (wizard) 100% en el chat ---------- */
   function isCompleteWizard(modulo, campos) {
     const req = WIZARD_REQUIRED[modulo];
@@ -1209,7 +1435,14 @@
       if (/^(cancelar|cancela|salir|salí|nada|me arrepentí|para|basta|olvidalo|olvídalo|chau|no quiero)\b/.test(mt)) cancelWizard();
       else if (/^(seguir|continuar|continuemos|dale|sí|si)\b/.test(mt)) wizardAskNext();
       else if (isQuery(msg)) askContinueOrCancel();
-      else wizardAdvance(msg, false);
+      else wizardAdvance(msg);
+      busy = false;
+      return;
+    }
+    /* ===== 1b) Alta express del COO en curso ===== */
+    if (adminWizard) {
+      if (/^(cancelar|cancela|salir|nada|no)\b/.test(msg.toLowerCase())) { adminWizard = null; wizardBubble('✋ Alta cancelada.'); }
+      else adminWizardAdvance(msg);
       busy = false;
       return;
     }
@@ -1226,7 +1459,16 @@
       const found = searchStore(sq);
       if (found.length) { handleSearchResults(sq, found, pend); return; }
     }
-    /* ===== 2) Creación guiada universal: la carga se resuelve 100% en el chat ===== */
+    /* ===== 2) COO Virtual: comandos del Super Admin (SOLO con rol admin) ===== */
+    if (esSuperAdmin()) {
+      const adm = adminIntent(msg);
+      if (adm) {
+        rememberTurn('usuario', msg);
+        handleAdminIntent(adm, pend).finally(() => { busy = false; log.scrollTop = log.scrollHeight; });
+        return;
+      }
+    }
+    /* ===== 3) Creación guiada universal: la carga se resuelve 100% en el chat ===== */
     const li = localIntent(msg);
     if (li && WIZARD_STEPS[li.modulo]) {
       rememberTurn('usuario', msg);
@@ -1315,5 +1557,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS };
 })(typeof window !== 'undefined' ? window : globalThis);
