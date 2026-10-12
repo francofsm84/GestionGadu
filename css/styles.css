@@ -125,7 +125,19 @@ button { font-family: inherit; }
 }
 .badge-danger { background: var(--danger); color: #fff; }
 .badge-info { background: var(--info-soft); color: var(--info); }
-.sidebar-foot { border-top: 1px solid var(--border-soft); padding: 12px; display: grid; gap: 2px; }
+.sidebar-foot { border-top: none; padding: 0; }
+/* Botón de colapsar estilo Canva: circular, centrado verticalmente en el borde derecho */
+#btnCollapse {
+  position: absolute; top: 50%; right: -13px; transform: translateY(-50%);
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--surface-2); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; margin: 0; cursor: pointer; z-index: 62;
+  box-shadow: 0 2px 8px rgba(0,0,0,.35);
+}
+#btnCollapse:hover { background: var(--surface-3); }
+#btnCollapse .nav-label { display: none; }
+#btnCollapse .nav-ico { display: grid; place-items: center; }
 
 body.sb-collapsed .sidebar { width: var(--sidebar-w-min); }
 body.sb-collapsed .sidebar .logo { align-items: center; }
@@ -646,6 +658,7 @@ canvas.chart { min-width: 0; max-width: 100%; }
   .sidebar.open { transform: none; }
   .sidebar-close { display: inline-flex; }
   .btn-menu { display: inline-flex; }
+  #btnCollapse { display: none; }   /* el colapso flotante es solo de escritorio */
   .main { margin-left: 0 !important; }
   body.sb-collapsed .sidebar { width: var(--sidebar-w); }
   body.sb-collapsed .sidebar .logo { align-items: flex-start; }
