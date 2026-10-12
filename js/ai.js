@@ -595,14 +595,16 @@
     return { modulo: kind, campos };
   }
 
-  /* Llamada a la Edge Function con reintento + backoff exponencial (1.2s, 2.4s) */
+  /* Llamada a la Edge Function: 2 intentos (1 reintento por fallo de red) con
+     timeout de 25s y backoff de 1s. Antes hacía 3×30s y dejaba al usuario
+     "pensando" casi 2 minutos. */
   async function callAI(payload) {
     const sess = G.auth.getSession();
     const url = G.auth.SUPABASE_URL + '/functions/v1/ai-assistant';
     let lastErr = null;
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 2; i++) {
       const ctrl = new AbortController();
-      const to = setTimeout(() => ctrl.abort(), 30000);
+      const to = setTimeout(() => ctrl.abort(), 25000);
       try {
         const r = await fetch(url, {
           method: 'POST',
@@ -616,7 +618,7 @@
       } catch (e) {
         clearTimeout(to);
         lastErr = e;
-        if (i < 2) await new Promise(res => setTimeout(res, (i + 1) * 1200));
+        if (i < 1) await new Promise(res => setTimeout(res, 1000));
       }
     }
     throw lastErr || new Error('Sin respuesta');

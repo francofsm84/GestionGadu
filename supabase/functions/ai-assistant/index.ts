@@ -153,12 +153,11 @@ serve(async (req) => {
     const systemPrompt = mode === "admin" ? ADMIN_PROMPT : USER_PROMPT;
     const userText = `Contexto de mi cuenta:\n${finalContext || "sin contexto"}\n\nMi consulta:\n${message}`;
 
-    // Cadena de modelos: si el principal está congestionado (503/429), probamos el siguiente.
+    // Cadena de modelos (3 máximo): si el principal está congestionado, probamos el siguiente.
     const modelos = [...new Set([
       Deno.env.get("GEMINI_MODEL") || "gemini-3.5-flash",
       "gemini-3.5-flash",
       "gemini-3.8-flash",
-      "gemini-3.7-flash",
       "gemini-flash-latest",
     ])];
 
@@ -167,7 +166,7 @@ serve(async (req) => {
       // Timeout por modelo: evita que un modelo colgado bloquee toda la cadena
       // de respaldo y deje al usuario en "Pensando…" indefinido.
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 12000);
+      const timer = setTimeout(() => controller.abort(), 8000);
       try {
         const aiRes = await fetch(url, {
           method: "POST",
