@@ -372,6 +372,15 @@
   }
   function reset() { data = seed(); save(); }
 
+  /* Aplicar datos llegados por Realtime desde OTRO dispositivo:
+     actualiza la memoria y el disco SIN volver a pushear (evita el bucle). */
+  function applyRemote(newData) {
+    if (!newData || typeof newData !== 'object' || !Array.isArray(newData.works) || !Array.isArray(newData.incomes)) return false;
+    data = newData;
+    try { localStorage.setItem(key, JSON.stringify(data)); } catch (e) {}
+    return true;
+  }
+
   /* ---------- Empezar de cero (datos reales) ---------- */
   function currentSettings() {
     const st = data.settings || {};
@@ -736,7 +745,7 @@
     workClientAdvances, workEmployeeAdvances, workEmployees,
     moveAsset, assetUsage,
     CATS_OBRA, CATS_GENERAL, METODOS, WORK_STATUS, ASSET_STATUS, ASSET_CATS, SEGURO_TIPOS, CONTACT_TYPES, BUDGET_STATUS,
-    uid, todayISO, parseISO, monthLabel, daysAgo, daysAhead, sum, KEY, attachUser, hasLocalData,
+    uid, todayISO, parseISO, monthLabel, daysAgo, daysAhead, sum, KEY, attachUser, hasLocalData, applyRemote,
     seguroDaysLeft, seguroEstado,
     get data() { return data; },
   };

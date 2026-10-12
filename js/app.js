@@ -843,6 +843,21 @@
     } catch (e) { /* sin conexión: la app sigue en modo local */ }
     finally { if (spin) spin.hidden = true; }
 
+    /* Supabase Realtime: cambios de app_data desde OTRO dispositivo (sync instantánea) */
+    try {
+      G.sync.subscribeRealtime((remoteData, updatedAt) => {
+        if (!remoteData) return;
+        const localTs = (S.data && S.data.settings && S.data.settings.lastCloudSync) || 0;
+        /* Ignorar si la versión local ya es igual o más nueva (evita bucle de push) */
+        if (updatedAt && localTs && new Date(updatedAt).getTime() <= new Date(localTs).getTime()) return;
+        if (remoteData.settings) remoteData.settings.lastCloudSync = String(updatedAt || new Date().toISOString());
+        if (S.applyRemote(remoteData)) {
+          try { UI.toast('Datos actualizados desde otro dispositivo', 'info'); } catch (e) {}
+          try { renderNow(); } catch (e) {}
+        }
+      });
+    } catch (e) {}
+
     /* Asistente de IA (chat flotante) */
     try { G.ai.init(); } catch (e) {}
 

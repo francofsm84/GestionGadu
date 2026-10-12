@@ -92,5 +92,49 @@
     }, 2500);
   }
 
-  G.sync = { baseUrl, headers, test, push, pull, schedulePush };
+  /* ---------- Realtime: cambios de app_data en tiempo real ---------- */
+  let rtSocket = null, rtTimer = null;
+
+  function subscribeRealtime(onUpdate) {
+    if (typeof WebSocket === 'undefined') return () => {};
+    const uid = G.auth.getSession() ? G.auth.getSession().userId : null;
+    if (!uid) return () => {};
+    const wsUrl = G.auth.SUPABASE_URL.replace(/^http/, 'ws') +
+      '/realtime/v1/websocket?apikey=' + encodeURIComponent(G.auth.SUPABASE_ANON_KEY) + '&vsn=1.0.0';
+    const topic = 'realtime:public:app_data';
+    let closed = false;
+
+    function connect() {
+      if (closed) return;
+      try { rtSocket = new WebSocket(wsUrl); } catch (e) { return; }
+      rtSocket.onopen = () => {
+        rtSocket.send(JSON.stringify({
+          topic: topic,
+          event: 'phx_join',
+          payload: { config: { postgres_changes: [{ event: '*', schema: 'public', table: 'app_data', filter: 'user_id=eq.' + uid }] } },
+          ref: String(Date.now()),
+        }));
+        rtTimer = setInterval(() => {
+          if (rtSocket.readyState === 1) rtSocket.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: String(Date.now()) }));
+        }, 30000);
+      };
+      rtSocket.onmessage = (msg) => {
+        let m; try { m = JSON.parse(msg.data); } catch (e) { return; }
+        if (m.event !== 'postgres_changes') return;
+        const d = m.payload && m.payload.data;
+        const row = d && d.new;
+        if (!row || row.user_id !== uid) return;
+        try { if (typeof onUpdate === 'function') onUpdate(row.data, row.updated_at, row.user_id); } catch (e) {}
+      };
+      rtSocket.onclose = () => {
+        clearInterval(rtTimer);
+        if (!closed) setTimeout(connect, 3000);   // reconexión
+      };
+      rtSocket.onerror = () => { try { rtSocket.close(); } catch (e) {} };
+    }
+    connect();
+    return () => { closed = true; clearInterval(rtTimer); try { rtSocket && rtSocket.close(); } catch (e) {} };
+  }
+
+  G.sync = { baseUrl, headers, test, push, pull, schedulePush, subscribeRealtime };
 })(typeof window !== 'undefined' ? window : globalThis);
