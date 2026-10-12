@@ -125,8 +125,7 @@
         '<div class="field"><label>Foto</label><div id="photoSlot"></div></div>' +
         '<div class="field"><label>Contacto</label><button type="button" class="btn btn-soft btn-sm" id="btnImportContact" style="margin-top:6px">📇 Importar desde contactos</button></div>' +
         '<div class="field span-2"><label>Nombre / Razón social *</label><input class="input" id="fName" value="' + UI.escapeHtml(c ? c.name : '') + '" placeholder="Ej.: Familia Rossi, Estudio Piemonte…"></div>' +
-        '<div class="field"><label>Teléfono</label><input class="input" id="fPhone" value="' + UI.escapeHtml(c ? c.phone : '') + '" placeholder="+54 9 3547 …"></div>' +
-        '<div class="field"><label>WhatsApp</label><input class="input" id="fWa" value="' + UI.escapeHtml(c ? c.whatsapp : '') + '" placeholder="Si difiere del teléfono"></div>' +
+        '<div class="field span-2"><label>Teléfono / WhatsApp</label><input class="input" id="fPhone" value="' + UI.escapeHtml(c ? (c.whatsapp || c.phone) : '') + '" placeholder="+54 9 3547 … (teléfono y WhatsApp)"></div>' +
         '<div class="field"><label>E-mail</label><input class="input" id="fEmail" value="' + UI.escapeHtml(c ? c.email : '') + '" placeholder="cliente@ejemplo.com"></div>' +
         '<div class="field"><label>Dirección</label><input class="input" id="fAddr" value="' + UI.escapeHtml(c ? c.address : '') + '" placeholder="Barrio, ciudad"></div>' +
         '<div class="field span-2"><label>Notas</label><textarea class="textarea" id="fNotes" rows="2" placeholder="Referencias, condiciones de pago…">' + UI.escapeHtml(c ? c.notes : '') + '</textarea></div>' +
@@ -160,7 +159,7 @@
         name,
         company: c ? c.company : '',
         phone: m.panel.querySelector('#fPhone').value.trim(),
-        whatsapp: m.panel.querySelector('#fWa').value.trim(),
+        whatsapp: m.panel.querySelector('#fPhone').value.trim(),   // campo unificado Teléfono / WhatsApp
         email: m.panel.querySelector('#fEmail').value.trim(),
         address: m.panel.querySelector('#fAddr').value.trim(),
         notes: m.panel.querySelector('#fNotes').value.trim(),

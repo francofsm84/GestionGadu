@@ -207,18 +207,89 @@
 
   /* ---------- Importar desde la agenda del móvil (Contact Picker API) ---------- */
   UI.contactsSupported = () => !!(navigator.contacts && navigator.contacts.select);
-  UI.pickContact = async () => {
-    if (!UI.contactsSupported()) throw new Error('Tu navegador no permite importar contactos. Funciona en Android con Chrome.');
-    const props = ['name', 'tel', 'email'];
-    const picked = await navigator.contacts.select(props, { multiple: false });
-    const c = picked && picked[0];
-    if (!c) return null;
-    return {
-      name: (c.name && c.name.join(' ')) || '',
-      phone: (c.tel && c.tel[0]) || '',
-      email: (c.email && c.email[0]) || '',
+
+  /* Parseo de un archivo VCF (tarjeta de contacto) */
+  function parseVCF(text) {
+    const out = { name: '', phone: '', email: '' };
+    const lines = String(text || '').split(/\r?\n/);
+    for (const line of lines) {
+      const m = line.match(/^(FN|N|TEL[^:]*|EMAIL[^:]*)[;:](.+)$/i);
+      if (!m) continue;
+      const key = m[1].toUpperCase();
+      const val = m[2].trim();
+      if (key.startsWith('TEL')) { if (!out.phone) out.phone = val; }
+      else if (key.startsWith('EMAIL')) { if (!out.email) out.email = val; }
+      else if (key === 'FN') out.name = val;
+      else if (key === 'N' && !out.name) out.name = val.replace(/;/g, ' ').trim();
+    }
+    return out;
+  }
+  /* Parseo de un CSV de contactos (primer registro) */
+  function parseCSV(text) {
+    const lines = String(text || '').split(/\r?\n/).filter(Boolean);
+    if (!lines.length) return { name: '', phone: '', email: '' };
+    const headers = lines[0].split(/[,;]/).map(s => s.replace(/^"|"$/g, '').trim());
+    const cells = lines.length > 1 ? lines[1].split(/[,;]/).map(s => s.replace(/^"|"$/g, '').trim()) : [];
+    const norm = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const pick = (...keys) => {
+      for (const k of keys) {
+        const i = headers.findIndex(h => norm(h).includes(k));
+        if (i >= 0 && cells[i]) return cells[i];
+      }
+      return '';
     };
+    return {
+      name: pick('name', 'nombre') || cells[0] || '',
+      phone: pick('tel', 'phone', 'telefono', 'celular', 'movil'),
+      email: pick('email', 'correo', 'mail'),
+    };
+  }
+
+  /* Fallback de escritorio: aviso amigable + importación de archivo VCF/CSV */
+  UI.pickContactFallback = () => new Promise(resolve => {
+    const m = UI.openModal({
+      title: 'Importar contacto',
+      subtitle: 'Tu navegador no tiene la agenda nativa (disponible en Chrome para Android). Podés importar un archivo o cargar los datos a mano.',
+      body:
+        '<p class="form-hint">📇 Subí un archivo <b>.vcf</b> (tarjeta de contacto) o <b>.csv</b> exportado desde Google/Contactos. Se importará el primer contacto del archivo.</p>' +
+        '<p class="form-hint muted">💡 También podés hacerlo desde el celular: en Chrome Android, "Importar desde contactos" abre tu agenda directamente.</p>' +
+        '<div class="field"><label>Archivo (.vcf o .csv)</label><input type="file" id="impFile" accept=".vcf,.csv,text/vcard,text/csv" class="input"></div>',
+      footer: '<button class="btn btn-ghost" data-cancel>Cancelar</button><button class="btn btn-primary" data-import>Importar</button>',
+    });
+    m.panel.querySelector('[data-cancel]').addEventListener('click', () => { m.close(); resolve(null); });
+    m.panel.querySelector('[data-import]').addEventListener('click', async () => {
+      const inp = m.panel.querySelector('#impFile');
+      const f = inp && inp.files && inp.files[0];
+      if (!f) { UI.toast('Elegí un archivo .vcf o .csv', 'error'); return; }
+      try {
+        const text = await f.text();
+        const c = /\.csv$/i.test(f.name) ? parseCSV(text) : parseVCF(text);
+        if (!c.name && !c.phone && !c.email) { UI.toast('No se encontró ningún contacto en el archivo', 'error'); return; }
+        m.close();
+        resolve(c);
+      } catch (e) {
+        UI.toast('No se pudo leer el archivo: ' + ((e && e.message) || e), 'error');
+      }
+    });
+  });
+
+  UI.pickContact = async () => {
+    if (UI.contactsSupported()) {
+      const props = ['name', 'tel', 'email'];
+      const picked = await navigator.contacts.select(props, { multiple: false });
+      const c = picked && picked[0];
+      if (!c) return null;
+      return {
+        name: (c.name && c.name.join(' ')) || '',
+        phone: (c.tel && c.tel[0]) || '',
+        email: (c.email && c.email[0]) || '',
+      };
+    }
+    /* Navegador sin Contact Picker (escritorio): fallback con archivo */
+    return UI.pickContactFallback();
   };
+  UI.parseVCF = parseVCF;
+  UI.parseCSV = parseCSV;
 
   UI.chip = (text, tone, iconName) => '<span class="chip chip-' + tone + '">' + (iconName ? UI.icon(iconName, 13) : '') + '<span>' + UI.escapeHtml(text) + '</span></span>';
 
