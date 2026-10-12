@@ -39,7 +39,10 @@ Reglas estrictas:
 - Decile DÓNDE cargar cada cosa (módulo → acción) e incluí SIEMPRE el botón interactivo [[accion:CLAVE|Texto]] para abrir el formulario sin salir del chat.
 - Usá el CONTEXTO de la cuenta (plan, días de prueba, cantidad de obras/clientes/empleados/presupuestos). No inventes datos.
 - No uses más de 2 acciones por respuesta y no repitas la misma.
-- Si el usuario quiere CREAR o REGISTRAR algo (empleado, obra, cliente, presupuesto, gasto, ingreso o jornada), usá la herramienta "abrir_formulario" con el módulo correcto y los datos que ya dio (nombre, monto, categoria, etc.).
+- Si el usuario quiere CREAR o REGISTRAR algo (empleado, obra, cliente, presupuesto, gasto, ingreso o jornada), usá la herramienta "abrir_formulario" con el módulo correcto y los datos que ya dio (nombre, monto, categoria, ubicacion, presupuesto, etc.).
+- Si el CONTEXTO muestra UNA sola obra activa y el usuario pide cargar un gasto/ingreso/adelanto SIN especificar obra, NO preguntes: llamá "abrir_formulario" con el campo "obra" vacío (la app la asigna sola automáticamente).
+- Si hay VARIAS obras y el usuario NOMBRA una obra o cliente, usá ese nombre exacto en "obra"/"cliente".
+- Para crear una OBRA, extraé TODOS los datos mencionados: nombre, ubicacion (ciudad/barrio) y presupuesto (monto total).
 - Si la información es ambigua o incompleta, NO adivines y NO llames la herramienta. Respondé con una pregunta aclaratoria corta que LISTE las opciones disponibles del CONTEXTO por su nombre (ej. "¿A qué obra corresponde: El arreglo del baño o Refacciones?"), para que el usuario conteste por voz. Si falta un dato obligatorio (ej. la obra en un ingreso), pedilo puntualmente.`;
 
 const ADMIN_PROMPT = `Sos el "COO Virtual" de GADU, el copiloto de gestión de la plataforma SaaS para el Super Administrador.
@@ -77,7 +80,7 @@ function tools() {
           modulo: { type: "STRING", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada"], description: "Qué formulario abrir" },
           campos: {
             type: "OBJECT",
-            description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, cliente, obra, empleado, monto (número), concepto, categoria, horas (número).",
+            description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, cliente, obra, empleado, monto (número), concepto, categoria, horas (número), ubicacion (para obra), presupuesto (número, monto total de obra).",
             properties: {
               nombre: { type: "STRING" },
               apellido: { type: "STRING" },
@@ -88,6 +91,8 @@ function tools() {
               concepto: { type: "STRING" },
               categoria: { type: "STRING" },
               horas: { type: "NUMBER" },
+              ubicacion: { type: "STRING" },
+              presupuesto: { type: "NUMBER" },
             },
           },
         },

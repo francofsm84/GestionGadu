@@ -331,18 +331,29 @@
         const hit = (list || []).find(x => keyFn(x).toLowerCase().trim() === n);
         return hit ? hit.id : null;
       };
+      /* Auto-asignación: si hay UNA sola obra activa, usarla sin preguntar */
+      const autoWorkId = () => {
+        const activas = (d.works || []).filter(w => w.status === 'activa');
+        return activas.length === 1 ? activas[0].id : null;
+      };
+      const workName = (id) => {
+        const w = (d.works || []).find(x => x.id === id);
+        return w ? w.name : '';
+      };
       if (mod === 'gasto') {
         const amount = Number(c.monto);
         if (!(amount > 0)) return null;
         const desc = c.concepto || c.categoria || 'Gasto';
         const cat = c.categoria || 'General';
-        const workId = c.obra ? findId(d.works, c.obra, x => x.name) : null;
+        const autoId = autoWorkId();
+        const workId = c.obra ? findId(d.works, c.obra, x => x.name) : autoId;
+        const esObra = !!workId;
         S.add('expenses', {
-          type: c.obra ? 'obra' : 'general', workId: workId || null, date: today, amount,
+          type: esObra ? 'obra' : 'general', workId: workId || null, date: today, amount,
           category: cat, providerId: null, employeeId: null, expenseKind: null,
           description: desc, invoiceNumber: '', paymentMethod: (S.METODOS && S.METODOS[0]) || 'Efectivo',
         });
-        return { ok: true, label: 'gasto de $' + amount + ' (' + desc + ')' };
+        return { ok: true, label: 'gasto de $' + amount + ' (' + desc + ')' + (esObra ? ' en ' + workName(workId) : '') };
       }
       if (mod === 'cliente' || mod === 'socio') {
         const name = c.nombre || '';
@@ -377,10 +388,11 @@
       if (mod === 'ingreso') {
         const amount = Number(c.monto);
         if (!(amount > 0)) return null;
-        const workId = c.obra ? findId(d.works, c.obra, x => x.name) : null;
-        if (!workId) return null;   // sin obra no se puede guardar: abrir formulario
+        const autoId = autoWorkId();
+        const workId = c.obra ? findId(d.works, c.obra, x => x.name) : autoId;
+        if (!workId) return null;   // sin obra única ni nombre → abrir formulario
         S.add('incomes', { workId, clientId: null, date: today, amount, concept: c.concepto || 'Cobro', incomeKind: 'pago', method: (S.METODOS && S.METODOS[0]) || 'Efectivo', reference: '', notes: '' });
-        return { ok: true, label: 'ingreso de $' + amount + ' en ' + c.obra };
+        return { ok: true, label: 'ingreso de $' + amount + ' en ' + (workName(workId) || c.obra) };
       }
     } catch (e) { return null; }
     return null;
@@ -429,6 +441,8 @@
         case 'obra':
           if (G.actions.work) G.actions.work(null, { clientId });
           setVal('#fName', nombre);
+          setVal('#fLoc', c.ubicacion || c.direccion);
+          setVal('#fBudget', c.presupuesto);
           break;
         case 'cliente':
           if (G.actions.client) G.actions.client();
@@ -540,6 +554,55 @@
     }, 900);
   }
 
+  /* Intents locales de respaldo: si la IA no responde (pico/timeout),
+     interpretamos la orden con patrones simples (monto + gasto/ingreso). */
+  function localIntent(text) {
+    const t = String(text || '').toLowerCase();
+    const kind = /gasto|gast[ée]|pagu[ée]|compr[ée]|comprar/.test(t) ? 'gasto'
+      : /ingreso|cobr[ée]|cobro|anticipo|adelanto|certificaci/.test(t) ? 'ingreso'
+      : null;
+    if (!kind) return null;
+    const m = t.match(/(\d{1,3}(?:[.,]\d{3})+|\d{4,})(?:[.,]\d+)?/);
+    if (!m) return null;
+    const monto = Number(m[0].replace(/\./g, '').replace(',', '.'));
+    if (!(monto > 0)) return null;
+    const campos = { monto };
+    if (kind === 'gasto') {
+      const cat = t.match(/(material|combustible|nafta|mano de obra|jornal|flete|subcontrat|sueldo)/);
+      if (cat) campos.categoria = cat[1];
+    } else {
+      campos.concepto = /anticipo|adelanto/.test(t) ? 'Adelanto' : 'Cobro';
+    }
+    return { modulo: kind, campos };
+  }
+
+  /* Llamada a la Edge Function con reintento + backoff exponencial (1.2s, 2.4s) */
+  async function callAI(payload) {
+    const sess = G.auth.getSession();
+    const url = G.auth.SUPABASE_URL + '/functions/v1/ai-assistant';
+    let lastErr = null;
+    for (let i = 0; i < 3; i++) {
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 30000);
+      try {
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': G.auth.SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + sess.accessToken },
+          body: JSON.stringify(payload),
+          signal: ctrl.signal,
+        });
+        clearTimeout(to);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return await r.json();
+      } catch (e) {
+        clearTimeout(to);
+        lastErr = e;
+        if (i < 2) await new Promise(res => setTimeout(res, (i + 1) * 1200));
+      }
+    }
+    throw lastErr || new Error('Sin respuesta');
+  }
+
   function send() {
     /* Anti-spam: evita reintentos inmediatos en cadena (saturación/eco) */
     if (Date.now() - lastSendAt < 1200) {
@@ -560,31 +623,16 @@
     log.scrollTop = log.scrollHeight;
     const sess = G.auth.getSession();
     if (!sess) { pend.innerHTML = 'Necesitás iniciar sesión para usar el asistente.'; busy = false; return; }
-    /* Timeout amplio: la Edge Function tiene cadena de modelos de respaldo;
-       30s cubre esa latencia sin dejar la UI en "Pensando…" indefinido. */
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 30000);
-    fetch(G.auth.SUPABASE_URL + '/functions/v1/ai-assistant', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': G.auth.SUPABASE_ANON_KEY,
-        'Authorization': 'Bearer ' + sess.accessToken,
-      },
-      body: JSON.stringify({ message: msg, context: context(), mode: isAdminMode() ? 'admin' : 'usuario' }),
-      signal: ctrl.signal,
-    })
-      .then(async r => {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      })
+    const payload = { message: msg, context: context(), mode: isAdminMode() ? 'admin' : 'usuario' };
+
+    callAI(payload)
       .then(data => {
         const replyText = data.reply || data.error || 'Sin respuesta.';
         const res = data.action ? execFormAction(data.action) : null;
         if (res && res.saved) {
-          const msg = '✅ Listo, guardé ' + res.label;
-          pend.innerHTML = renderText(msg);
-          speak(msg);
+          const txt = '✅ Listo, guardé ' + res.label;
+          pend.innerHTML = renderText(txt);
+          speak(txt);
           if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
         } else {
           pend.innerHTML = renderText(replyText);
@@ -608,11 +656,26 @@
         }
       })
       .catch((err) => {
-        pend.innerHTML = (err && err.name === 'AbortError')
-          ? '⏳ El asistente tardó más de lo esperado. Probá de nuevo en unos segundos.'
-          : '😅 No pude conectar con el asistente. Verificá que la Edge Function esté desplegada (' + G.auth.SUPABASE_URL + '/functions/v1/ai-assistant).';
+        /* Respaldo local: si la IA falla (pico/timeout), interpretamos la orden
+           y ejecutamos la acción más probable sin romper la experiencia. */
+        const local = localIntent(msg);
+        if (local && local.campos && local.campos.monto > 0) {
+          const res = execFormAction(local);
+          if (res && res.saved) {
+            const txt = '✅ Listo, guardé ' + res.label;
+            pend.innerHTML = renderText(txt);
+            speak(txt);
+            if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
+          } else {
+            pend.innerHTML = renderText('Entendí tu pedido, pero necesito que confirmes unos datos en el formulario.');
+          }
+        } else {
+          pend.innerHTML = (err && err.name === 'AbortError')
+            ? '⏳ El asistente tardó más de lo esperado. Probá de nuevo en unos segundos.'
+            : '😅 Estoy con un pico de consultas. Podés seguir cargando desde los botones del menú.';
+        }
       })
-      .finally(() => { clearTimeout(to); busy = false; log.scrollTop = log.scrollHeight; });
+      .finally(() => { busy = false; log.scrollTop = log.scrollHeight; });
   }
 
   function init() {
