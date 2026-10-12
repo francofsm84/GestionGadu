@@ -136,6 +136,8 @@
      el texto se rellena en el input pero NUNCA se envía solo. */
   function stopRec() {
     if (rec) { try { rec.stop(); } catch (e) {} }
+    /* Al cancelar/dejar de escuchar, descartar el interino y dejar solo lo definitivo */
+    try { input.value = finalText || ''; } catch (e) {}
   }
   function toggleMic() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;

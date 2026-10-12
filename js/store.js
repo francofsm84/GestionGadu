@@ -747,6 +747,12 @@
     CATS_OBRA, CATS_GENERAL, METODOS, WORK_STATUS, ASSET_STATUS, ASSET_CATS, SEGURO_TIPOS, CONTACT_TYPES, BUDGET_STATUS,
     uid, todayISO, parseISO, monthLabel, daysAgo, daysAhead, sum, KEY, attachUser, hasLocalData, applyRemote,
     seguroDaysLeft, seguroEstado,
-    get data() { return data; },
+    /* Getter defensivo: nunca devuelve null (auto-carga/seed) para evitar
+       errores del tipo "reading 'incomes'" durante el render inicial. */
+    get data() {
+      if (data === null) { try { load(); } catch (e) { data = seed(); } }
+      if (data === null) data = seed();
+      return data;
+    },
   };
 })(typeof window !== 'undefined' ? window : globalThis);
