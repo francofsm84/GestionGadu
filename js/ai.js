@@ -702,17 +702,41 @@
     return null;
   }
 
-  /* Ejecución 100% conversacional: guarda directo si hay datos suficientes;
-     si faltan, la IA pide los datos en el chat (sin abrir ventanas emergentes). */
-  function execFormAction(action) {
+  /* Ejecución 100% conversacional CON confirmación real de persistencia:
+     guarda en el store local, espera la respuesta de Supabase (upsert de
+     app_data) y recién entonces permite mostrar el tilde verde. Si la nube
+     falla, devuelve synced:false → NUNCA tilde verde con error. */
+  async function execFormAction(action) {
     const mod = (action && action.modulo) || '';
     const c = (action && action.campos) || {};
     const saved = saveViaStore(mod, c);
     if (saved && saved.ok) {
-      try { if (G.sync && G.sync.push) G.sync.push(G.store.data); } catch (e) {}
-      return { saved: true, label: saved.label };
+      /* El dato ya está en el store local (S.add) → refrescar listas de la app */
+      try { if (G.router && G.router.refresh) G.router.refresh(); } catch (e) {}
+      /* Esperar la confirmación REAL de la base de datos (Supabase) */
+      try {
+        if (G.sync && G.sync.push) await G.sync.push(G.store.data);
+        return { saved: true, label: saved.label, synced: true };
+      } catch (e) {
+        return { saved: true, label: saved.label, synced: false, error: String((e && e.message) || e) };
+      }
     }
     return { saved: false, modulo: mod };   // sin modal: la conversación continúa
+  }
+
+  /* Renderiza el resultado del guardado: tilde verde SOLO si sync confirmó */
+  function renderSaveResult(pend, res) {
+    if (!res || !res.saved) return false;
+    if (res.synced) {
+      pend.innerHTML = successCard(res.label);
+      speak('¡Listo! Guardé ' + res.label);
+      if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
+    } else {
+      pend.innerHTML = '⚠️ Guardé ' + res.label + ' en tu dispositivo, pero la nube no respondió y todavía no se sincronizó. Se va a reintentar solo cuando vuelva la conexión.';
+      speak('Guardé ' + res.label + ' en el dispositivo, pero sin conexión con la nube.');
+      if (G.ui && G.ui.toast) G.ui.toast('Guardado local (sin conexión): ' + res.label, 'warning');
+    }
+    return true;
   }
 
   function setOpen(v) {
@@ -1021,15 +1045,21 @@
     pendingOp = { modulo, campos: campos || {}, idx: 0 };
     wizardAskNext();
   }
-  function finishWizard() {
+  async function finishWizard() {
     const op = pendingOp;
     pendingOp = null;
     if (!op) return;
-    const res = execFormAction({ modulo: op.modulo, campos: op.campos });
+    /* Esperar la confirmación REAL de persistencia antes de celebrar */
+    const res = await execFormAction({ modulo: op.modulo, campos: op.campos });
     if (res && res.saved) {
-      wizardBubble(successCard(res.label));
-      speak('¡Listo! Guardé ' + res.label);
-      if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
+      if (res.synced) {
+        wizardBubble(successCard(res.label));
+        speak('¡Listo! Guardé ' + res.label);
+        if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
+      } else {
+        wizardBubble('⚠️ Guardé ' + res.label + ' en tu dispositivo, pero la nube no respondió y todavía no se sincronizó. Se reintentará solo cuando vuelva la conexión.');
+        speak('Guardé ' + res.label + ' en el dispositivo, pero sin conexión con la nube.');
+      }
       rememberTurn('asistente', 'guardado ' + res.label);
     } else {
       wizardBubble('No pude guardar el/la ' + op.modulo + ' porque me faltan datos. Decime qué falta y lo completo.');
@@ -1144,16 +1174,17 @@
     if (li && WIZARD_STEPS[li.modulo]) {
       rememberTurn('usuario', msg);
       if (isCompleteWizard(li.modulo, li.campos)) {
-        const res = execFormAction(li);
-        if (res && res.saved) {
-          pend.innerHTML = successCard(res.label);
-          speak('¡Listo! Guardé ' + res.label);
-          if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
-          rememberTurn('asistente', 'guardado ' + res.label);
+        /* Guardado con confirmación real: espera a Supabase antes del tilde */
+        execFormAction(li).then(res => {
+          if (renderSaveResult(pend, res)) {
+            rememberTurn('asistente', 'guardado ' + res.label);
+          } else {
+            startWizard(li.modulo, li.campos);
+          }
           busy = false;
           log.scrollTop = log.scrollHeight;
-          return;
-        }
+        });
+        return;
       }
       startWizard(li.modulo, li.campos);
       busy = false;
@@ -1168,15 +1199,11 @@
       pend.innerHTML = renderText(streamedText);
       log.scrollTop = log.scrollHeight;
     })
-      .then(data => {
+      .then(async data => {
         const replyText = data.reply || streamedText || 'Sin respuesta.';
         if (data.action) setFocus(data.action.modulo, data.action.campos);
-        const res = data.action ? execFormAction(data.action) : null;
-        if (res && res.saved) {
-          pend.innerHTML = successCard(res.label);
-          speak('¡Listo! Guardé ' + res.label);
-          if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
-        } else {
+        const res = data.action ? await execFormAction(data.action) : null;
+        if (!renderSaveResult(pend, res)) {
           if (!streamedText) pend.innerHTML = renderText(replyText);
           speak(replyText);
         }
@@ -1208,17 +1235,16 @@
            y ejecutamos la acción más probable sin romper la experiencia. */
         const local = localIntent(msg);
         if (local) {
-          const res = execFormAction(local);
-          if (res && res.saved) {
-            pend.innerHTML = successCard(res.label);
-            speak('¡Listo! Guardé ' + res.label);
-            if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
-          } else {
-            const faltante = local.modulo === 'gasto' ? 'Decime el monto y la categoría (ej. "gasto de 5000 en nafta").'
-              : local.modulo === 'ingreso' ? 'Decime el monto (ej. "ingreso de 10000").'
-              : 'Decime el nombre y los datos que puedas (ej. "empleado Juan Pérez").';
-            pend.innerHTML = renderText('Entendí tu pedido (' + local.modulo + '). ' + faltante);
-          }
+          execFormAction(local).then(res => {
+            if (renderSaveResult(pend, res)) {
+              rememberTurn('asistente', 'guardado ' + res.label);
+            } else {
+              const faltante = local.modulo === 'gasto' ? 'Decime el monto y la categoría (ej. "gasto de 5000 en nafta").'
+                : local.modulo === 'ingreso' ? 'Decime el monto (ej. "ingreso de 10000").'
+                : 'Decime el nombre y los datos que puedas (ej. "empleado Juan Pérez").';
+              pend.innerHTML = renderText('Entendí tu pedido (' + local.modulo + '). ' + faltante);
+            }
+          });
         } else {
           pend.innerHTML = (err && err.name === 'AbortError')
             ? '⏳ El asistente tardó más de lo esperado. Probá de nuevo en unos segundos.'

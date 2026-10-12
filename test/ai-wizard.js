@@ -16,6 +16,8 @@ const AI = G.ai;
 let ok = 0, ko = 0;
 function okk(cond, label) { if (cond) { ok++; console.log('  ✔ ' + label); } else { ko++; console.log('  ✘ ' + label); } }
 
+(async () => {
+
 S.load();
 S.startEmpty();
 const obra = S.add('works', { name: 'Norma Molina', code: 'OB-1', clientId: null, location: '', status: 'activa', budgetTotal: 0, advanceFisico: 0, startDate: S.todayISO(), endDate: '', description: '' });
@@ -49,35 +51,37 @@ okk(AI.isCompleteWizard('jornada', { empleado: 'X' }) === false, 'jornada incomp
 console.log('== 5) Guardado estricto: sin obra no se guarda como general ==');
 const otra = S.add('works', { name: 'Obra Dos', code: 'OB-2', clientId: null, location: '', status: 'activa', budgetTotal: 0, advanceFisico: 0, startDate: S.todayISO(), endDate: '', description: '' });
 const antes = S.data.expenses.length;
-const rSin = AI.execFormAction({ modulo: 'gasto', campos: { monto: 3000, categoria: 'Materiales' } });
+const rSin = await AI.execFormAction({ modulo: 'gasto', campos: { monto: 3000, categoria: 'Materiales' } });
 okk(rSin && rSin.saved === false, 'gasto sin obra con varias obras → NO guarda (retiene)');
 okk(S.data.expenses.length === antes, 'no se insertó gasto fantasma');
-const rCon = AI.execFormAction({ modulo: 'gasto', campos: { monto: 3000, categoria: 'Materiales', obra: 'Norma Molina' } });
+const rCon = await AI.execFormAction({ modulo: 'gasto', campos: { monto: 3000, categoria: 'Materiales', obra: 'Norma Molina' } });
 okk(rCon && rCon.saved === true, 'gasto con obra → guarda directo');
 okk(S.data.expenses.some(x => x.amount === 3000 && x.workId === obra.id), 'gasto insertado en la obra correcta');
 
 console.log('== 4) Guardado autónomo de los nuevos módulos ==');
-const r1 = AI.execFormAction({ modulo: 'presupuesto', campos: { nombre: 'Reforma cocina', monto: 80000, obra: 'Norma Molina' } });
+const r1 = await AI.execFormAction({ modulo: 'presupuesto', campos: { nombre: 'Reforma cocina', monto: 80000, obra: 'Norma Molina' } });
 okk(r1 && r1.saved === true, 'presupuesto guarda directo');
 const b = S.data.budgets.find(x => x.name === 'Reforma cocina');
 okk(!!b && b.total === 80000 && b.workId === obra.id, 'presupuesto con monto y obra correctos');
-const r2 = AI.execFormAction({ modulo: 'herramienta', campos: { nombre: 'Amoladora', categoria: 'Herramienta eléctrica', costo: 12000 } });
+const r2 = await AI.execFormAction({ modulo: 'herramienta', campos: { nombre: 'Amoladora', categoria: 'Herramienta eléctrica', costo: 12000 } });
 okk(r2 && r2.saved === true, 'herramienta guarda directo');
 const a = S.data.assets.find(x => x.name === 'Amoladora');
 okk(!!a && a.cost === 12000 && a.category === 'Herramienta eléctrica', 'herramienta con costo y categoría');
-const r3 = AI.execFormAction({ modulo: 'empleado', campos: { nombre: 'Jorge el Flaco', oficio: 'Albañil', tarifa: 1500 } });
+const r3 = await AI.execFormAction({ modulo: 'empleado', campos: { nombre: 'Jorge el Flaco', oficio: 'Albañil', tarifa: 1500 } });
 okk(r3 && r3.saved === true, 'empleado con oficio guarda');
 const e = S.data.employees.find(x => x.firstName === 'Jorge');
 okk(!!e && e.notes === 'Oficio: Albañil' && e.hourlyRate === 1500, 'empleado con oficio y tarifa persistidos');
-const rSinOficio = AI.execFormAction({ modulo: 'empleado', campos: { nombre: 'Pepe' } });
+const rSinOficio = await AI.execFormAction({ modulo: 'empleado', campos: { nombre: 'Pepe' } });
 okk(rSinOficio && rSinOficio.saved === false, 'empleado SIN oficio → NO guarda (retiene)');
-const r4 = AI.execFormAction({ modulo: 'jornada', campos: { empleado: 'Jorge el Flaco', obra: 'Norma Molina', horas: 8 } });
+const r4 = await AI.execFormAction({ modulo: 'jornada', campos: { empleado: 'Jorge el Flaco', obra: 'Norma Molina', horas: 8 } });
 okk(r4 && r4.saved === true, 'jornada guarda directo');
 const j = S.data.attendance.find(x => x.employeeId === e.id);
 okk(!!j && j.hours[0].hours === 8 && j.hours[0].workId === obra.id, 'jornada con empleado, obra y horas correctas');
-const rSinJ = AI.execFormAction({ modulo: 'jornada', campos: { empleado: 'Jorge el Flaco' } });
+const rSinJ = await AI.execFormAction({ modulo: 'jornada', campos: { empleado: 'Jorge el Flaco' } });
 okk(rSinJ && rSinJ.saved === false, 'jornada incompleta → NO guarda');
 
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }
+
+})().catch(e => { console.error('✘ FALLO:', e); process.exit(1); });

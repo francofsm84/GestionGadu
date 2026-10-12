@@ -29,6 +29,8 @@ function okk(cond, label) {
   else { ko++; console.log('  ✘ ' + label); }
 }
 
+(async () => {
+
 /* ---------- Seed de datos realista ---------- */
 S.load();
 S.startEmpty();
@@ -49,11 +51,11 @@ okk(ctx.includes('Juan Pérez ($1500/hora)'), 'tarifa horaria del empleado');
 
 console.log('== 2) Ejecución directa sin modales (carga conversacional) ==');
 const antesGastos = S.data.expenses.length;
-const resGasto = AI.execFormAction({ modulo: 'gasto', campos: { monto: 5000, categoria: 'nafta' } });
+const resGasto = await AI.execFormAction({ modulo: 'gasto', campos: { monto: 5000, categoria: 'nafta' } });
 okk(resGasto && resGasto.saved === true, 'gasto completo → guarda directo');
 okk(S.data.expenses.length === antesGastos + 1 && S.data.expenses.some(e => e.amount === 5000), 'gasto insertado en el store (Dashboard se actualiza)');
 const antesEmps = S.data.employees.length;
-const resEmp = AI.execFormAction({ modulo: 'empleado', campos: {} });
+const resEmp = await AI.execFormAction({ modulo: 'empleado', campos: {} });
 okk(resEmp && resEmp.saved === false, 'empleado incompleto → NO guarda, sigue en el chat');
 okk(S.data.employees.length === antesEmps, 'sin empleados fantasma (sin modal externo)');
 
@@ -78,3 +80,5 @@ okk(ctx3.includes('usuario: Juan Pérez'), 'siguiente paso del diálogo presente
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI CONVERSACIONAL AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }
+
+})().catch(e => { console.error('✘ FALLO:', e); process.exit(1); });
