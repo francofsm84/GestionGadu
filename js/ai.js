@@ -90,7 +90,7 @@
     return div;
   }
 
-  let host = null, log = null, input = null, busy = false, builtMode = null, rec = null, listening = false, voiceOn = true;
+  let host = null, log = null, input = null, busy = false, builtMode = null, rec = null, listening = false, voiceOn = true, speaking = false;
   let voicePref = null;
   try { voicePref = localStorage.getItem('gadu_ai_voice') || null; } catch (e) {}
 
@@ -107,6 +107,7 @@
       '<div class="ai-head-txt"><strong>Asistente GADU</strong><span class="muted small" id="aiSub">Te guío paso a paso</span></div>' +
       '<select class="ai-voice-sel" id="aiVoiceSel" title="Elegir voz" hidden></select>' +
       '<button class="icon-btn sm" id="aiVoice" title="Silenciar voz">🔊</button>' +
+      '<button class="icon-btn sm" id="aiStop" title="Detener voz" hidden>⏹️</button>' +
       '<button class="icon-btn sm" id="aiClose">' + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>' + '</button></div>' +
       '<div class="ai-log" id="aiLog"></div>' +
       '<div class="ai-foot"><button class="ai-mic" id="aiMic" title="Dictar por voz" aria-label="Dictar por voz">🎙️</button>' +
@@ -121,6 +122,7 @@
     document.getElementById('aiSend').addEventListener('click', send);
     document.getElementById('aiMic').addEventListener('click', toggleMic);
     document.getElementById('aiVoice').addEventListener('click', toggleVoice);
+    document.getElementById('aiStop').addEventListener('click', stopVoice);
     document.getElementById('aiVoiceSel').addEventListener('change', onVoiceChange);
     populateVoices();
     if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = populateVoices;
@@ -149,14 +151,16 @@
     rec.continuous = true;       // no corta en pausas breves
     rec.onstart = () => { listening = true; mic.classList.add('ai-mic-on'); };
     rec.onresult = (e) => {
-      /* Reconstruir SIEMPRE desde e.results evita acumular/duplicar palabras */
-      let fin = '', inter = '';
+      /* Reconstruir SIEMPRE desde e.results y unir con espacios (evita "cargamecargame") */
+      const finals = [], interims = [];
       for (let i = 0; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) fin += r[0].transcript;
-        else inter += r[0].transcript;
+        const t = (r[0].transcript || '').trim();
+        if (!t) continue;
+        if (r.isFinal) finals.push(t);
+        else interims.push(t);
       }
-      input.value = (fin + ' ' + inter).replace(/\s+/g, ' ').trim();
+      input.value = finals.concat(interims).join(' ').replace(/\s+/g, ' ').trim();
       clearTimeout(silenceTimer);
       silenceTimer = setTimeout(() => { stopRec(); }, 2500);
     };
@@ -209,10 +213,20 @@
     try { speak('Hola, soy tu asistente GADU. Esta es mi voz.'); } catch (er) {}
   }
 
+  function updateVoiceBtn() {
+    const b = document.getElementById('aiVoice');
+    if (b) { b.textContent = voiceOn ? '🔊' : '🔇'; b.title = voiceOn ? 'Silenciar voz' : 'Activar voz'; }
+  }
+  function updateStopBtn() {
+    const b = document.getElementById('aiStop');
+    if (b) b.hidden = !speaking;
+  }
+
   function speak(text) {
     if (!voiceOn || !text) return;
     try {
       if (!window.speechSynthesis) return;
+      stopRec();   // IMPORTANTE: detener el micrófono para no "escucharse a sí mismo"
       window.speechSynthesis.cancel();
       const clean = String(text)
         .replace(/\[\[accion:[^\]]+\]\]/g, '')
@@ -230,16 +244,27 @@
       if (voicePref) es = voices.find(v => v.name === voicePref);
       if (!es) es = voices.find(v => /es[-_]AR/i.test(v.lang)) || voices.find(v => /es[-_]ES/i.test(v.lang)) || voices.find(v => /^es/i.test(v.lang));
       if (es) u.voice = es;
+      u.onstart = () => { speaking = true; updateStopBtn(); };
+      u.onend = () => { speaking = false; updateStopBtn(); };
+      u.onerror = () => { speaking = false; updateStopBtn(); };
       window.speechSynthesis.speak(u);
-    } catch (e) {}
+    } catch (e) { speaking = false; updateStopBtn(); }
+  }
+
+  function stopVoice() {
+    try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}
+    stopRec();
+    speaking = false;
+    updateStopBtn();
   }
 
   function toggleVoice() {
+    try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}
+    stopRec();   // al silenciar, también detenemos el micrófono
     voiceOn = !voiceOn;
-    const b = document.getElementById('aiVoice');
-    b.textContent = voiceOn ? '🔊' : '🔇';
-    b.title = voiceOn ? 'Silenciar voz' : 'Activar voz';
-    if (!voiceOn) { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {} }
+    speaking = false;
+    updateVoiceBtn();
+    updateStopBtn();
   }
 
   /* Persistencia real: inserta en la capa de datos local y sincroniza a Supabase */
@@ -465,6 +490,7 @@
   function send() {
     const msg = cleanInput(input.value);
     if (!msg || busy) return;
+    if (listening) stopRec();   // detener el micrófono al enviar
     busy = true;
     input.value = '';
     log.appendChild(bubble(renderText(msg), 'user'));
