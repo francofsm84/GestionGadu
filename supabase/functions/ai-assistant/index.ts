@@ -161,7 +161,7 @@ serve(async (req) => {
       "gemini-flash-latest",
     ])];
 
-    // ---- Streaming (SSE): el texto se envía palabra por palabra ----
+    // ---- Streaming (SSE) multi-proveedor: Groq → Gemini → OpenRouter ----
     if (stream) {
       const encoder = new TextEncoder();
       const sseStream = new ReadableStream({
@@ -171,50 +171,103 @@ serve(async (req) => {
           let reply = "";
           let streamed = false;
 
-          for (const modelo of modelos) {
+          const providers = [
+            { name: "groq", key: Deno.env.get("GROQ_API_KEY"), model: Deno.env.get("GROQ_MODEL") || "llama-3.3-70b-versatile" },
+            { name: "gemini", key: Deno.env.get("GEMINI_API_KEY"), model: Deno.env.get("GEMINI_MODEL") || "gemini-3.5-flash" },
+            { name: "openrouter", key: Deno.env.get("OPENROUTER_API_KEY"), model: Deno.env.get("OPENROUTER_MODEL") || "meta-llama/llama-3.3-70b-instruct" },
+          ];
+
+          for (const prov of providers) {
+            if (!prov.key || streamed) continue;
             try {
-              const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:streamGenerateContent?alt=sse`;
-              const aiRes = await fetch(url, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-                body: JSON.stringify({
-                  system_instruction: { parts: [{ text: systemPrompt }] },
-                  contents: [{ role: "user", parts: [{ text: userText }] }],
-                  tools: tools(),
-                  generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
-                }),
-              });
-              if (!aiRes.ok || !aiRes.body) {
-                console.error(`[ai-assistant] ${modelo} stream HTTP ${aiRes.status}`);
-                continue;
-              }
-              const reader = aiRes.body.getReader();
-              const decoder = new TextDecoder();
-              let buf = "";
-              while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                buf += decoder.decode(value, { stream: true });
-                const lines = buf.split("\n");
-                buf = lines.pop() || "";
-                for (const line of lines) {
-                  const s = line.trim();
-                  if (!s.startsWith("data: ")) continue;
-                  const json = s.slice(6);
-                  if (json === "[DONE]") continue;
-                  try {
-                    const obj = JSON.parse(json);
-                    const part = obj?.candidates?.[0]?.content?.parts?.[0];
-                    if (!part) continue;
-                    if (part.functionCall) { functionCall = part.functionCall; continue; }
-                    const txt = part.text || "";
-                    if (txt) { reply += txt; streamed = true; send({ text: txt }); }
-                  } catch (e) { /* chunk inválido */ }
+              if (prov.name === "gemini") {
+                // Gemini: con herramientas (function calling) y cadena de modelos
+                for (const modelo of modelos) {
+                  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:streamGenerateContent?alt=sse`;
+                  const aiRes = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "x-goog-api-key": prov.key },
+                    body: JSON.stringify({
+                      system_instruction: { parts: [{ text: systemPrompt }] },
+                      contents: [{ role: "user", parts: [{ text: userText }] }],
+                      tools: tools(),
+                      generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
+                    }),
+                  });
+                  if (!aiRes.ok || !aiRes.body) { console.error(`[ai-assistant] gemini ${modelo} HTTP ${aiRes.status}`); continue; }
+                  const reader = aiRes.body.getReader();
+                  const decoder = new TextDecoder();
+                  let buf = "";
+                  while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buf += decoder.decode(value, { stream: true });
+                    const lines = buf.split("\n");
+                    buf = lines.pop() || "";
+                    for (const line of lines) {
+                      const s = line.trim();
+                      if (!s.startsWith("data: ")) continue;
+                      const json = s.slice(6);
+                      if (json === "[DONE]") continue;
+                      try {
+                        const obj = JSON.parse(json);
+                        const part = obj?.candidates?.[0]?.content?.parts?.[0];
+                        if (!part) continue;
+                        if (part.functionCall) { functionCall = part.functionCall; continue; }
+                        const txt = part.text || "";
+                        if (txt) { reply += txt; streamed = true; send({ text: txt }); }
+                      } catch (e) { /* chunk inválido */ }
+                    }
+                  }
+                  if (streamed) break;
+                }
+              } else {
+                // Groq / OpenRouter: API compatible con OpenAI (streaming de texto)
+                const baseUrl = prov.name === "groq" ? "https://api.groq.com/openai/v1" : "https://openrouter.ai/api/v1";
+                const headers: Record<string, string> = { "Content-Type": "application/json", "Authorization": `Bearer ${prov.key}` };
+                if (prov.name === "openrouter") {
+                  headers["HTTP-Referer"] = "https://gestiongadu.vercel.app";
+                  headers["X-Title"] = "GADU";
+                }
+                const aiRes = await fetch(`${baseUrl}/chat/completions`, {
+                  method: "POST",
+                  headers,
+                  body: JSON.stringify({
+                    model: prov.model,
+                    messages: [
+                      { role: "system", content: systemPrompt },
+                      { role: "user", content: userText },
+                    ],
+                    stream: true,
+                    temperature: 0.4,
+                    max_tokens: 700,
+                  }),
+                });
+                if (!aiRes.ok || !aiRes.body) { console.error(`[ai-assistant] ${prov.name} HTTP ${aiRes.status}`); continue; }
+                const reader = aiRes.body.getReader();
+                const decoder = new TextDecoder();
+                let buf = "";
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+                  buf += decoder.decode(value, { stream: true });
+                  const lines = buf.split("\n");
+                  buf = lines.pop() || "";
+                  for (const line of lines) {
+                    const s = line.trim();
+                    if (!s.startsWith("data: ")) continue;
+                    const json = s.slice(6);
+                    if (json === "[DONE]") continue;
+                    try {
+                      const obj = JSON.parse(json);
+                      const delta = obj?.choices?.[0]?.delta?.content;
+                      if (delta) { reply += delta; streamed = true; send({ text: delta }); }
+                    } catch (e) { /* chunk inválido */ }
+                  }
                 }
               }
-              if (streamed) break;
             } catch (e) {
-              console.error(`[ai-assistant] ${modelo} stream excepción:`, e);
+              console.error(`[ai-assistant] ${prov.name} excepción:`, e);
             }
           }
 
