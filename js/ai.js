@@ -153,17 +153,17 @@
     rec.continuous = true;       // no corta en pausas breves
     rec.onstart = () => { listening = true; finalText = ''; mic.classList.add('ai-mic-on'); };
     rec.onresult = (e) => {
-      /* Reconstruir SIEMPRE desde e.results y unir con espacios (evita "cargamecargame") */
-      const finals = [], interims = [];
+      /* Reconstruir DESDE CERO en cada disparo: nunca leer input.value ni usar += sobre él */
+      let transcriptFinal = '', transcriptInterim = '';
       for (let i = 0; i < e.results.length; i++) {
         const r = e.results[i];
         const t = (r[0].transcript || '').trim();
         if (!t) continue;
-        if (r.isFinal) finals.push(t);
-        else interims.push(t);
+        if (r.isFinal) transcriptFinal += (transcriptFinal ? ' ' : '') + t;
+        else transcriptInterim = t;   // asignar (sobrescribir) el interino
       }
-      finalText = finals.join(' ');   // solo lo DEFINITIVO
-      input.value = finals.concat(interims).join(' ').replace(/\s+/g, ' ').trim();
+      finalText = transcriptFinal;
+      input.value = (transcriptFinal + ' ' + transcriptInterim).replace(/\s+/g, ' ').trim();
     };
     rec.onerror = (e) => {
       if (e.error === 'no-speech' || e.error === 'aborted') { /* ignorar: es normal */ }
@@ -178,28 +178,34 @@
     try { rec.start(); } catch (e) { listening = false; mic.classList.remove('ai-mic-on'); }
   }
 
-  /* Limpia el dictado antes de enviar: colapsa espacios, elimina palabras
-     consecutivas repetidas y colapsa frases duplicadas ("a b a b" -> "a b"). */
-  function cleanInput(s) {
-    let t = String(s || '').replace(/\s+/g, ' ').trim();
-    if (!t) return '';
-    const words = t.split(' ');
+  /* Deduplicación de emergencia: elimina palabras consecutivas repetidas y
+     frases repetidas ("a b a b a b c" -> "a b c"). Soporta acentos. */
+  function removeRepeatedPhrases(text) {
+    const words = String(text || '').replace(/\s+/g, ' ').trim().split(' ');
+    if (!words.length || !words[0]) return '';
+    // 1) palabras consecutivas idénticas
     const deduped = [];
     for (const w of words) if (w !== deduped[deduped.length - 1]) deduped.push(w);
-    const n = deduped.length;
-    /* Frase repetida exacta: la primera mitad es igual a la segunda */
-    if (n >= 4 && n % 2 === 0) {
-      const half = n / 2;
-      const first = deduped.slice(0, half).join(' ');
-      const second = deduped.slice(half).join(' ');
-      if (first === second) return first;
+    // 2) colapsar frases repetidas en bucle hasta estabilizar
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const n = deduped.length;
+      for (let len = Math.floor(n / 2); len >= 2; len--) {
+        const first = deduped.slice(0, len).join(' ');
+        const second = deduped.slice(len, len * 2).join(' ');
+        if (first === second) { deduped.splice(len, len); changed = true; break; }
+      }
     }
     return deduped.join(' ');
   }
 
+  /* Limpia el dictado antes de enviar */
+  function cleanInput(s) { return removeRepeatedPhrases(s); }
+
   /* Mensaje final listo para enviar: limpieza + tope de longitud (anti-consultas gigantes) */
   function prepareMessage(input) {
-    let msg = cleanInput(input);
+    let msg = removeRepeatedPhrases(input);
     if (msg.length > 400) msg = msg.slice(0, 400);
     return msg;
   }
@@ -580,5 +586,5 @@
     try { build(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, prepareMessage };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage };
 })(typeof window !== 'undefined' ? window : globalThis);

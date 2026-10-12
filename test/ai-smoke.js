@@ -16,6 +16,8 @@ try {
   // 2) Colapso de frases repetidas (a b a b → a b)
   assert(AI.cleanInput('quiero cargar quiero cargar') === 'quiero cargar', 'dedup frase repetida (2+2)');
   assert(AI.cleanInput('podés hacer podés hacer') === 'podés hacer', 'dedup frase repetida (2+2)');
+  assert(AI.removeRepeatedPhrases('cárgame el cárgame el gasto') === 'cárgame el gasto', 'dedup frase repetida (acentos)');
+  assert(AI.removeRepeatedPhrases('cárgame el cárgame el cárgame el gasto de') === 'cárgame el gasto de', 'dedup triple repetición');
 
   // 3) Colapso de espacios
   assert(AI.cleanInput('  hola   mundo  ') === 'hola mundo', 'colapso de espacios');
