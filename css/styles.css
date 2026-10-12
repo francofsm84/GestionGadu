@@ -142,7 +142,11 @@ body.sb-collapsed .nav-section::after { content: '···'; font-size: 11px; lett
 .main { margin-left: var(--sidebar-w); min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; min-width: 0; transition: margin-left .22s ease; }
 
 /* Anti-scroll horizontal: el contenedor nunca excede el ancho de la pantalla */
-.app, .main, .topbar, #view { width: 100%; max-width: 100vw; min-width: 0; }
+.app, .topbar, #view { width: 100%; max-width: 100vw; min-width: 0; }
+/* .main NO debe llevar width:100%: al sumarse al margin-left del sidebar
+   desbordaba 250px a la derecha y (con overflow-x:hidden en body) cortaba
+   el borde del Dashboard. Con width:auto ocupa solo el espacio restante. */
+.main { width: auto; }
 .main { overflow-x: hidden; }
 body.sb-collapsed .main { margin-left: var(--sidebar-w-min); }
 .sidebar { padding-bottom: env(safe-area-inset-bottom); }
