@@ -416,6 +416,8 @@
     const equipos = ['Solo yo', '2 a 5 personas', '6 a 15 personas', 'Más de 15'];
     /* Dirección: se completa por Google Maps (autocomplete) si hay API key */
     const placeData = { direccion: prof.direccion || '', lat: prof.latitud || null, lng: prof.longitud || null };
+    const sess = G.auth.getSession();
+    const email = (sess && sess.email) || (prof && prof.email) || '';
     const overlay = document.createElement('div');
     overlay.className = 'onboard-overlay';
     overlay.innerHTML =
@@ -439,11 +441,56 @@
       equipos.map(e => '<option' + (prof.tamano_equipo === e ? ' selected' : '') + '>' + e + '</option>').join('') +
       '</select></div>' +
       '</div>' +
+      '<div class="consent-box">' +
+      '<label class="consent-row"><input type="checkbox" id="oGoogle"><span>Autorizo a GADU a <b>sincronizar y respaldar</b> mis datos con la cuenta <b>' + UI.escapeHtml(email) + '</b> (Google).</span></label>' +
+      '<label class="consent-row"><input type="checkbox" id="oTerms"><span>Acepto los <a class="link" id="oTermsLink">Términos y Condiciones</a> y las <a class="link" id="oPrivacyLink">Políticas de Privacidad</a> de GADU.</span></label>' +
+      '</div>' +
       '<p class="form-hint" id="oMsg" style="margin-top:10px"></p>' +
-      '<button class="btn btn-primary" id="oSave" style="width:100%">Guardar y continuar</button>' +
+      '<button class="btn btn-primary" id="oSave" style="width:100%" disabled>Guardar y continuar</button>' +
       '</div>';
     document.body.appendChild(overlay);
     const setMsg = (m, err) => { const el = document.getElementById('oMsg'); el.textContent = m || ''; el.style.color = err ? 'var(--danger)' : 'var(--muted)'; };
+
+    /* Consentimientos: sincronización Google + Términos (obligatorios) */
+    const btnSave = document.getElementById('oSave');
+    const cbGoogle = document.getElementById('oGoogle');
+    const cbTerms = document.getElementById('oTerms');
+    const updateSave = () => {
+      const ok = cbGoogle.checked && cbTerms.checked;
+      btnSave.disabled = !ok;
+      const el = document.getElementById('oMsg');
+      if (!ok) {
+        el.textContent = 'Para continuar, marcá la sincronización con Google y aceptá los términos.';
+        el.style.color = 'var(--muted)';
+      } else {
+        el.textContent = '';
+      }
+    };
+    cbGoogle.addEventListener('change', updateSave);
+    cbTerms.addEventListener('change', updateSave);
+    updateSave();
+
+    const TERMS_HTML = `<h4>Términos y Condiciones de Uso</h4>
+<p>1. GADU es una plataforma de gestión para obras, remodelaciones y finanzas de tu emprendimiento.</p>
+<p>2. Al usar GADU aceptás que los datos que cargues (obras, clientes, empleados, gastos, ingresos, etc.) se almacenan de forma segura en tu cuenta y se sincronizan entre tus dispositivos.</p>
+<p>3. Sos responsable de la veracidad de los datos y del resguardo de tu acceso.</p>
+<p>4. Los planes de suscripción y sus límites se describen en la sección "Mi suscripción".</p>
+<h4 style="margin-top:14px">Políticas de Privacidad</h4>
+<p>1. Tus datos personales y de tu negocio son privados: solo vos y los administradores de tu cuenta pueden verlos.</p>
+<p>2. No compartimos tu información con terceros; la usamos únicamente para brindarte el servicio.</p>
+<p>3. Si sincronizás con Google, solo se accede a tu correo y nombre para identificarte y respaldar tus datos.</p>
+<p>4. Podés solicitar la eliminación de tus datos en cualquier momento.</p>`;
+    const openTerms = () => {
+      const m = UI.openModal({
+        title: 'Términos y Condiciones · Políticas de Privacidad',
+        subtitle: 'GADU · Gestión de obras y remodelaciones',
+        body: '<div style="max-height:55vh;overflow-y:auto;font-size:13px;line-height:1.6;color:var(--text)">' + TERMS_HTML + '</div>',
+        footer: '<button class="btn btn-primary" data-cancel>Entendido</button>',
+      });
+      m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+    };
+    document.getElementById('oTermsLink').addEventListener('click', openTerms);
+    document.getElementById('oPrivacyLink').addEventListener('click', openTerms);
 
     /* Google Maps Places Autocomplete (si hay API key) */
     const mapsKey = (G.config && G.config.googleMapsKey) || '';
@@ -480,6 +527,8 @@
     }
 
     document.getElementById('oSave').addEventListener('click', async () => {
+      if (!cbGoogle.checked) { setMsg('Autorizá la sincronización con tu cuenta de Google para continuar.', true); return; }
+      if (!cbTerms.checked) { setMsg('Debés aceptar los Términos y Condiciones y las Políticas de Privacidad.', true); return; }
       const telefono = document.getElementById('oPhone').value.trim();
       const localidad = document.getElementById('oLoc').value.trim();
       const empresa = document.getElementById('oEmp').value.trim();
