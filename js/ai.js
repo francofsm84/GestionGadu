@@ -91,7 +91,7 @@
   }
 
   let host = null, log = null, input = null, busy = false, builtMode = null, rec = null, listening = false, voiceOn = true, speaking = false;
-  let finalText = '', lastSendAt = 0;
+  let finalText = '', lastSendAt = 0, silenceTimer = null;
   let voicePref = null;
   try { voicePref = localStorage.getItem('gadu_ai_voice') || null; } catch (e) {}
 
@@ -108,7 +108,7 @@
       '<div class="ai-head-txt"><strong>Asistente GADU</strong><span class="muted small" id="aiSub">Te guío paso a paso</span></div>' +
       '<select class="ai-voice-sel" id="aiVoiceSel" title="Elegir voz" hidden></select>' +
       '<button class="icon-btn sm" id="aiVoice" title="Silenciar voz">🔊</button>' +
-      '<button class="icon-btn sm" id="aiStop" title="Detener voz" hidden>⏹️</button>' +
+      '<button class="icon-btn sm" id="aiStop" title="Detener voz">⏹️</button>' +
       '<button class="icon-btn sm" id="aiClose">' + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>' + '</button></div>' +
       '<div class="ai-log" id="aiLog"></div>' +
       '<div class="ai-foot"><button class="ai-mic" id="aiMic" title="Dictar por voz" aria-label="Dictar por voz">🎙️</button>' +
@@ -136,8 +136,17 @@
      el texto se rellena en el input pero NUNCA se envía solo. */
   function stopRec() {
     if (rec) { try { rec.stop(); } catch (e) {} }
+    clearTimeout(silenceTimer);
     /* Al cancelar/dejar de escuchar, descartar el interino y dejar solo lo definitivo */
     try { input.value = finalText || ''; } catch (e) {}
+  }
+
+  /* Debounce de silencio: si no llegan resultados durante 3,5s, se suelta el
+     micrófono automáticamente (SIN enviar). Evita que quede abierto y capte
+     ruido o la propia salida del altavoz. */
+  function resetSilenceTimer() {
+    clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(() => { if (listening) stopRec(); }, 3500);
   }
 
   /* Construye la transcripción desde una lista de {isFinal, transcript}.
@@ -177,6 +186,7 @@
       const bt = buildTranscript(items);
       finalText = bt.final;
       input.value = bt.combined;
+      resetSilenceTimer();
     };
     rec.onerror = (e) => {
       if (e.error === 'no-speech' || e.error === 'aborted') { /* ignorar: es normal */ }
@@ -185,6 +195,7 @@
     };
     rec.onend = () => {
       listening = false;
+      clearTimeout(silenceTimer);
       mic.classList.remove('ai-mic-on');
       /* NO se envía automáticamente: el envío es manual con el botón ➤ */
     };
@@ -256,7 +267,11 @@
   }
   function updateStopBtn() {
     const b = document.getElementById('aiStop');
-    if (b) b.hidden = !speaking;
+    if (b) {
+      /* Botón siempre visible: cancela de inmediato cualquier reproducción */
+      b.style.opacity = speaking ? '1' : '.45';
+      b.title = speaking ? 'Detener voz' : 'No hay audio reproduciéndose';
+    }
   }
 
   function speak(text) {
@@ -441,6 +456,7 @@
   function setOpen(v) {
     document.getElementById('aiPanel').hidden = !v;
     if (v) { refreshGreeting(); input.focus(); }
+    else { stopVoice(); }   // cierre limpio: cancela TTS y libera el micrófono
   }
   function toggle() { setOpen(document.getElementById('aiPanel').hidden); }
 

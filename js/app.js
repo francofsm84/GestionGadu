@@ -422,6 +422,13 @@
     const rubros = ['Albañilería', 'Electricidad', 'Plomería', 'Gas', 'Pintura', 'Carpintería', 'Techos', 'General', 'Otro'];
     const perfiles = ['Contratista', 'Oficio / particular', 'Empresa constructora', 'Otro'];
     const equipos = ['Solo yo', '2 a 5 personas', '6 a 15 personas', 'Más de 15'];
+    const obrasOpciones = [
+      { value: 1, label: '1' },
+      { value: 2, label: '2' },
+      { value: 3, label: '3' },
+      { value: 4, label: '4 o más' },
+    ];
+    const obrasSel = (() => { const n = Number(prof.obras_simultaneas) || 1; return n >= 4 ? 4 : n; })();
     /* Dirección: se completa por Google Maps (autocomplete) si hay API key */
     const placeData = { direccion: prof.direccion || '', lat: prof.latitud || null, lng: prof.longitud || null };
     const sess = G.auth.getSession();
@@ -434,7 +441,7 @@
       '<h2>Completá tu perfil</h2>' +
       '<p class="muted" style="margin-bottom:14px">Un paso más para activar tu <b>Plan Free</b> y empezar a usar GADU.</p>' +
       '<div class="grid-form">' +
-      '<div class="field"><label>Teléfono / Celular *</label><input class="input" id="oPhone" value="' + UI.escapeHtml(prof.telefono || '') + '" placeholder="+54 9 3547 …" inputmode="tel"></div>' +
+      '<div class="field"><label>Teléfono / Celular *</label><input class="input" id="oPhone" value="' + UI.escapeHtml(prof.telefono || '+54 ') + '" placeholder="+54 9 3547 …" inputmode="tel"></div>' +
       '<div class="field"><label>Localidad / Nacionalidad *</label><input class="input" id="oLoc" value="' + UI.escapeHtml(prof.localidad || prof.nacionalidad || '') + '" placeholder="Ej.: Argentina · Alta Gracia"></div>' +
       '<div class="field span-2"><label>Dirección / Ubicación *</label><input class="input" id="oDir" value="' + UI.escapeHtml(prof.direccion || '') + '" placeholder="Buscá y seleccioná tu dirección…" autocomplete="off"></div>' +
       '<div class="field span-2"><label>Empresa / Constructora *</label><input class="input" id="oEmp" value="' + UI.escapeHtml(prof.empresa_constructora || prof.empresa || '') + '" placeholder="Nombre de tu emprendimiento"></div>' +
@@ -444,7 +451,9 @@
       '<div class="field"><label>Tipo de perfil *</label><select class="select" id="oPerfil">' +
       perfiles.map(p => '<option' + (prof.perfil_tipo === p ? ' selected' : '') + '>' + p + '</option>').join('') +
       '</select></div>' +
-      '<div class="field"><label>Obras simultáneas (habitual) *</label><input class="input" type="number" id="oObras" min="1" max="100" value="' + (prof.obras_simultaneas || 1) + '"></div>' +
+      '<div class="field"><label>Obras simultáneas (habitual) *</label><select class="select" id="oObras">' +
+      obrasOpciones.map(o => '<option value="' + o.value + '"' + (o.value === obrasSel ? ' selected' : '') + '>' + o.label + '</option>').join('') +
+      '</select></div>' +
       '<div class="field"><label>Tamaño del equipo *</label><select class="select" id="oEquipo">' +
       equipos.map(e => '<option' + (prof.tamano_equipo === e ? ' selected' : '') + '>' + e + '</option>').join('') +
       '</select></div>' +
