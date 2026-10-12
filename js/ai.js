@@ -174,12 +174,23 @@
     try { rec.start(); } catch (e) { listening = false; mic.classList.remove('ai-mic-on'); }
   }
 
-  /* Limpia y elimina palabras consecutivas repetidas antes de enviar */
+  /* Limpia el dictado antes de enviar: colapsa espacios, elimina palabras
+     consecutivas repetidas y colapsa frases duplicadas ("a b a b" -> "a b"). */
   function cleanInput(s) {
-    const words = String(s || '').replace(/\s+/g, ' ').trim().split(' ');
-    const out = [];
-    for (let i = 0; i < words.length; i++) if (words[i] !== out[out.length - 1]) out.push(words[i]);
-    return out.join(' ');
+    let t = String(s || '').replace(/\s+/g, ' ').trim();
+    if (!t) return '';
+    const words = t.split(' ');
+    const deduped = [];
+    for (const w of words) if (w !== deduped[deduped.length - 1]) deduped.push(w);
+    const n = deduped.length;
+    /* Frase repetida exacta: la primera mitad es igual a la segunda */
+    if (n >= 4 && n % 2 === 0) {
+      const half = n / 2;
+      const first = deduped.slice(0, half).join(' ');
+      const second = deduped.slice(half).join(' ');
+      if (first === second) return first;
+    }
+    return deduped.join(' ');
   }
 
   /* Texto a voz (Text-to-Speech) */
@@ -484,8 +495,9 @@
   }
 
   function send() {
-    const msg = cleanInput(input.value);
+    let msg = cleanInput(input.value);
     if (!msg || busy) return;
+    if (msg.length > 400) msg = msg.slice(0, 400);   // tope anti-consultas gigantes
     if (listening) stopRec();   // detener el micrófono al enviar
     busy = true;
     input.value = '';
