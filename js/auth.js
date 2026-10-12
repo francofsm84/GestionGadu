@@ -129,22 +129,32 @@
 
   async function refresh() {
     if (!session || !session.refreshToken) return null;
-    try {
-      const res = await fetchT(SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token', {
-        method: 'POST',
-        headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: session.refreshToken }),
-      });
-      if (!res.ok) { clear(); return null; }
-      const j = await res.json();
-      if (!j || !j.access_token) { clear(); return null; }
-      return setSession({
-        accessToken: j.access_token,
-        refreshToken: j.refresh_token,
-        email: j.user && j.user.email,
-        userId: j.user && j.user.id,
-      });
-    } catch (e) { return session; }
+    let lastErr = null;
+    for (let i = 0; i < 3; i++) {
+      try {
+        const res = await fetchT(SUPABASE_URL + '/auth/v1/token?grant_type=refresh_token', {
+          method: 'POST',
+          headers: { 'apikey': SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: session.refreshToken }),
+        });
+        /* refresh token inválido/expirado: no tiene sentido reintentar */
+        if (res.status === 400 || res.status === 401) { clear(); return null; }
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const j = await res.json();
+        if (!j || !j.access_token) { clear(); return null; }
+        return setSession({
+          accessToken: j.access_token,
+          refreshToken: j.refresh_token,
+          email: j.user && j.user.email,
+          userId: j.user && j.user.id,
+        });
+      } catch (e) {
+        lastErr = e;
+        /* backoff exponencial ante fallo de red (1s, 2s) */
+        if (i < 2) await new Promise(r => setTimeout(r, (i + 1) * 1000));
+      }
+    }
+    return session;   // mantiene la sesión anterior si la red siguió fallando
   }
 
   async function logout() {
