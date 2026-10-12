@@ -70,9 +70,44 @@
       else if (p.subscription_status) s += ' · ' + p.subscription_status;
     }
     s += ' · ' + works.length + ' obras (' + activas + ' activas), ' + clientes + ' clientes, ' + empleados + ' empleados, ' + presupuestos + ' presupuestos.';
-    if (works.length) s += ' Obras: ' + works.slice(0, 8).map(w => w.name).join(', ') + '.';
+
+    /* Números por obra: para consultas de cobros/gastos/pendientes */
+    const incs = d.incomes || [];
+    const exps = d.expenses || [];
+    if (works.length) {
+      const ws = works.slice(0, 8).map(w => {
+        const cobrado = incs.filter(i => i.workId === w.id).reduce((a, b) => a + (Number(b.amount) || 0), 0);
+        const gastado = exps.filter(e => e.workId === w.id).reduce((a, b) => a + (Number(b.amount) || 0), 0);
+        const presup = Number(w.budgetTotal) || 0;
+        const pend = Math.max(0, presup - cobrado);
+        return w.name + ' (cobrado $' + cobrado + ', gastado $' + gastado + (presup ? ', pendiente por cobrar $' + pend : '') + ')';
+      });
+      s += ' Obras y saldos: ' + ws.join('; ') + '.';
+    }
+
+    /* Empleados con tarifa horaria: para consultas de sueldos y jornadas */
     const emps = d.employees || [];
-    if (emps.length) s += ' Empleados: ' + emps.slice(0, 12).map(e => ((e.firstName || '') + ' ' + (e.lastName || '')).trim()).join(', ') + '.';
+    if (emps.length) {
+      s += ' Empleados: ' + emps.slice(0, 12).map(e => {
+        const full = ((e.firstName || '') + ' ' + (e.lastName || '')).trim();
+        return e.hourlyRate ? full + ' ($' + e.hourlyRate + '/hora)' : full;
+      }).join(', ') + '.';
+    }
+
+    /* Herramientas con estado y nota (ubicación): para "¿dónde está...?" */
+    const assets = d.assets || [];
+    if (assets.length) {
+      s += ' Herramientas: ' + assets.slice(0, 10).map(a => a.name + ' (' + (a.status || 'operativo') + (a.notes ? ', nota: ' + a.notes : '') + ')').join('; ') + '.';
+    }
+
+    /* Reparto pendiente: para consultas de socios ("¿cuánto cobra Juan?") */
+    const pendDist = (d.distributions || []).filter(x => x.status === 'pendiente');
+    if (pendDist.length) {
+      const parts = [];
+      pendDist.slice(0, 5).forEach(x => { (x.splits || []).forEach(sp => parts.push(sp.name + ' $' + sp.amount + ' (' + (x.period || '') + ')')); });
+      if (parts.length) s += ' Reparto pendiente de pago: ' + parts.slice(0, 12).join(', ') + '.';
+    }
+
     const clis = (d.contacts || []).filter(c => c.type === 'cliente');
     if (clis.length) s += ' Clientes: ' + clis.slice(0, 12).map(c => c.name).join(', ') + '.';
     if (sessionFocus && (sessionFocus.obra || sessionFocus.cliente)) {
@@ -80,6 +115,10 @@
       if (sessionFocus.obra) s += ' obra "' + sessionFocus.obra + '"';
       if (sessionFocus.cliente) s += (sessionFocus.obra ? ' y' : '') + ' cliente "' + sessionFocus.cliente + '"';
       s += '. Si el próximo comando no especifica otra obra/cliente, aplicalo a esa entidad.';
+    }
+    /* Historial reciente: permite continuar cargas/consultas en varios pasos */
+    if (chatHistory.length) {
+      s += ' Historial de la conversación: ' + chatHistory.slice(-6).join(' ') + '.';
     }
     return s;
   }
@@ -99,6 +138,35 @@
     return txt;
   }
 
+  /* Botones de opciones inline para pasos guiados: si la IA pregunta por
+     oficio/obra/categoría, se agregan botoncitos que envían la selección. */
+  function addInlineOptions(hostEl, replyText) {
+    const t = String(replyText || '').toLowerCase();
+    const opts = [];
+    if (/(oficio|profesi[oó]n|qu[eé] hace|rubro)/.test(t)) {
+      ['Albañil', 'Pintor', 'Plomero', 'Electricista', 'Carpintero', 'Yesero', 'Herrero'].forEach(o => opts.push({ label: o, send: 'oficio ' + o }));
+    } else if (/(categor[ií]a|tipo de gasto)/.test(t)) {
+      ['Materiales', 'Combustible', 'Mano de obra', 'Flete', 'Subcontrato'].forEach(c => opts.push({ label: c, send: 'categoría ' + c }));
+    } else if (/(qu[eé] obra|cu[aá]l obra|a qu[eé] obra|en qu[eé] obra)/.test(t)) {
+      const works = (G.store.data && G.store.data.works) || [];
+      works.slice(0, 6).forEach(w => opts.push({ label: w.name, send: 'obra ' + w.name }));
+    }
+    if (!opts.length) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'ai-actions';
+    opts.forEach(o => {
+      const b = document.createElement('button');
+      b.className = 'btn btn-soft btn-sm';
+      b.textContent = o.label;
+      b.addEventListener('click', () => {
+        input.value = o.send;
+        send();
+      });
+      wrap.appendChild(b);
+    });
+    hostEl.appendChild(wrap);
+  }
+
   function bubble(html, who) {
     const div = document.createElement('div');
     div.className = 'ai-msg ai-' + who;
@@ -108,6 +176,7 @@
 
   let host = null, log = null, input = null, busy = false, builtMode = null, rec = null, listening = false, voiceOn = true, speaking = false;
   let finalText = '', persistedFinal = '', lastSendAt = 0, silenceTimer = null, shouldListen = false;
+  let chatHistory = [];   // últimas interacciones (seguimiento multi-paso en el chat)
   let voicePref = null;
   /* Memoria de sesión: última obra/cliente tratado, para que los comandos
      consecutivos se apliquen sin volver a preguntar. */
@@ -459,73 +528,17 @@
     return null;
   }
 
-  /* Auto-apertura de modales + pre-completado de campos detectados por la IA */
+  /* Ejecución 100% conversacional: guarda directo si hay datos suficientes;
+     si faltan, la IA pide los datos en el chat (sin abrir ventanas emergentes). */
   function execFormAction(action) {
     const mod = (action && action.modulo) || '';
     const c = (action && action.campos) || {};
-
-    /* 1) Si hay datos suficientes, GUARDAR directo y sincronizar */
     const saved = saveViaStore(mod, c);
     if (saved && saved.ok) {
       try { if (G.sync && G.sync.push) G.sync.push(G.store.data); } catch (e) {}
       return { saved: true, label: saved.label };
     }
-
-    /* 2) Sino, abrir el modal y pre-completar */
-    const d = G.store.data || {};
-    const setVal = (sel, val) => {
-      if (val === undefined || val === null || val === '') return;
-      const el = document.querySelector(sel);
-      if (el) { el.value = val; try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {} }
-    };
-    const findId = (list, name, keyFn) => {
-      if (!name) return '';
-      const n = String(name).toLowerCase().trim();
-      const hit = (list || []).find(x => keyFn(x).toLowerCase().trim() === n);
-      return hit ? hit.id : '';
-    };
-    const clientId = findId((d.contacts || []).filter(x => x.type === 'cliente'), c.cliente, x => x.name);
-    const workId = findId(d.works, c.obra, x => x.name);
-    const empId = findId(d.employees, c.empleado, x => ((x.firstName || '') + ' ' + (x.lastName || '')).trim());
-    const nombre = c.nombre || '';
-
-    try {
-      switch (mod) {
-        case 'empleado': {
-          if (G.actions.employee) G.actions.employee();
-          const fn = c.nombre ? (c.apellido ? c.nombre : String(c.nombre).split(/\s+/)[0]) : '';
-          const ln = c.apellido || (c.nombre ? String(c.nombre).split(/\s+/).slice(1).join(' ') : '');
-          setVal('#fFirst', fn);
-          setVal('#fLast', ln);
-          break;
-        }
-        case 'obra':
-          if (G.actions.work) G.actions.work(null, { clientId });
-          setVal('#fName', nombre);
-          setVal('#fLoc', c.ubicacion || c.direccion);
-          setVal('#fBudget', c.presupuesto);
-          break;
-        case 'cliente':
-          if (G.actions.client) G.actions.client();
-          setVal('#fName', nombre);
-          break;
-        case 'presupuesto':
-          if (G.actions.budget) G.actions.budget(null, { name: nombre || c.concepto || '', clientId, workId });
-          break;
-        case 'gasto':
-          if (G.actions.expense) G.actions.expense({ type: c.obra ? 'obra' : 'general', workId: workId || undefined, amount: c.monto || undefined, description: c.concepto || c.categoria || '', category: c.categoria || undefined });
-          break;
-        case 'ingreso':
-          if (G.actions.income) G.actions.income({ amount: c.monto || undefined, concept: c.concepto || '' });
-          break;
-        case 'jornada':
-          if (G.actions.attendance) G.actions.attendance({ employeeId: empId, workId });
-          if (c.horas) setVal('[data-k="hours"]', c.horas);
-          break;
-      }
-      setOpen(false);   // contraer el chat para dejar ver el formulario (móvil)
-    } catch (e) { /* si algo falla, el modal ya quedó abierto */ }
-    return { saved: false };
+    return { saved: false, modulo: mod };   // sin modal: la conversación continúa
   }
 
   function setOpen(v) {
@@ -713,6 +726,8 @@
     const sess = G.auth.getSession();
     if (!sess) { pend.innerHTML = 'Necesitás iniciar sesión para usar el asistente.'; busy = false; return; }
     const payload = { message: msg, context: context(), mode: isAdminMode() ? 'admin' : 'usuario' };
+    chatHistory.push('usuario: ' + msg);
+    if (chatHistory.length > 8) chatHistory.shift();
     let streamedText = '';
 
     callAI(payload, (chunk) => {
@@ -749,6 +764,10 @@
           });
           pend.appendChild(wrap);
         }
+        /* Historial + opciones inline para continuar la conversación en pasos */
+        chatHistory.push('asistente: ' + replyText.slice(0, 140));
+        if (chatHistory.length > 8) chatHistory.shift();
+        addInlineOptions(pend, replyText);
       })
       .catch((err) => {
         /* Respaldo local: si la IA falla (pico/timeout), interpretamos la orden
