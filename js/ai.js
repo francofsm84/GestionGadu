@@ -62,7 +62,7 @@
     ],
     gasto: [
       { key: 'monto', ask: '¿De cuánto es el gasto? (ej. 5000)' },
-      { key: 'categoria', ask: '¿Qué categoría es?', buttons: ['Materiales', 'Combustible', 'Mano de obra', 'Flete', 'Subcontrato', 'Otro'] },
+      { key: 'categoria', ask: '¿Qué categoría es?', catsList: true },
       { key: 'obra', ask: '¿A qué obra corresponde?', worksList: true },
     ],
     ingreso: [
@@ -200,7 +200,9 @@
     if (/(oficio|profesi[oó]n|qu[eé] hace|rubro)/.test(t)) {
       ['Albañil', 'Pintor', 'Plomero', 'Electricista', 'Carpintero', 'Yesero', 'Herrero'].forEach(o => opts.push({ label: o, send: 'oficio ' + o }));
     } else if (/(categor[ií]a|tipo de gasto)/.test(t)) {
-      ['Materiales', 'Combustible', 'Mano de obra', 'Flete', 'Subcontrato'].forEach(c => opts.push({ label: c, send: 'categoría ' + c }));
+      /* Categorías REALES del store + Herramientas/Equipamiento */
+      const cats = ['Herramientas / Equipamiento'].concat((G.store && G.store.CATS_OBRA) || []).concat((G.store && G.store.CATS_GENERAL) || []);
+      [...new Set(cats)].forEach(c => opts.push({ label: c, send: 'categoría ' + c }));
     } else if (/(qu[eé] obra|cu[aá]l obra|a qu[eé] obra|en qu[eé] obra)/.test(t)) {
       const works = (G.store.data && G.store.data.works) || [];
       works.slice(0, 6).forEach(w => opts.push({ label: w.name, send: 'obra ' + w.name }));
@@ -846,10 +848,37 @@
     }, 900);
   }
 
+  /* Normaliza palabras sueltas a las categorías CANÓNICAS del store */
+  function normCat(raw) {
+    const r = String(raw || '').toLowerCase();
+    if (/material/.test(r)) return 'Materiales';
+    if (/combustible|nafta|gasoil|gas-oil/.test(r)) return 'Combustible';
+    if (/mano de obra|jornal/.test(r)) return 'Mano de obra';
+    if (/flete/.test(r)) return 'Fletes';
+    if (/subcontrat/.test(r)) return 'Subcontratos';
+    if (/alquiler de equip/.test(r)) return 'Alquiler de equipos';
+    if (/mantenimiento/.test(r)) return 'Mantenimiento de herramientas';
+    if (/herramienta|equipamiento|equipo/.test(r)) return 'Herramientas / Equipamiento';
+    if (/sueldo/.test(r)) return 'Sueldos';
+    if (/seguro/.test(r)) return 'Seguros';
+    if (/impuesto/.test(r)) return 'Impuestos';
+    if (/servicio/.test(r)) return 'Servicios';
+    if (/alquiler/.test(r)) return 'Alquiler';
+    return null;
+  }
+
   /* Intents locales de respaldo: si la IA no responde (pico/timeout),
      interpretamos la orden con patrones simples. */
   function localIntent(text) {
     const t = String(text || '').toLowerCase();
+    /* 0) Compra de herramienta/equipamiento → flujo de inversión (herramienta) */
+    if (/(?:comprar|compré|compre|compra|compro|invertir en|inversión en)\s+(?:una |un |la |el )?/.test(t) &&
+        /(herramienta|equipo|equipamiento|máquina|maquina|amoladora|taladro|sierra|compresor|andamio|mezcladora|hormigonera|moladora)/.test(t)) {
+      const campos = {};
+      const m = t.match(/(\d{1,3}(?:[.,]\d{3})+|\d{4,})(?:[.,]\d+)?/);
+      if (m) campos.costo = Number(m[0].replace(/\./g, '').replace(',', '.'));
+      return { modulo: 'herramienta', campos };
+    }
     /* 1) Crear entidades: "crear/cargar empleado|obra|cliente|socio|presupuesto [nombre]" */
     const crear = t.match(/(?:crear|crea|agregar|alta de|nueva|nuevo|cargar|carga|cárgame|cargame|cargá)\s+(?:un |una |el |la |a )?(empleado|obra|cliente|socio|presupuesto|herramienta|jornada)\b/i);
     if (crear) {
@@ -870,8 +899,8 @@
     if (!(monto > 0)) return { modulo: kind, campos: {} };
     const campos = { monto };
     if (kind === 'gasto') {
-      const cat = t.match(/(material|combustible|nafta|mano de obra|jornal|flete|subcontrat|sueldo)/);
-      if (cat) campos.categoria = cat[1];
+      const cat = t.match(/(material|combustible|nafta|gasoil|mano de obra|jornal|flete|subcontrat|alquiler|mantenimiento|herramienta|equipamiento|equipo|sueldo|seguro|impuesto|servicio)/);
+      if (cat) campos.categoria = normCat(cat[1]);
     } else {
       campos.concepto = /anticipo|adelanto/.test(t) ? 'Adelanto' : 'Cobro';
     }
@@ -913,6 +942,28 @@
     (d.works || []).forEach(w => {
       if (has(w.name)) {
         out.push({ tipo: 'Obra', nombre: w.name, detail: (w.status || '') + (w.location ? ' · ' + w.location : '') + (w.budgetTotal ? ' · presupuesto $' + w.budgetTotal : ''), key: 'obras' });
+      }
+    });
+    /* Cobertura completa: ingresos, gastos, presupuestos y seguros */
+    (d.incomes || []).forEach(i => {
+      if (has(i.concept) || has(i.notes) || has(i.method)) {
+        out.push({ tipo: 'Ingreso', nombre: i.concept || 'Ingreso', detail: '$' + (i.amount || 0) + (i.date ? ' · ' + i.date : '') + (i.method ? ' · ' + i.method : ''), key: 'ingresos' });
+      }
+    });
+    (d.expenses || []).forEach(x => {
+      if (has(x.description) || has(x.category) || has(x.paymentMethod)) {
+        out.push({ tipo: 'Gasto', nombre: x.description || x.category || 'Gasto', detail: (x.category ? x.category + ' · ' : '') + '$' + (x.amount || 0) + (x.date ? ' · ' + x.date : ''), key: 'gastos' });
+      }
+    });
+    (d.budgets || []).forEach(b => {
+      if (has(b.name) || has(b.notes)) {
+        out.push({ tipo: 'Presupuesto', nombre: b.name, detail: (b.status || '') + (b.total ? ' · $' + b.total : ''), key: 'presupuestos' });
+      }
+    });
+    (d.seguros || []).forEach(s => {
+      const full = ((s.tipo || '') + ' ' + (s.compania || '')).trim();
+      if (has(full) || has(s.tipo)) {
+        out.push({ tipo: 'Seguro', nombre: full || s.tipo, detail: (s.estado || '') + (s.fechaVencimiento ? ' · vence ' + s.fechaVencimiento : ''), key: 'seguros' });
       }
     });
     return out;
@@ -995,6 +1046,12 @@
         return;
       }
       buttons = emps.map(e => ((e.firstName || '') + ' ' + (e.lastName || '')).trim());
+    } else if (s.catsList) {
+      /* Categorías REALES del store (obra + generales) + Herramientas/Equipamiento */
+      const cats = ['Herramientas / Equipamiento']
+        .concat((G.store && G.store.CATS_OBRA) || [])
+        .concat((G.store && G.store.CATS_GENERAL) || []);
+      buttons = [...new Set(cats)];
     }
 
     const pend = wizardBubble('🤖 ' + s.ask);
