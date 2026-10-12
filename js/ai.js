@@ -107,7 +107,7 @@
   }
 
   let host = null, log = null, input = null, busy = false, builtMode = null, rec = null, listening = false, voiceOn = true, speaking = false;
-  let finalText = '', lastSendAt = 0, silenceTimer = null, shouldListen = false;
+  let finalText = '', persistedFinal = '', lastSendAt = 0, silenceTimer = null, shouldListen = false;
   let voicePref = null;
   /* Memoria de sesión: última obra/cliente tratado, para que los comandos
      consecutivos se apliquen sin volver a preguntar. */
@@ -200,8 +200,9 @@
       const items = [];
       for (let i = 0; i < e.results.length; i++) items.push({ isFinal: e.results[i].isFinal, transcript: e.results[i][0].transcript });
       const bt = buildTranscript(items);
-      finalText = bt.final;
-      input.value = bt.combined;
+      /* conserva lo transcrito en sesiones previas (auto-reinicio) sin duplicar */
+      finalText = (persistedFinal + (persistedFinal && bt.final ? ' ' : '') + bt.final).trim();
+      input.value = (finalText + (bt.interim ? ' ' + bt.interim : '')).replace(/\s+/g, ' ').trim();
       resetSilenceTimer();
     };
     rec.onerror = (e) => {
@@ -214,6 +215,7 @@
       if (shouldListen) {
         /* El navegador cortó la sesión (continuous no siempre funciona en móvil):
            reiniciar la escucha conservando lo ya transcrito. */
+        persistedFinal = finalText;
         listening = false;
         mic.classList.remove('ai-mic-on');
         setTimeout(() => { if (shouldListen) startRecognition(); }, 150);
@@ -236,6 +238,7 @@
     if (listening) { stopRec(); return; }   // 2ª pulsación = dejar de escuchar (sin enviar)
     shouldListen = true;
     finalText = '';
+    persistedFinal = '';
     startRecognition();
   }
 
@@ -616,12 +619,12 @@
      interpretamos la orden con patrones simples. */
   function localIntent(text) {
     const t = String(text || '').toLowerCase();
-    /* 1) Crear entidades: "crear empleado/obra/cliente ..." → abre el formulario */
-    const crear = t.match(/(?:crear|crea|agregar|alta de|nueva|nuevo)\s+(empleado|obra|cliente|socio|presupuesto)\b/i);
+    /* 1) Crear entidades: "crear/cargar empleado|obra|cliente|socio|presupuesto [nombre]" */
+    const crear = t.match(/(?:crear|crea|agregar|alta de|nueva|nuevo|cargar|carga|cárgame|cargame|cargá)\s+(?:un |una |el |la |a )?(empleado|obra|cliente|socio|presupuesto)\b/i);
     if (crear) {
       const modulo = crear[1];
       const resto = t.slice(t.indexOf(crear[0]) + crear[0].length).trim();
-      const nombre = resto.replace(/^(que se llame|llamado|llamada|de nombre|de)\s+/i, '').trim();
+      const nombre = resto.replace(/^(que se llame|llamado|llamada|de nombre|de|a)\s+/i, '').trim();
       if (nombre) return { modulo, campos: { nombre } };
       return { modulo, campos: {} };
     }
