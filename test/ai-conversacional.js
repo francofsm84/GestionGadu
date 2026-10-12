@@ -65,7 +65,7 @@ okk(oficios.length === 7 && oficios[0].label === 'Albañil' && oficios[0].send =
 const obras = AI.inlineOptionsFor('¿A qué obra lo asigno?');
 okk(obras.length === 1 && obras[0].label === 'Norma Molina' && obras[0].send === 'obra Norma Molina', 'botones de obra (del store)');
 const cats = AI.inlineOptionsFor('¿Cuál es la categoría del gasto?');
-okk(cats.length === 5 && cats[0].label === 'Materiales', 'botones de categoría (5)');
+okk(cats.length >= 12 && cats[0].label === 'Herramientas / Equipamiento' && cats.some(c => c.label === 'Materiales'), 'botones de categoría (reales del store)');
 okk(AI.inlineOptionsFor('Hola, ¿cómo estás?').length === 0, 'sin botones para mensaje normal');
 
 console.log('== 4) Historial multi-paso (sin pérdida de contexto) ==');
