@@ -789,7 +789,7 @@ body.no-session .app { display: none; }
 .ai-fab { position: fixed; right: 20px; bottom: 20px; z-index: 90; width: 56px; height: 56px; border-radius: 50%; border: none; padding: 0; overflow: hidden; background: linear-gradient(135deg, #f59e0b, #f97316); color: #1a1205; display: grid; place-items: center; cursor: pointer; box-shadow: 0 6px 20px rgba(245,158,11,.4); }
 .ai-fab img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; overflow: hidden; }
 .ai-fab:hover { transform: translateY(-2px); }
-.ai-panel { position: fixed; right: 20px; bottom: 88px; z-index: 90; width: 360px; max-width: calc(100vw - 32px); height: 480px; max-height: calc(100vh - 110px); background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden; }
+.ai-panel { position: fixed; right: 20px; bottom: 88px; z-index: 90; width: 360px; max-width: calc(100vw - 32px); height: 480px; max-height: calc(100dvh - 110px); background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden; }
 .ai-panel:not([hidden]) { animation: ai-slide-in .28s ease; }
 @keyframes ai-slide-in { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
 .ai-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border-soft); }
@@ -812,7 +812,9 @@ body.no-session .app { display: none; }
 .ai-mic-on { color: #ef4444; border-color: #ef4444; animation: ai-pulse 1s ease-in-out infinite; }
 @keyframes ai-pulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239,68,68,.4); } 50% { transform: scale(1.12); box-shadow: 0 0 0 6px rgba(239,68,68,0); } }
 @media (max-width: 768px) {
-  .ai-fab { right: 20px; bottom: 20px; width: 64px; height: 64px; }
-  .ai-panel { width: calc(100vw - 32px); max-height: 80vh; bottom: 85px; right: 16px; left: 16px; margin: auto; }
+  .ai-fab { right: 20px; bottom: calc(20px + env(safe-area-inset-bottom)); width: 64px; height: 64px; }
+  .ai-panel { width: calc(100vw - 32px); max-height: 80dvh; bottom: 85px; right: 16px; left: 16px; margin: auto; }
   .ai-mic { width: 60px; height: 60px; font-size: 24px; }
+  /* Espacio inferior para que el botón flotante no tape las tarjetas */
+  .view { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
 }

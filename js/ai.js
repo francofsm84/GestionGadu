@@ -160,12 +160,12 @@
     try { input.value = finalText || ''; } catch (e) {}
   }
 
-  /* Debounce de silencio: si no llegan resultados durante 3,5s, se suelta el
-     micrófono automáticamente (SIN enviar). Evita que quede abierto y capte
-     ruido o la propia salida del altavoz. */
+  /* Debounce de silencio: si no llegan resultados durante 6s, se suelta el
+     micrófono automáticamente (SIN enviar). 6s permite pausas naturales al
+     hablar sin cortar la captura. */
   function resetSilenceTimer() {
     clearTimeout(silenceTimer);
-    silenceTimer = setTimeout(() => { if (listening) stopRec(); }, 3500);
+    silenceTimer = setTimeout(() => { if (listening) stopRec(); }, 6000);
   }
 
   /* Construye la transcripción desde una lista de {isFinal, transcript}.
