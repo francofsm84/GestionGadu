@@ -1,136 +1,171 @@
-# GADU Construye · Dashboard contable y de gestión operativa
+# GADU Construye · Tu obra. Tu plata. Sin cuaderno.
 
-Aplicación web **100% local y offline** para centralizar las finanzas, el avance de proyectos y la toma de decisiones de GADU Construye (Alta Gracia, Córdoba).
+**GADU** es la plataforma de gestión pensada para **contratistas, albañiles y gente de obra**: llevá el control de **cobros, gastos, balances, obras, empleados y herramientas** desde el celular, sin planillas ni cuadernos.
 
-## Cómo abrirla
+- 📱 **App web progresiva (PWA)**: instalable en la pantalla de inicio del celular, funciona offline y se sincroniza con la nube.
+- ☁️ **Multi-usuario (SaaS)**: cada cuenta tiene sus propios datos protegidos en Supabase (Google o email).
+- 🤖 **Asistente virtual con IA**: cargás todo hablando o escribiendo, con respuestas por voz y streaming en tiempo real.
 
-**Opción recomendada (1 clic):** hacé doble clic en **`ABRIR DASHBOARD.bat`**. Arranca un servidor local con Node y abre el navegador solo en `http://localhost:8000`.
+---
 
-**Opciones alternativas:**
+## Descripción General
 
-1. **Doble clic en `index.html`** — se abre directo en el navegador predeterminado. Si Windows pregunta con qué programa abrirla, elegí **Chrome o Edge**. Si se abre en blanco, hacé clic derecho sobre el archivo → *Abrir con* → Google Chrome o Microsoft Edge.
-2. **Servidor local manual** (necesario si tu navegador bloquea archivos locales): abrí una terminal en esta carpeta y ejecutá:
+GADU Construye centraliza toda la operación de una empresa constructora o de remodelaciones en un solo lugar:
+
+- **Cobros y gastos** por obra, con balance neto en tiempo real.
+- **Obras** con estado, avance físico y porcentaje cobrado.
+- **Socios y reparto** de ganancias con liquidaciones automáticas.
+- **Empleados, jornadas, adelantos y liquidación**.
+- **Herramientas e inversión** con control de ubicación y mantenimiento.
+- **Agenda** de contactos con llamada y WhatsApp directos.
+
+Todo diseñado para **usarse en la obra**: pantallas simples, botones grandes y un asistente que entiende cómo hablás.
+
+---
+
+## Módulos y Funcionalidades Principales
+
+### 📊 Dashboard / Panel General
+- **Balance neto**, ingresos y gastos del período, y **porcentaje cobrado** por obra.
+- **Flujo de caja** interactivo (ingresos vs. egresos).
+- **Inversión en herramientas**, distribución de gastos y alertas de vencimientos (seguros y liquidaciones).
+- Selector de **período de análisis** (este mes, últimos 3/6/12 meses o rango personalizado).
+- **Últimos movimientos** y obras en curso de un vistazo.
+
+### 🏗️ Obras
+- Tablero por estado: **activas / pausadas / finalizadas**, con avance físico y de cobro.
+- Detalle por obra: presupuesto, cobros, costos, **margen en tiempo real**, personal asignado (días, horas y costo), adelantos del cliente y adelantos a empleados.
+- Búsqueda, filtros y altas al vuelo.
+
+### 📄 Presupuestos
+- Cotizaciones ordenadas con editor de ítems, descuentos y subtotales automáticos.
+- Estados: **borrador / enviado / aprobado / rechazado / vencido**.
+- Duplicado, detalle y **registro directo del cobro** desde un presupuesto aprobado.
+- Cliente y obra asociados (creación al vuelo desde el mismo formulario).
+
+### 💰 Ingresos y Gastos
+- **Ingresos**: cobros por obra con concepto, método de pago y tipo **Cobro/certificación** o **Adelanto del cliente**.
+- **Gastos directos de obra** (materiales, mano de obra, fletes, subcontratos, alquiler de equipos) y **gastos generales** (combustible, servicios, impuestos, sueldos, seguros…).
+- Pagos al personal marcados como **Sueldo o Adelanto**.
+- Filtros, totales y exportación CSV.
+
+### 🤝 Socios y Reparto
+- Porcentajes de participación y **distribución de ganancias** automática.
+- Reserva de capital configurable, saldo disponible a distribuir y resultado por obra.
+- Cronograma de **liquidaciones** con alertas de vencimientos.
+
+### 👷 Empleados y Registro de Jornadas
+- Legajo por empleado: contacto, datos de pago, **días trabajados**, horas por obra, **adelantos** y **liquidación**.
+- Registro diario de asistencia con horas por obra.
+- Pagos separados en sueldos y adelantos, y "cobrado hasta la fecha" por período.
+- Fotos/avatar por empleado.
+
+### 🛠️ Herramientas
+- **Control de inventario e inversión**: registro de compras, costo y estado (operativo / en reparación / dado de baja).
+- **Ubicación actual** (en qué obra está o si está guardada) con historial de movimientos.
+- Mantenimiento con costos y rendimiento por obra (días de uso).
+
+### 📅 Agenda
+- Directorio de contactos (clientes, proveedores, subcontratistas y socios) con **llamada directa, WhatsApp y e-mail**.
+- **Visitas y entregas** organizadas desde el directorio.
+- Importación desde la agenda del celular (Android) o por archivo **.vcf / .csv** en escritorio.
+
+### 💾 Respaldos y Datos
+- **Copia de seguridad** completa: exportar/importar respaldo JSON.
+- Sincronización automática o manual con la nube (Subir / Descargar / Probar conexión).
+- Restaurar datos de ejemplo, dejar 1 ejemplo por módulo o vaciar por completo.
+- Cerrar sesión y gestionar la cuenta.
+
+> También incluye: **Clientes** (directorio con teléfono unificado Teléfono/WhatsApp), **Seguros** con semáforo de vencimientos, **Planes y límites** por suscripción y **Panel de Administración** para administradores del sistema.
+
+---
+
+## Asistente Virtual GADU (Capataz Digital 🤖)
+
+El chat flotante de GADU es un **asistente conversacional con IA** que funciona con voz y texto:
+
+- **Carga guiada por chat**: creá obras, clientes, empleados, gastos, ingresos, presupuestos, herramientas y jornadas **paso a paso con botones inline**, sin formularios externos. Validación estricta: no guarda hasta tener todos los datos, y confirma con **tilde verde ✔** solo cuando la escritura llegó a la nube.
+- **Consultas con números reales**: preguntá *"¿cuánto queda por cobrar en la obra X?"* o *"¿dónde está la amoladora?"* y responde con datos de tu cuenta.
+- **Búsqueda inteligente**: *"buscame a Jorge"* busca en obras, empleados, herramientas, clientes, ingresos, gastos, presupuestos y seguros, con botones de acceso directo.
+- **Voz**: dictado continuo (Android/Chrome) y respuestas habladas con **voces latinoamericanas** (femeninas y masculinas). En iPhone se usa escritura (degradación elegante).
+- **Importación de contactos**: agenda nativa del celular o archivo **.vcf / .csv** como respaldo.
+- **COO Virtual** (solo Super Admin): gestioná usuarios, planes, pruebas y métricas del SaaS desde el chat.
+- Respuestas en **streaming** palabra por palabra (DeepSeek/Gemini con cadena de respaldo).
+
+---
+
+## Modo de Uso e Instalación / Guía Rápida
+
+### Uso diario (usuario final)
+
+1. Entrá a **`https://gestiongadu.vercel.app`** desde el celular (Chrome recomendado).
+2. **Creá tu cuenta** con Google o email (45 días de prueba gratis).
+3. Tocá **"Agregar a pantalla de inicio"** para instalarla como una app.
+4. Empezá cargando: el **asistente** te guía, o usá los botones **"+"** de la barra superior.
+5. Activá la **sincronización automática** en *Respaldos y datos* para que todo quede en la nube.
+
+### Desarrollo / instalación local
+
+Requisitos: un navegador moderno (Chrome/Edge) y Node.js.
+
+```bash
+# 1) Clonar el repositorio
+git clone https://github.com/francofsm84/GestionGadu.git
+cd GestionGadu
+
+# 2) (Opcional) servidor local
+node server.js            # → http://localhost:8000
+```
+
+No necesita build: es HTML + CSS + JavaScript puro (sin frameworks ni dependencias).
+
+### Configuración de Supabase (una sola vez)
+
+1. Creá un proyecto en [supabase.com](https://supabase.com) con la base `public`.
+2. En *SQL Editor*, ejecutá **en orden** todos los archivos de migración:
+   `supabase-setup.sql`, luego `supabase-setup-v2.sql` … hasta **`supabase-setup-v21.sql`** (tablas, RLS por usuario, planes, invitaciones, auditoría y códigos de licencia).
+3. Configurá las variables de la app (URL y clave anónima de Supabase) en `js/auth.js` / `js/config`.
+4. *(Opcional, para el asistente)* Desplegá la Edge Function `ai-assistant`:
+   ```bash
+   npx supabase functions deploy ai-assistant --no-verify-jwt --project-ref <ref>
+   npx supabase secrets set GEMINI_API_KEY=... DEEPSEEK_API_KEY=...
    ```
-   node server.js
-   ```
-   y entrá a `http://localhost:8000`. Funciona sin internet y sin instalar nada (usa el Node que ya tenés).
+   La función usa **DeepSeek como proveedor principal** con Gemini de respaldo (streaming SSE).
 
-## Publicación en internet (GitHub + Vercel)
+### Publicación (Vercel)
 
 - Repositorio: **https://github.com/francofsm84/GestionGadu** (rama `main`).
-- Para publicar en Vercel: entrá a **vercel.com** → *Add New… → Project* → *Import* el repositorio `GestionGadu` → *Deploy* (no necesita build: es un sitio estático, `vercel.json` ya está incluido). Después cada `git push` actualiza el sitio automáticamente.
-- Para actualizar la app desde la PC: `git add -A`, `git commit -m "cambios"` y `git push`.
+- El sitio está publicado en **Vercel**; cada `git push` a `main` actualiza automáticamente `https://gestiongadu.vercel.app` (sitio estático, sin build).
 
-## Módulos
+### Pruebas
 
-| Módulo | Qué incluye |
-|---|---|
-| **Dashboard** | KPIs (ingresos, gastos, balance neto, inversión en herramientas, estado de obras), flujo de caja interactivo (ingresos vs egresos, 8 meses), distribución de gastos por obra + gastos generales, obras en curso, liquidaciones con alertas y últimos movimientos. |
-| **Obras** | Tablero kanban (activas / pausadas / finalizadas) y vista de lista, con búsqueda, filtros por estado, avance físico y de cobro, margen por obra. **Al tocar una obra** se abre su detalle con todos los movimientos: presupuesto, cobros, costos, margen en tiempo real, slider de avance físico, **personal asignado** (quién trabajó en esa obra, días, horas y costo estimado), **adelantos del cliente hacia vos** y **adelantos tuyos hacia empleados**, y pestañas de ingresos / gastos / personal / presupuesto. |
-| **Presupuestos** | Creación y edición con editor de ítems (cálculo automático de subtotales y descuentos), estados (borrador / enviado / aprobado / rechazado / vencido), duplicado, detalle y registro directo del cobro desde un presupuesto aprobado. **Cliente y Obra son obligatorios**, y podés crearlos al vuelo desde el mismo formulario (botones +): si creás una obra nueva ahí, queda asociada automáticamente al cliente seleccionado. |
-| **Ingresos** | Registro de cobros por obra (fecha, monto, concepto, método de pago, cliente), con tipo **Cobro / certificación** o **Adelanto del cliente**, filtros, totales y exportación CSV. |
-| **Gastos** | Pestañas "Por obra" (materiales, mano de obra, fletes, subcontratos…) y "Generales / estructura" (combustible, servicios, impuestos…), con proveedor o **empleado** (los pagos al personal se marcan como **Sueldo o Adelanto**), número de factura y método de pago. |
-| **Socios y reparto** | Porcentajes de participación, cálculo automático de la utilidad neta, reserva de capital configurable, saldo disponible a distribuir, resultado por obra y cronograma de liquidaciones con alertas de vencimientos. |
-| **Seguros y vencimientos** | Pólizas por tipo (ART, Vehículo, VTV, Caución, Otro) con compañía, nº de póliza, costo y obra asociada. **Semáforo automático**: rojo si venció o vence hoy, amarillo si faltan ≤7 días, verde al día. Widget de **Próximos vencimientos** en el Dashboard, badge de alertas en el menú, y botón **Registrar pago** que genera el gasto en el libro con categoría "Seguros" ya precargado. |
-| **Empleados** | **Panel global** con tabla ordenada (o tarjetas): por empleado ves teléfono, alias/CBV/CVU de pago, presentes/ausentes del mes, horas del mes, sueldos y adelantos acumulados y última jornada. Legajos individuales con **"cobrado hasta la fecha"** que elijas, asistencia día por día con **horas por obra**, y pagos separados en **sueldos** y **adelantos de dinero**. Si no hay empleados cargados, el modal de jornada ofrece crearlos ahí mismo (botón +) y los agrega al selector al instante. |
-| **Herramientas** | Registro de activos y compras, estados (operativo / en reparación / dado de baja), historial de mantenimiento con costos, **ubicación** (en qué obra está o si está guardada) con **historial de movimientos** y **rendimiento por obra** (días de uso en cada una), y totales de inversión. |
-| **Clientes** | Directorio propio de clientes: listar, crear, editar y eliminar con nombre/razón social, teléfono, e-mail y dirección, obras vinculadas y total cobrado. Acceso rápido **"Nuevo cliente"** en la barra superior y botón + dentro de los formularios de Obras y Presupuestos. |
-| **Agenda** | Directorio de contactos (clientes, proveedores, subcontratistas y socios) con accesos directos de llamada, WhatsApp (mensaje prearmado) y e-mail. |
+```bash
+node test/run-all.js        # suite completa de regresión
+```
 
-## Acciones rápidas
+Incluye pruebas de finanzas, sincronización, planes, licencias, CSS y todas las suites del asistente (`ai-smoke`, `ai-audit`, `ai-conversacional`, `ai-search`, `ai-wizard`, `ai-pills`, `ai-voices`, `ai-user-isolation`, `ai-coo`, `ai-mapeo`, `ai-persistencia`, `ui-contactos`) y el **E2E con usuario simulado** (`ai-e2e`), que verifica la escritura real en Supabase contra un mock local.
 
-Desde la barra superior (o el menú "+" en pantallas chicas): **Nuevo ingreso**, **Cargar gasto**, **Nuevo presupuesto**, **Nueva obra**, **Registrar jornada** (asistencia de empleados) y **Nuevo cliente**.
-
-## Análisis por período
-
-En el Dashboard hay un selector **"Período de análisis"** (este mes, últimos 3/6/12 meses, todo el historial o un rango personalizado con fechas desde/hasta) que recalcula los KPIs: cuánto **ganaste** (ingresos), **gastaste** (directos + generales), el **balance neto** y cuánto **invertiste** en herramientas en ese lapso.
-
-## Diseño
-
-- Modo oscuro y claro (botón de sol/luna en la barra superior).
-- Barra lateral colapsable y menú deslizable en móvil.
-- Tablas con búsqueda rápida y filtros; estados con colores claros.
-- Gráficos dibujados en canvas sin librerías externas (funcionan sin internet).
-- **Logo propio** en la barra lateral, en la pestaña del navegador (favicon) y como ícono al **agregar la app a la pantalla de inicio del celular** (`manifest.json` + `logo-192.png`).
-- **Fotos en los registros**: Clientes, Empleados y Socios (agenda) admiten **foto/avatar** desde la **galería** o la **cámara** (`capture="environment"`). La imagen se reduce automáticamente (≤320 px) y se guarda dentro del registro, por lo que persiste en el dispositivo y se sincroniza a la nube con el resto de los datos. Los avatares se ven en Clientes, Agenda, Socios, Empleados, Obras y Dashboard.
-- **Importar desde los contactos del celular**: botón **📇 Importar desde contactos** en los formularios de Clientes, Empleados y Agenda (socios/proveedores). Usa la API nativa del navegador (Contact Picker) y autocompleta nombre, teléfono y e-mail. Disponible en Android/Chrome; en otros navegadores avisa que no está soportado.
-
-## Datos
-
-- Viene con **datos de demostración realistas** (obras, presupuestos, movimientos, contactos de Alta Gracia) para que puedas explorar todo de inmediato.
-- Todo se guarda automáticamente en el navegador (**localStorage**).
-- Desde **"Respaldos y datos"** (parte inferior del menú) podés **exportar un respaldo JSON**, **importarlo** en otra máquina o **restaurar los datos de ejemplo**.
-- Para **empezar con datos reales**: "Respaldos y datos" → **"Dejar 1 ejemplo por módulo"** borra toda la demo y deja un solo ejemplo en cada lugar (obra, cliente, proveedor, subcontratista, socio, presupuesto, ingreso, gasto, empleado, jornada, herramienta y liquidación) con montos en $0, listos para editar o reemplazar. También existe **"Vaciar por completo"** si preferís arrancar sin ningún registro.
-
-## SaaS: usuarios, planes y datos en la nube (Supabase)
-
-- Cada persona **crea su cuenta** desde la pantalla de inicio (Google o email). Sus datos viven en **una fila propia** de la nube y **no puede ver los de otros usuarios** (seguridad RLS de Supabase por `user_id`).
-- **Suscripciones y planes:** catálogo de planes (`Free`, `Pro`, `Empresa`) con precios mensual/anual y **límites de obras activas y empleados**. Si un usuario alcanza el límite, la app le bloquea el alta y le muestra el modal para **mejorar el plan**.
-- **Panel de Administración** (menú "Administración", visible solo para `admin`/`super_admin`):
-  - **Usuarios:** listado con búsqueda, cambiar rol/plan, extender la prueba 7 días, activar/suspender, eliminar acceso y registrar invitados.
-  - **Planes:** editar precios y límites.
-  - **Configuración:** datos del negocio (nombre, teléfono, dirección, datos fiscales, moneda).
-  - **Métricas:** MRR, usuarios por plan, obras totales y cuentas en mora.
-  - **Auditoría:** historial de acciones administrativas.
-- **Configuración inicial (una sola vez):**
-  1. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v2.sql`** → *Run*.
-  2. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v3.sql`** → *Run* (crea `planes`, `pagos`, `auditoria`, `negocio`, amplía `profiles` con rol/plan/cobranza y agrega la seguridad de administrador).
-  3. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v4.sql`** → *Run* (crea `invitaciones` para pre-registrar usuarios y reemplaza el hook de primer ingreso: asigna rol/plan por defecto o hereda la invitación del admin).
-  4. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v5.sql`** → *Run* (permite a los admins **editar planes**, define los **4 planes oficiales** Free/Pro/Pyme/Empresa y agrega `trial_ends_at` para el período de prueba).
-  5. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v6.sql`** → *Run* (agrega los campos de **onboarding**: teléfono, dirección, nacionalidad, rubro y `onboarding_completo`).
-  6. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v7.sql`** → *Run* (columnas ampliadas de perfil con lat/lng, localidad, rubro, tipo de perfil, etc., y refresh de caché).
-  7. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v8.sql`** → *Run* (blindaje absoluto del admin con trigger, prueba de **45 días** y corrección retroactiva de cuentas admin).
-  8. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v9.sql`** → *Run* (métricas financieras **MRR/ARR** y distribución completa de los 4 planes).
-  9. Supabase → *SQL Editor* → pegá todo el contenido de **`supabase-setup-v10.sql`** → *Run* (configuración dinámica: trial configurable, modo mantenimiento, banner global, credenciales de Mercado Pago y % de conversión).
-  10. *Authentication → Providers → Email* → desactivá **"Confirm email"** (si usás registro por email).
-  4. Para **hacerte administrador**: SQL Editor → `update public.profiles set rol='super_admin', plan_id='pro' where email='TU-EMAIL';`
-- **Uso diario:** cada guardado puede subirse solo a la nube (activá "Sincronizar automáticamente" en *Respaldos y datos* → Mi cuenta). En otro dispositivo, al iniciar sesión la app ofrece descargar los datos de la nube. También hay botones manuales **Subir / Descargar / Probar conexión** y **Cerrar sesión**.
-- Sin conexión la app sigue funcionando con los datos locales del dispositivo.
+---
 
 ## Estructura del proyecto
 
 ```
-index.html                 · shell de la aplicación
-ABRIR DASHBOARD.bat        · acceso directo: arranca el server y abre el navegador
-server.js                  · servidor local opcional (solo Node, sin dependencias)
-css/styles.css             · sistema de diseño (dark/light, responsive)
-js/store.js                · datos, seed y cálculos financieros
-js/ui.js                   · iconos, modales, toasts y helpers
-js/charts.js               · gráficos en canvas (flujo de caja y donut)
-js/app.js                  · router y arranque
-js/views/dashboard.js      · panel principal
-js/views/obras.js          · tablero kanban y lista
-js/views/obra-detalle.js   · detalle por obra
-js/views/presupuestos.js   · presupuestos
-js/views/ingresos.js       · ingresos
-js/views/gastos.js         · gastos (obra y generales)
-js/views/socios.js         · socios, reparto y liquidaciones
-js/views/empleados.js      · empleados, asistencia, horas y pagos
-js/views/herramientas.js   · activos y mantenimiento
-js/views/agenda.js         · directorio de contactos
+index.html                  · shell de la aplicación (PWA)
+manifest.json               · manifiesto PWA (iconos y splash)
+css/styles.css              · sistema de diseño (dark/light, responsive)
+js/store.js                 · datos, seed y cálculos financieros
+js/ui.js                    · iconos, modales, toasts, importación de contactos
+js/charts.js                · gráficos en canvas (flujo de caja y donut)
+js/app.js                   · router y arranque
+js/auth.js                  · autenticación (Supabase GoTrue)
+js/sync.js                  · sincronización de datos por usuario
+js/plan.js                  · planes, límites y códigos de licencia
+js/ai.js                    · asistente virtual (chat, voz, wizard, intenciones)
+js/views/                   · vistas: dashboard, obras, presupuestos, ingresos,
+                              gastos, socios, empleados, herramientas, agenda, admin
+supabase/functions/ai-assistant/ · Edge Function del asistente (streaming IA)
+supabase-setup*.sql         · migraciones de base de datos (v1 … v21)
+test/                       · suites de pruebas (run-all.js + mock-supabase)
 ```
 
-Tecnología: HTML + CSS + JavaScript puro (ES6), sin frameworks ni dependencias.
-
-## Pruebas y verificación (antes de desplegar)
-
-Para validar todo el sistema con **un solo comando**, desde la carpeta del proyecto ejecutá:
-
-```bash
-node test/run-all.js
-```
-
-Corre las **7 pruebas** de punta a punta (incluida la que usa el mock de Supabase) y termina con `✅ TODAS LAS PRUEBAS PASARON` si todo está en verde:
-
-| Prueba | Qué valida |
-|---|---|
-| `store-smoke` | Finanzas, obras, empleados, seguros, herramientas y CRUD |
-| `sync-smoke` | Sincronización y aislamiento de datos por usuario |
-| `ai-smoke` | Sanitización del dictado por voz (deduplicación y tope de longitud) |
-| `gadux-scenario` | Flujo operativo completo + balance del Dashboard |
-| `gadux-simulation` | Simulación STT (interim/final) y QA integral |
-| `css-check` | Que todas las clases CSS existan |
-| `plan-smoke` | Planes, blindaje admin, invitaciones y onboarding (con mock) |
-
-Para correr una prueba individual: `node test/store-smoke.js`, `node test/sync-smoke.js`, etc.
-
+**Tecnología:** HTML + CSS + JavaScript puro (ES6) · Supabase (Auth + PostgREST + RLS) · Edge Function en Deno · IA (DeepSeek/Gemini) · Web Speech API · Contact Picker API · PWA offline-first.
