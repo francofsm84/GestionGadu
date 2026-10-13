@@ -258,6 +258,14 @@ body.sb-collapsed .main { margin-left: var(--sidebar-w-min); }
 .charts-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 16px; min-width: 0; max-width: 100%; }
 .grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; min-width: 0; max-width: 100%; }
 
+/* ---------- Agenda: agrupación por fecha ---------- */
+.list-date {
+  margin: 16px 0 8px; font-size: 13px; font-weight: 700;
+  color: var(--text-2); letter-spacing: .02em;
+  display: flex; align-items: center; gap: 8px;
+}
+.list-date::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
 /* ---------- Tarjetas ---------- */
 .card {
   background: var(--surface); border: 1px solid var(--border);

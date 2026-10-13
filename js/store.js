@@ -324,8 +324,14 @@
   }
   function normalize() {
     if (!data.settings) data.settings = { company: 'GADU Construye', theme: 'dark', reservePercent: 30 };
-    ['contacts', 'works', 'budgets', 'incomes', 'expenses', 'assets', 'distributions', 'employees', 'attendance', 'seguros'].forEach(k => {
+    ['contacts', 'works', 'budgets', 'incomes', 'expenses', 'assets', 'distributions', 'employees', 'attendance', 'seguros', 'compromisos'].forEach(k => {
       if (!Array.isArray(data[k])) data[k] = [];
+    });
+    /* Migración limpia: compromisos de la agenda (visitas/entregas/eventos) */
+    data.compromisos.forEach(c => {
+      if (c.hora === undefined) c.hora = '';
+      if (c.estado === undefined) c.estado = 'pendiente';
+      if (c.createdAt === undefined) c.createdAt = c.fecha || todayISO();
     });
     /* Migración: ubicación e historial de uso de herramientas */
     data.assets.forEach(a => {
@@ -428,6 +434,9 @@
       seguros: [
         { id: 'ms1', tipo: 'ART', compania: 'ART de ejemplo', numeroPoliza: '', costo: 0, fechaVencimiento: daysAhead(30), estado: 'activo', obraId: null, createdAt: hoy, updatedAt: hoy },
       ],
+      compromisos: [
+        { id: 'mc1', fecha: daysAhead(2), hora: '09:00', tipo: 'visita', titulo: 'Visita de obra · quincho y pileta', lugar: '', contactoId: null, notas: '', estado: 'pendiente', createdAt: hoy },
+      ],
     };
   }
   function startReal() { data = minimalSeed(); save(); }
@@ -435,7 +444,7 @@
     data = {
       settings: currentSettings(),
       contacts: [], works: [], budgets: [], incomes: [], expenses: [],
-      employees: [], attendance: [], assets: [], distributions: [],
+      employees: [], attendance: [], assets: [], distributions: [], compromisos: [],
     };
     save();
   }
