@@ -332,6 +332,11 @@
       if (c.hora === undefined) c.hora = '';
       if (c.estado === undefined) c.estado = 'pendiente';
       if (c.createdAt === undefined) c.createdAt = c.fecha || todayISO();
+      /* Nuevos campos multirubro: compatibles con compromisos guardados antes */
+      if (c.horaFin === undefined) c.horaFin = '';
+      if (c.modalidad === undefined) c.modalidad = 'presencial';
+      if (c.enlace === undefined) c.enlace = '';
+      if (c.asignadoA === undefined) c.asignadoA = null;
     });
     /* Migración: ubicación e historial de uso de herramientas */
     data.assets.forEach(a => {

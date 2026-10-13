@@ -10,10 +10,18 @@
 
   G.router.add('agenda', 'agenda', 'Agenda', 'Calendario operativo: visitas, entregas y eventos con avisos', render);
 
+  /* Categorías multirubro: compatibles con los registros previos
+     (visita / entrega / evento conservan sus claves originales) */
   const TIPOS = {
-    visita: ['Visita', 'info', 'map-pin'],
-    entrega: ['Entrega', 'primary', 'truck'],
-    evento: ['Evento', 'violet', 'calendar'],
+    reunion: ['Reunión / Cita', 'violet', 'users'],
+    visita: ['Visita / Servicio en sitio', 'info', 'map-pin'],
+    entrega: ['Entrega / Envío', 'primary', 'truck'],
+    tarea: ['Tarea / Interno', 'warning', 'check-circle'],
+    evento: ['Evento clave / Hito', 'success', 'calendar'],
+  };
+  const MODALIDADES = {
+    presencial: ['Presencial', 'map-pin'],
+    virtual: ['Virtual / Llamada', 'phone'],
   };
 
   function hoy() { return S.todayISO(); }
@@ -49,11 +57,9 @@
       '</section>' +
       '<div class="toolbar">' +
       '<div class="search">' + UI.icon('search', 16) + '<input id="fq" class="input" placeholder="Buscar compromiso, lugar o contacto…" value="' + UI.escapeHtml(state.q) + '"></div>' +
-      '<select id="ftipo" class="select" style="max-width:150px">' +
+      '<select id="ftipo" class="select" style="max-width:190px">' +
       '<option value="todos"' + (state.tipo === 'todos' ? ' selected' : '') + '>Todos los tipos</option>' +
-      '<option value="visita"' + (state.tipo === 'visita' ? ' selected' : '') + '>Visitas</option>' +
-      '<option value="entrega"' + (state.tipo === 'entrega' ? ' selected' : '') + '>Entregas</option>' +
-      '<option value="evento"' + (state.tipo === 'evento' ? ' selected' : '') + '>Eventos</option>' +
+      Object.keys(TIPOS).map(k => '<option value="' + k + '"' + (state.tipo === k ? ' selected' : '') + '>' + TIPOS[k][0] + '</option>').join('') +
       '</select>' +
       '<select id="fest" class="select" style="max-width:150px">' +
       '<option value="pendientes"' + (state.estado === 'pendientes' ? ' selected' : '') + '>Pendientes</option>' +
@@ -114,8 +120,11 @@
 
   function compromisoCard(c) {
     const tl = TIPOS[c.tipo] || ['Compromiso', 'neutral', 'calendar'];
+    const md = MODALIDADES[c.modalidad] || MODALIDADES.presencial;
     const vg = vigencia(c);
     const con = c.contactoId ? S.contactById(c.contactoId) : null;
+    const emp = c.asignadoA ? (S.data.employees || []).find(e => e.id === c.asignadoA) : null;
+    const rangoHora = c.hora ? UI.escapeHtml(c.hora) + ' hs' + (c.horaFin ? ' – ' + UI.escapeHtml(c.horaFin) + ' hs' : '') : '';
     const aviso = vg === 'vencido'
       ? UI.chip('⚠ Vencido', 'danger', 'alert-triangle')
       : vg === 'hoy' && c.estado !== 'hecho'
@@ -126,10 +135,12 @@
       '<div class="contact-head">' +
       '<span class="asset-ico">' + UI.icon(tl[2], 20) + '</span>' +
       '<div class="contact-info"><strong>' + UI.escapeHtml(c.titulo) + '</strong>' +
-      '<span>' + tl[0] + (c.hora ? ' · ' + UI.escapeHtml(c.hora) + ' hs' : '') + (con ? ' · ' + UI.escapeHtml(con.name) : '') + '</span></div>' +
+      '<span>' + tl[0] + (rangoHora ? ' · ' + rangoHora : '') + (con ? ' · ' + UI.escapeHtml(con.name) : '') + (emp ? ' · ' + UI.escapeHtml(((emp.firstName || '') + ' ' + (emp.lastName || '')).trim()) : '') + '</span></div>' +
       '</div>' +
-      '<div class="contact-chips">' + UI.chip(tl[0], tl[1], tl[2]) + aviso + (hecho ? UI.chip('Hecho', 'success', 'check-circle') : UI.chip('Pendiente', 'warning', 'clock')) + '</div>' +
-      (c.lugar ? '<div class="contact-address">' + UI.icon('map-pin', 13) + UI.escapeHtml(c.lugar) + '</div>' : '') +
+      '<div class="contact-chips">' + UI.chip(tl[0], tl[1], tl[2]) + aviso + (c.modalidad === 'virtual' ? UI.chip(md[0], 'info', md[1]) : '') + (hecho ? UI.chip('Hecho', 'success', 'check-circle') : UI.chip('Pendiente', 'warning', 'clock')) + '</div>' +
+      (c.modalidad === 'virtual'
+        ? (c.enlace ? '<div class="contact-address">' + UI.icon('phone', 13) + UI.escapeHtml(c.enlace) + '</div>' : '')
+        : (c.lugar ? '<div class="contact-address">' + UI.icon('map-pin', 13) + UI.escapeHtml(c.lugar) + '</div>' : '')) +
       (c.notas ? '<div class="muted small">' + UI.escapeHtml(c.notas) + '</div>' : '') +
       '<div class="contact-actions">' +
       (!hecho ? '<button class="btn btn-soft-success btn-sm" data-done="' + c.id + '">' + UI.icon('check', 14) + 'Marcar hecho</button>' : '') +
@@ -157,15 +168,14 @@
 
   function openCompromisoModal(c) {
     const isEdit = !!c;
+    const modalidad = c ? (c.modalidad || 'presencial') : 'presencial';
     const m = UI.openModal({
       title: isEdit ? 'Editar compromiso' : 'Nuevo compromiso',
-      subtitle: 'Visitas a obras/clientes, entregas de materiales y eventos clave.',
+      subtitle: 'Reuniones, visitas, entregas, tareas internas y eventos clave de cualquier rubro.',
       body:
         '<div class="grid-form">' +
         '<div class="field"><label>Tipo *</label><select class="select" id="fTipo">' +
-        '<option value="visita"' + (!c || c.tipo === 'visita' ? ' selected' : '') + '>Visita a obra / cliente</option>' +
-        '<option value="entrega"' + ((c && c.tipo === 'entrega') ? ' selected' : '') + '>Entrega de materiales</option>' +
-        '<option value="evento"' + ((c && c.tipo === 'evento') ? ' selected' : '') + '>Evento clave</option>' +
+        Object.keys(TIPOS).map(k => '<option value="' + k + '"' + ((c ? c.tipo : 'visita') === k ? ' selected' : '') + '>' + TIPOS[k][0] + '</option>').join('') +
         '</select></div>' +
         '<div class="field"><label>Estado</label><select class="select" id="fEstado">' +
         '<option value="pendiente"' + (!c || c.estado !== 'hecho' ? ' selected' : '') + '>Pendiente</option>' +
@@ -173,8 +183,17 @@
         '</select></div>' +
         '<div class="field"><label>Fecha *</label><input class="input" type="date" id="fFecha" value="' + (c ? c.fecha : hoy()) + '"></div>' +
         '<div class="field"><label>Hora</label><input class="input" type="time" id="fHora" value="' + (c ? (c.hora || '') : '09:00') + '"></div>' +
-        '<div class="field span-2"><label>Compromiso *</label><input class="input" id="fTitulo" value="' + UI.escapeHtml(c ? c.titulo : '') + '" placeholder="Ej.: Visitar la obra del quincho, entregar 20 bolsas de cemento…"></div>' +
-        '<div class="field span-2"><label>Lugar</label><input class="input" id="fLugar" value="' + UI.escapeHtml(c ? c.lugar : '') + '" placeholder="Dirección o referencia"></div>' +
+        '<div class="field"><label>Hora fin (opcional)</label><input class="input" type="time" id="fHoraFin" value="' + (c ? (c.horaFin || '') : '') + '"></div>' +
+        '<div class="field"><label>Modalidad</label><select class="select" id="fModalidad">' +
+        '<option value="presencial"' + (modalidad === 'presencial' ? ' selected' : '') + '>Presencial</option>' +
+        '<option value="virtual"' + (modalidad === 'virtual' ? ' selected' : '') + '>Virtual / Llamada</option>' +
+        '</select></div>' +
+        '<div class="field span-2"><label>Compromiso *</label><input class="input" id="fTitulo" value="' + UI.escapeHtml(c ? c.titulo : '') + '" placeholder="Ej.: Reunión con cliente, visita técnica, entrega de presupuesto…"></div>' +
+        '<div class="field span-2" id="fLugarField"><label>Dirección o referencia</label><input class="input" id="fLugar" value="' + UI.escapeHtml(c ? c.lugar : '') + '" placeholder="Calle, barrio, obra o punto de encuentro"></div>' +
+        '<div class="field span-2" id="fEnlaceField" hidden><label>Enlace de reunión o teléfono</label><input class="input" id="fEnlace" value="' + UI.escapeHtml(c ? (c.enlace || '') : '') + '" placeholder="https://meet.google.com/… o +54 9 …"></div>' +
+        '<div class="field span-2"><label>Asignado a (opcional)</label><select class="select" id="fAsig">' +
+        UI.selectOptions(S.data.employees.map(x => ({ v: x.id, l: ((x.firstName || '') + ' ' + (x.lastName || '')).trim() })), c ? c.asignadoA : '', true, 'Sin asignar') +
+        '</select></div>' +
         '<div class="field span-2"><label>Contacto relacionado</label><select class="select" id="fCon">' +
         UI.selectOptions(S.data.contacts.map(x => ({ v: x.id, l: x.name })), c ? c.contactoId : '', true, 'Sin contacto') +
         '</select></div>' +
@@ -182,19 +201,34 @@
         '</div>',
       footer: '<button class="btn btn-ghost" data-cancel>Cancelar</button><button class="btn btn-primary" data-save>' + (isEdit ? 'Guardar cambios' : 'Agregar compromiso') + '</button>',
     });
+
+    /* Modalidad: alterna entre dirección (presencial) y enlace/teléfono (virtual) */
+    const syncModalidad = () => {
+      const virtual = m.panel.querySelector('#fModalidad').value === 'virtual';
+      m.panel.querySelector('#fLugarField').hidden = virtual;
+      m.panel.querySelector('#fEnlaceField').hidden = !virtual;
+    };
+    m.panel.querySelector('#fModalidad').addEventListener('change', syncModalidad);
+    syncModalidad();
+
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
     m.panel.querySelector('[data-save]').addEventListener('click', () => {
       const titulo = m.panel.querySelector('#fTitulo').value.trim();
       const fecha = m.panel.querySelector('#fFecha').value;
       if (!titulo) { UI.toast('Ingresá el compromiso', 'error'); return; }
       if (!fecha) { UI.toast('Ingresá la fecha', 'error'); return; }
+      const mod = m.panel.querySelector('#fModalidad').value;
       const payload = {
         tipo: m.panel.querySelector('#fTipo').value,
         estado: m.panel.querySelector('#fEstado').value,
         fecha,
         hora: m.panel.querySelector('#fHora').value,
+        horaFin: m.panel.querySelector('#fHoraFin').value,
+        modalidad: mod,
         titulo,
-        lugar: m.panel.querySelector('#fLugar').value.trim(),
+        lugar: mod === 'presencial' ? m.panel.querySelector('#fLugar').value.trim() : (c ? (c.lugar || '') : ''),
+        enlace: mod === 'virtual' ? m.panel.querySelector('#fEnlace').value.trim() : '',
+        asignadoA: m.panel.querySelector('#fAsig').value || null,
         contactoId: m.panel.querySelector('#fCon').value || null,
         notas: m.panel.querySelector('#fNotas').value.trim(),
       };
