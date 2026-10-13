@@ -148,6 +148,13 @@ okk(AI.normFecha('chau') === null, 'normFecha: inválida → null');
 const iCrear = AI.localIntent('crear una obra para Pablo Molina');
 okk(iCrear && iCrear.modulo === 'obra' && iCrear.campos.nombre === 'pablo molina', 'crear obra: nombre extraído');
 
+console.log('== 9) Robustez: consultas nunca son datos ==');
+okk(AI.isValidName('dónde está la amoladora') === false, 'consulta de ubicación rechazada como nombre');
+okk(AI.isValidName('cuánto vale') === false, 'pregunta de monto rechazada como nombre');
+okk(AI.searchIntent('¿dónde está la amoladora?') === 'amoladora', 'searchIntent extrae la herramienta');
+const res9 = AI.searchStore('amoladora');
+okk(res9.some(r => r.tipo === 'Herramienta' && /En (mantenimiento|depósito|uso)/.test(r.detail)), 'búsqueda devuelve estado + ubicación claros');
+
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }

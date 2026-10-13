@@ -264,6 +264,26 @@ function fail(msg) { console.error('✘ FALLO:', msg); process.exit(1); }
   if (S.data.expenses.length !== antesUndo - 1) fail('Deshacer no eliminó el gasto');
   console.log('  ✔ Deshacer eliminó el registro y refrescó');
 
+  /* ============ FLUJO G: consulta de herramienta NO rompe el wizard ============ */
+  console.log('== G) "¿Dónde está la hormigonera?" durante un wizard ==');
+  G.auth.SUPABASE_URL = 'http://localhost:9333';
+  S.add('assets', { name: 'Hormigonera 130 L', category: 'Equipo mayor', purchaseDate: S.todayISO(), cost: 100000, status: 'operativo', supplierId: null, notes: '', location: obra.id, usages: [{ from: S.todayISO(), workId: obra.id, notes: 'En obra E2E' }], maintenance: [] });
+  AI._send('cargar un presupuesto');
+  if (!AI._pending() || AI._pending().modulo !== 'presupuesto') fail('no arrancó el wizard de presupuesto');
+  AI._send('dónde está la hormigonera');
+  if (AI._pending() && 'nombre' in AI._pending().campos) fail('la consulta se guardó como dato del presupuesto');
+  if (!AI._pending() || AI._pending().modulo !== 'presupuesto') fail('el wizard se perdió tras la consulta');
+  /* La respuesta de búsqueda está entre las últimas burbujas (luego se re-pregunta el paso) */
+  let okG = false;
+  for (let i = log.children.length - 1; i >= 0 && i >= log.children.length - 4; i--) {
+    if (log.children[i].innerHTML.indexOf('Hormigonera') >= 0) { okG = true; break; }
+  }
+  if (!okG) fail('no mostró la ubicación de la herramienta');
+  console.log('  ✔ consulta respondida (ubicación + estado) y wizard intacto');
+  AI._send('cancelar');
+  if (AI._pending() || AI._ledger() || AI._tools()) fail('cancelar no limpió el estado por completo');
+  console.log('  ✔ cancelar limpia todos los estados colgados');
+
   console.log('\n──────────────────────────');
   console.log('✔ AI E2E PASADO — persistencia verificada de punta a punta');
   process.exit(0);

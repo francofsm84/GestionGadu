@@ -501,7 +501,7 @@
       if (G.ui && G.ui.toast) G.ui.toast('Tu navegador no soporta dictado por voz. Escribí tu mensaje y lo cargamos igual.', 'error');
       try {
         const pend = bubble('🎙️ Este navegador (Safari/iOS) no permite dictar por voz. <b>Escribí tu mensaje acá abajo</b>: el asistente responde igual de bien.', 'bot');
-        log.appendChild(pend);
+        appendLog(pend);
         scrollToEnd();
       } catch (e) {}
       return;
@@ -970,14 +970,14 @@
     resetFlows();   // cambio de flujo → limpiar estados anteriores colgados
     if (k === 'contabilidad') {
       const pend = bubble('', 'bot');
-      log.appendChild(pend);
+      appendLog(pend);
       scrollToEnd();
       startLedgerMenu(pend);
       return;
     }
     if (k === 'herramientas') {
       const pend = bubble('', 'bot');
-      log.appendChild(pend);
+      appendLog(pend);
       scrollToEnd();
       startToolsMenu(pend);
       return;
@@ -985,7 +985,7 @@
     if (CONTACT_KEYS.indexOf(k) >= 0) {
       /* Blindaje: activa el estado WAITING_CONTACT_TYPE sin pasar texto */
       const pend = bubble('', 'bot');
-      log.appendChild(pend);
+      appendLog(pend);
       scrollToEnd();
       startContactFlow(pend);
       return;
@@ -994,7 +994,7 @@
     if (mod) {
       /* Blindaje: arranca el wizard del módulo DIRECTAMENTE (estado inicial) */
       const pend = bubble('', 'bot');
-      log.appendChild(pend);
+      appendLog(pend);
       scrollToEnd();
       startWizard(mod, {});
       return;
@@ -1031,7 +1031,7 @@
       saludo + '<br>' +
       '<div class="ai-actions">' + pills.map(p => '<button class="btn btn-soft btn-sm" data-act="' + p.k + '">' + p.e + ' ' + p.l + '</button>').join('') + '</div>',
       'bot');
-    log.appendChild(bot);
+    appendLog(bot);
     log.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => firePill(b.dataset.act)));
   }
 
@@ -1048,7 +1048,7 @@
       'Tocá el micrófono 🎙️ y decime qué querés cargar, por ejemplo: <b>"Quiero cargar un empleado"</b>.<br>' +
       '<div class="ai-actions">' + pills.map(p => '<button class="btn btn-soft btn-sm" data-act="' + p.k + '">' + p.e + ' ' + p.l + '</button>').join('') + '</div>',
       'bot');
-    log.appendChild(bot);
+    appendLog(bot);
     log.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => firePill(b.dataset.act)));
   }
 
@@ -1256,7 +1256,13 @@
     });
     (d.assets || []).forEach(a => {
       if (has(a.name) || has(a.notes)) {
-        out.push({ tipo: 'Herramienta', nombre: a.name, detail: (a.status || 'operativo') + (a.notes ? ' · ' + a.notes : ''), key: 'herramientas' });
+        /* Ubicación y estado actuales, en lenguaje claro */
+        const loc = a.location ? d.works.find(w => w.id === a.location) : null;
+        const estado = a.status === 'dado de baja' ? 'Dado de baja'
+          : a.status === 'en reparación' ? 'En mantenimiento'
+          : a.location ? 'Activa en uso' : 'En depósito';
+        const donde = loc ? 'en ' + ((loc.code || '') + ' ' + loc.name).trim() : 'guardada en depósito';
+        out.push({ tipo: 'Herramienta', nombre: a.name, detail: estado + ' · ' + donde + (a.notes ? ' · ' + a.notes : ''), key: 'herramientas' });
       }
     });
     (d.contacts || []).forEach(c => {
@@ -1546,20 +1552,28 @@
   }
 
   /* Scroll automático al final del chat: ninguna burbuja ni la caja de texto
-     deben quedar ocultas por debajo (incluye scrollIntoView del último mensaje) */
+     deben quedar ocultas por debajo (incluye scrollIntoView del último mensaje).
+     SIN recursión: antes se llamaba a sí misma y saturaba el stack en móviles. */
   function scrollToEnd() {
     try {
       if (!log) return;
-      scrollToEnd();
+      log.scrollTop = log.scrollHeight;
       const last = log.lastElementChild || (log.children && log.children[log.children.length - 1]);
       if (last && last.scrollIntoView) last.scrollIntoView({ behavior: 'smooth', block: 'end' });
     } catch (e) {}
   }
   function wizardBubble(html) {
     const pend = bubble(html, 'bot');
-    log.appendChild(pend);
+    appendLog(pend);
     scrollToEnd();
     return pend;
+  }
+  /* Capa de rendimiento: el chat conserva como máximo MAX_LOG burbujas.
+     Las más viejas se descartan para que el DOM nunca congele el celular. */
+  const MAX_LOG = 60;
+  function appendLog(el) {
+    log.appendChild(el);
+    while (log.children.length > MAX_LOG && log.firstChild) log.removeChild(log.firstChild);
   }
 
   /* ---------- Flujo "Crear agenda" → Rol → carga 100% manual ---------- */
@@ -1724,8 +1738,8 @@
     /* Palabras sueltas reservadas (textos de botones) */
     const reservedWord = /^(crear|cargar|agregar|alta de|nueva|nuevo|empleado|cliente|socio|contacto|agenda|obra|gasto|ingreso|presupuesto|herramienta|jornada|cancelar|cancela|salir|salí|nada|no|seguir|continuar|continuemos|dale|sí|si|buscame|buscar|ver|métricas|auditoría|importar|traer|abrir|cerrar)$/i;
     if (reservedWord.test(t)) return false;
-    /* Frases que empiezan con un verbo de comando ("crear una obra", …) */
-    const commandPhrase = /^(crear|cargar|agregar|importar|traer|registr[aá]|alta de|nueva|nuevo|buscame|busca|ver |abrir|cerrar|suspend[eé]|activ[aá]|cambi[aá]|dale|extend[eé])\b/i;
+    /* Frases que empiezan con un verbo de comando o consulta ("crear una obra", "¿dónde está…?") */
+    const commandPhrase = /^(crear|cargar|agregar|importar|traer|registr[aá]|alta de|nueva|nuevo|buscame|busca|ver |abrir|cerrar|suspend[eé]|activ[aá]|cambi[aá]|dale|extend[eé]|d[oó]nde|cu[aá]nto|c[uó]mo|mostrame|mostráme|muestrame|asignar|mover|agendar|cobr[eé]|gast[eé]|pagu[eé])\b/i;
     if (commandPhrase.test(t)) return false;
     return true;
   }
@@ -1820,7 +1834,7 @@
   }
   function cancelWizard() {
     const op = pendingOp;
-    pendingOp = null;
+    resetFlows();   // limpieza TOTAL: wizard, submenús y confirmaciones colgadas
     wizardBubble('✋ Operación cancelada. Si querés retomarla, decime de nuevo qué cargar.');
     if (op) rememberTurn('asistente', 'cancelado ' + op.modulo);
   }
@@ -1895,16 +1909,44 @@
     busy = true;
     input.value = '';
     finalText = '';
-    log.appendChild(bubble(renderText(msg), 'user'));
+    appendLog(bubble(renderText(msg), 'user'));
     scrollToEnd();
 
     /* ===== 1) Operación guiada en curso (wizard): responder / cancelar / continuar ===== */
     if (pendingOp) {
       const mt = msg.toLowerCase();
-      if (/^(cancelar|cancela|salir|salí|nada|me arrepentí|para|basta|olvidalo|olvídalo|chau|no quiero)\b/.test(mt)) cancelWizard();
-      else if (/^(seguir|continuar|continuemos|dale|sí|si)\b/.test(mt)) wizardAskNext();
-      else if (isQuery(msg)) askContinueOrCancel();
-      else wizardAdvance(msg);
+      if (/^(cancelar|cancela|salir|salí|nada|me arrepentí|para|basta|olvidalo|olvídalo|chau|no quiero)\b/.test(mt)) { cancelWizard(); busy = false; return; }
+      if (/^(seguir|continuar|continuemos|dale|sí|si)\b/.test(mt)) { wizardAskNext(); busy = false; return; }
+      /* Consulta puntual ("¿dónde está la amoladora?") NUNCA es dato del wizard:
+         responde la búsqueda y vuelve a preguntar el paso actual, sin perder datos */
+      const sq = searchIntent(msg);
+      if (sq) {
+        const found = searchStore(sq);
+        const pendQ = bubble('', 'bot');
+        appendLog(pendQ);
+        if (found.length) handleSearchResults(sq, found, pendQ);
+        else {
+          pendQ.innerHTML = '🔍 No encontré nada para "' + esc(sq) + '". Seguimos con lo que estábamos:';
+          busy = false;
+        }
+        wizardAskNext();   // re-pregunta el paso actual (sin duplicar estado)
+        scrollToEnd();
+        return;
+      }
+      /* Cambio de tarea SOLO con intención completa de otro módulo:
+         "cobré $50000 de la obra X" cambia de flujo; una frase suelta
+         ("crear una obra") se trata como dato inválido del paso actual */
+      const li = localIntent(msg);
+      if (li && li.modulo && li.modulo !== pendingOp.modulo && WIZARD_STEPS[li.modulo] && isCompleteWizard(li.modulo, li.campos)) {
+        resetFlows();
+        rememberTurn('usuario', msg);
+        const pend2 = bubble('', 'bot');
+        appendLog(pend2);
+        execFormAction(li).then(res => { renderSaveResult(pend2, res); busy = false; scrollToEnd(); });
+        return;
+      }
+      if (isQuery(msg)) { askContinueOrCancel(); busy = false; return; }
+      wizardAdvance(msg);
       busy = false;
       return;
     }
@@ -1930,7 +1972,7 @@
         return;
       }
       const pend = bubble('Tocá un botón: <b>Empleado</b>, <b>Cliente</b> o <b>Socio</b>.', 'bot');
-      log.appendChild(pend);
+      appendLog(pend);
       addRoleButtons(pend);
       scrollToEnd();
       busy = false;
@@ -1946,6 +1988,17 @@
         busy = false;
         return;
       }
+      /* Consulta puntual dentro del contexto: responde sin cerrar el submenú */
+      const sq = searchIntent(msg);
+      if (sq) {
+        const found = searchStore(sq);
+        const pendQ = bubble('', 'bot');
+        appendLog(pendQ);
+        if (found.length) handleSearchResults(sq, found, pendQ);
+        else { pendQ.innerHTML = '🔍 No encontré nada para "' + esc(sq) + '".'; busy = false; }
+        scrollToEnd();
+        return;
+      }
       /* Instrucción conversacional directa dentro del contexto ("cobré $50000 de la obra X") */
       const int = localIntent(msg);
       if (int && (int.modulo === 'ingreso' || int.modulo === 'gasto')) {
@@ -1953,7 +2006,7 @@
         rememberTurn('usuario', msg);
         if (isCompleteWizard(int.modulo, int.campos)) {
           const pend = bubble('', 'bot');
-          log.appendChild(pend);
+          appendLog(pend);
           execFormAction(int).then(res => { renderSaveResult(pend, res); busy = false; scrollToEnd(); });
           return;
         }
@@ -1964,7 +2017,7 @@
       if (/^ingresos?$/.test(mt)) { ledgerMenu = false; startWizard('ingreso', {}); busy = false; return; }
       if (/^gastos?$/.test(mt)) { ledgerMenu = false; startWizard('gasto', {}); busy = false; return; }
       const pend = bubble('Tocá un botón: <b>Ingresos</b> o <b>Gastos</b>.', 'bot');
-      log.appendChild(pend);
+      appendLog(pend);
       addLedgerButtons(pend);
       scrollToEnd();
       busy = false;
@@ -1980,6 +2033,18 @@
         busy = false;
         return;
       }
+      /* Consulta puntual ("¿dónde está la amoladora?") → ubicación y estado,
+         sin caer en wizards de presupuestos ni bucles */
+      const sq = searchIntent(msg);
+      if (sq) {
+        const found = searchStore(sq);
+        const pendQ = bubble('', 'bot');
+        appendLog(pendQ);
+        if (found.length) handleSearchResults(sq, found, pendQ);
+        else { pendQ.innerHTML = '🔍 No encontré nada para "' + esc(sq) + '".'; busy = false; }
+        scrollToEnd();
+        return;
+      }
       /* Instrucción conversacional directa ("asignar la amoladora a la obra X") */
       const int = localIntent(msg);
       if (int && (int.modulo === 'asignar' || int.modulo === 'herramienta' || int.modulo === 'jornada')) {
@@ -1987,7 +2052,7 @@
         rememberTurn('usuario', msg);
         if (isCompleteWizard(int.modulo, int.campos)) {
           const pend = bubble('', 'bot');
-          log.appendChild(pend);
+          appendLog(pend);
           execFormAction(int).then(res => { renderSaveResult(pend, res); busy = false; scrollToEnd(); });
           return;
         }
@@ -2006,7 +2071,7 @@
       if (/^(cargar|nueva|nuevo|alta|herramienta)$/.test(mt)) { toolsMenu = false; startWizard('herramienta', {}); busy = false; return; }
       if (/^(jornada)$/.test(mt)) { toolsMenu = false; startWizard('jornada', {}); busy = false; return; }
       const pend = bubble('Tocá un botón: <b>Ver herramientas</b>, <b>Cargar nueva herramienta</b>, <b>Asignar herramienta</b> o <b>Cargar jornada</b>.', 'bot');
-      log.appendChild(pend);
+      appendLog(pend);
       addToolsButtons(pend);
       scrollToEnd();
       busy = false;
@@ -2014,7 +2079,7 @@
     }
 
     const pend = bubble('Pensando…', 'bot');
-    log.appendChild(pend);
+    appendLog(pend);
     scrollToEnd();
     const sess = G.auth.getSession();
     if (!sess) { pend.innerHTML = 'Necesitás iniciar sesión para usar el asistente.'; busy = false; return; }
