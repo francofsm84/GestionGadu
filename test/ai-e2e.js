@@ -139,6 +139,7 @@ function fail(msg) { console.error('✘ FALLO:', msg); process.exit(1); }
   AI._send('5000');
   AI._send('Materiales');
   AI._send('Obra E2E');
+  AI._send('no sé');   // comprobante (secundario)
   const t1 = Date.now();
   while (Date.now() - t1 < 6000) {
     const ult = log.children[log.children.length - 1];

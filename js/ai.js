@@ -68,6 +68,7 @@
       { key: 'monto', ask: '¿De cuánto es el gasto? (ej. 5000)' },
       { key: 'categoria', ask: '¿Qué categoría es?', catsList: true },
       { key: 'obra', ask: '¿A qué obra corresponde?', worksList: true },
+      { key: 'comprobante', ask: '¿Número de comprobante o una nota? (si no tenés, decime "no sé")' },
     ],
     ingreso: [
       { key: 'monto', ask: '¿De cuánto es el ingreso? (ej. 10000)' },
@@ -680,7 +681,7 @@
         S.add('expenses', {
           type: esObra ? 'obra' : 'general', workId: workId || null, date: today, amount,
           category: cat, providerId: null, employeeId: null, expenseKind: null,
-          description: desc, invoiceNumber: '', paymentMethod: (S.METODOS && S.METODOS[0]) || 'Efectivo',
+          description: desc, invoiceNumber: c.comprobante || '', paymentMethod: (S.METODOS && S.METODOS[0]) || 'Efectivo',
         });
         return { ok: true, label: 'gasto de $' + amount + ' (' + desc + ')' + (esObra ? ' en ' + workName(workId) : '') };
       }
@@ -812,34 +813,45 @@
     addGreeting();
   }
 
-  /* Pills de bienvenida → comando conversacional (inicia el flujo guiado
-     en el chat, sin redirigir a módulos externos) */
-  const PILL_COMMANDS = {
-    'new-obra': 'cargar una obra',
-    'new-contacto': 'crear un contacto',
-    'new-empleado': 'crear un contacto',   // entra por "Crear contacto" → elegir rol
-    'new-cliente': 'crear un contacto',
-    'new-gasto': 'cargar un gasto',
-    'new-ingreso': 'cargar un ingreso',
-    'new-presupuesto': 'cargar un presupuesto',
-    'herramientas': 'cargar una herramienta',
-    'new-jornada': 'cargar una jornada',
+  /* Acciones rápidas → módulo de wizard. El click arranca el estado inicial
+     DIRECTAMENTE: el texto del botón NUNCA se inyecta como dato del usuario. */
+  const PILL_WIZARD = {
+    'new-obra': 'obra',
+    'new-gasto': 'gasto',
+    'new-ingreso': 'ingreso',
+    'new-presupuesto': 'presupuesto',
+    'herramientas': 'herramienta',
+    'new-jornada': 'jornada',
   };
+  /* Claves que entran por "Crear agenda" (rol → carga manual) */
+  const CONTACT_KEYS = ['new-contacto', 'new-empleado', 'new-cliente'];
+
+  /* Limpia cualquier estado colgado si el usuario cancela o cambia de flujo */
+  function resetFlows() {
+    pendingOp = null;
+    contactStage = null;
+    contactRole = null;
+    adminWizard = null;
+    pendingAdmin = null;
+  }
+
   function firePill(k) {
-    if (k === 'new-contacto') {
-      /* Blindaje: el click activa DIRECTAMENTE el estado WAITING_CONTACT_TYPE.
-         El texto del botón NUNCA se interpreta como dato del usuario. */
+    resetFlows();   // cambio de flujo → limpiar estados anteriores colgados
+    if (CONTACT_KEYS.indexOf(k) >= 0) {
+      /* Blindaje: activa el estado WAITING_CONTACT_TYPE sin pasar texto */
       const pend = bubble('', 'bot');
       log.appendChild(pend);
       scrollToEnd();
       startContactFlow(pend);
       return;
     }
-    const cmd = PILL_COMMANDS[k];
-    if (cmd) {
-      finalText = '';
-      input.value = cmd;
-      send();   // arranca la conversación guiada dentro del chat
+    const mod = PILL_WIZARD[k];
+    if (mod) {
+      /* Blindaje: arranca el wizard del módulo DIRECTAMENTE (estado inicial) */
+      const pend = bubble('', 'bot');
+      log.appendChild(pend);
+      scrollToEnd();
+      startWizard(mod, {});
       return;
     }
     /* Pills administrativos: conservan la navegación original */
@@ -1418,6 +1430,21 @@
     if (commandPhrase.test(t)) return false;
     return true;
   }
+  /* Validadores de campos del wizard */
+  function extractNumber(val) {
+    const m = String(val || '').replace(/\./g, '').replace(',', '.').match(/(\d+(?:\.\d+)?)/);
+    return m ? Number(m[1]) : NaN;
+  }
+  function isValidNumber(val) {
+    const n = extractNumber(val);
+    return !isNaN(n) && n >= 0;
+  }
+  function isValidPhone(val) {
+    return String(val || '').replace(/[^0-9+]/g, '').length >= 6;
+  }
+  function isValidEmail(val) {
+    return /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(String(val || '').trim());
+  }
   function wizardAdvance(answer) {
     const op = pendingOp;
     if (!op) return;
@@ -1432,10 +1459,24 @@
       wizardBubble('🤖 Necesito ese dato para poder continuar. ' + s.ask);
       return;
     }
-    /* Blindaje: el campo nombre rechaza comandos y textos de botones */
-    if (s.key === 'nombre' && !isValidName(val)) {
-      wizardBubble('🤖 Eso parece un comando, no un nombre. Escribí el nombre y apellido de la persona (ej. "Juan Pérez").');
-      return;
+    /* Validación por tipo de campo (solo si no es "no sé") */
+    if (!noSe) {
+      if (s.key === 'nombre' && !isValidName(val)) {
+        wizardBubble('🤖 Eso parece un comando, no un nombre. Escribí el nombre y apellido de la persona (ej. "Juan Pérez").');
+        return;
+      }
+      if ((s.key === 'monto' || s.key === 'tarifa' || s.key === 'costo' || s.key === 'presupuesto' || s.key === 'horas' || s.key === 'porcentaje') && !isValidNumber(val)) {
+        wizardBubble('🤖 Eso no es un número válido. ' + s.ask);
+        return;
+      }
+      if (s.key === 'telefono' && !isValidPhone(val)) {
+        wizardBubble('🤖 Ese teléfono no parece válido (mínimo 6 dígitos). ' + s.ask);
+        return;
+      }
+      if (s.key === 'email' && !isValidEmail(val)) {
+        wizardBubble('🤖 Ese e-mail no parece válido (ej. nombre@dominio.com). ' + s.ask);
+        return;
+      }
     }
     op.campos[s.key] = noSe ? '' : val;
     op.idx++;
@@ -1662,7 +1703,7 @@
             b.addEventListener('click', () => {
               /* PROHIBIDO abrir formularios manuales: las claves new-* arrancan
                  el flujo guiado en el chat; el resto solo navega a vistas */
-              if (PILL_COMMANDS[a.clave]) { firePill(a.clave); return; }
+              if (PILL_WIZARD[a.clave] || CONTACT_KEYS.indexOf(a.clave) >= 0) { firePill(a.clave); return; }
               const fn = ACTION_KEYS[a.clave];
               if (fn) { fn(); setOpen(false); }
             });
@@ -1702,5 +1743,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, PILL_WIZARD, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole };
 })(typeof window !== 'undefined' ? window : globalThis);
