@@ -688,17 +688,20 @@
       const findId = (list, name, keyFn) => {
         if (!name) return null;
         const n = String(name).toLowerCase().trim();
-        const hit = (list || []).find(x => keyFn(x).toLowerCase().trim() === n);
+        const hit = (list || []).find(x => {
+          const k = keyFn(x);
+          return k != null && String(k).toLowerCase().trim() === n;
+        });
         return hit ? hit.id : null;
       };
       /* Auto-asignación: si hay UNA sola obra activa, usarla sin preguntar */
       const autoWorkId = () => {
-        const activas = (d.works || []).filter(w => w.status === 'activa');
+        const activas = (d.works || []).filter(w => w.status === 'activa' && w.name);
         return activas.length === 1 ? activas[0].id : null;
       };
       const workName = (id) => {
         const w = (d.works || []).find(x => x.id === id);
-        return w ? w.name : '';
+        return (w && w.name) || '';
       };
       if (mod === 'gasto') {
         const amount = Number(c.monto);
@@ -1100,45 +1103,58 @@
      Reúne coincidencias por nombre completo Y por palabras y elige
      siempre el nombre más largo/específico (evita "Amoladora" vs "Amoladora angular"). */
   function findAssetMention(t) {
-    const assets = ((G.store.data && G.store.data.assets) || []).filter(a => a.status !== 'dado de baja');
+    const assets = ((G.store.data && G.store.data.assets) || []).filter(a => a.status !== 'dado de baja' && a.name);
     if (!assets.length) return null;
+    const ft = flatText(t);
     const excl = /^(obra|hoy|ayer|mañana|depósito|deposito|mantenimiento|taller|asignar|mover|dejé|deje|mandar|manda|mandá|ubicar|destinar|devolver|guardar|guardé|herramienta|máquina|maquina|equipo)$/;
-    const words = t.split(/\s+/).filter(w => w.length >= 4 && !excl.test(w));
+    const words = ft.split(/\s+/).filter(w => w.length >= 4 && !excl.test(w));
     const cand = [];
     assets.forEach(a => {
-      const parts = a.name.toLowerCase().split(/\s+/);
-      const sub = t.includes(a.name.toLowerCase());
+      const nm = flatText(a.name);
+      const parts = nm.split(/\s+/);
+      const sub = ft.includes(nm);
       const word = words.some(w => parts.some(p => p.length >= 4 && (p.startsWith(w) || w.startsWith(p))));
-      if (sub || word) cand.push(a.name);
+      if (sub || word) cand.push(String(a.name).trim());
     });
     if (!cand.length) return null;
     cand.sort((a, b) => b.length - a.length);
     return cand[0];
   }
-  /* Resuelve una mención textual a una obra existente (nombre o cliente) */
+  /* Normaliza texto para comparación: minúsculas y sin acentos */
+  function flatText(s) {
+    try { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+    catch (e) { return String(s || '').toLowerCase(); }
+  }
+  /* Resuelve una mención textual a una obra existente (nombre o cliente).
+     Blindado: ignora obras sin nombre para nunca devolver "undefined". */
   function findWorkMention(t) {
     const d = G.store.data || {};
-    const works = d.works || [];
+    const works = (d.works || []).filter(w => w && w.name && String(w.name).trim());
     if (!works.length) return null;
-    let hit = works.find(w => t.includes(w.name.toLowerCase()));
-    if (hit) return hit.name;
+    const ft = flatText(t);
+    const nm = w => flatText(w.name);
+    let hit = works.find(w => ft.includes(nm(w)) && nm(w).length >= 3);
+    if (hit) return String(hit.name).trim();
     /* "obra de Pablo Molina" → busca por el cliente de la obra */
     const cm = t.match(/obra\s+(?:de|del)\s+([a-záéíóúñ][\wáéíóúñ\s'-]*?)(?=\s*(?:hoy|ayer|mañana|para|,|\.|$))/i);
     if (cm) {
-      const frag = cm[1].trim().toLowerCase();
-      const cli = (d.contacts || []).find(c => c.name.toLowerCase().includes(frag) || frag.includes(c.name.toLowerCase()));
+      const frag = flatText(cm[1].trim());
+      const cli = (d.contacts || []).filter(c => c && c.name).find(c => {
+        const n = flatText(c.name);
+        return n.includes(frag) || frag.includes(n);
+      });
       if (cli) {
         const w = works.find(x => x.clientId === cli.id);
-        if (w) return w.name;
+        if (w) return String(w.name).trim();
       }
-      hit = works.find(w => w.name.toLowerCase().includes(frag) || frag.includes(w.name.toLowerCase()));
-      if (hit) return hit.name;
+      hit = works.find(w => nm(w).includes(frag) || frag.includes(nm(w)));
+      if (hit) return String(hit.name).trim();
     }
-    const words = t.split(/\s+/).filter(w => w.length >= 5 && !/^(obra|hoy|ayer|mañana|asignar|mover|dejé|deje|cobré|cobre|pagué|pague|gasté|gaste|compré|compre|depósito|deposito|mantenimiento)$/.test(w));
+    const words = ft.split(/\s+/).filter(w => w.length >= 5 && !/^(obra|hoy|ayer|mañana|asignar|mover|deje|cobre|pague|gaste|compre|deposito|mantenimiento)$/.test(w));
     for (const w of words) {
       /* Solo prefijos estrictos de palabras del nombre (evita falsos positivos) */
-      hit = works.find(x => x.name.toLowerCase().split(/\s+/).some(p => p.length >= 5 && p.startsWith(w)));
-      if (hit) return hit.name;
+      hit = works.find(x => nm(x).split(/\s+/).some(p => p.length >= 5 && p.startsWith(w)));
+      if (hit) return String(hit.name).trim();
     }
     return null;
   }
@@ -1621,23 +1637,24 @@
     });
     return emps.slice().sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0));
   }
-  /* Obra sugerida (Smart Default): foco de sesión o la de actividad más reciente */
+  /* Obra sugerida (Smart Default): foco de sesión o la de actividad más reciente.
+     Solo nombres válidos: jamás devuelve "undefined". */
   function suggestedWork() {
     const d = G.store.data || {};
-    const activas = (d.works || []).filter(w => w.status === 'activa');
+    const activas = (d.works || []).filter(w => w.status === 'activa' && w.name && String(w.name).trim());
     if (!activas.length) return null;
     if (sessionFocus && sessionFocus.obra) {
       const hit = activas.find(w => String(w.name).toLowerCase() === String(sessionFocus.obra).toLowerCase());
-      if (hit) return hit.name;
+      if (hit) return String(hit.name).trim();
     }
-    if (activas.length === 1) return activas[0].name;
+    if (activas.length === 1) return String(activas[0].name).trim();
     const fechas = {};
     const touch = (workId, date) => { if (workId && date && (!fechas[workId] || date > fechas[workId])) fechas[workId] = date; };
     (d.attendance || []).forEach(a => touch(a.hours && a.hours[0] && a.hours[0].workId, a.date));
     (d.expenses || []).forEach(x => touch(x.workId, x.date));
     (d.incomes || []).forEach(x => touch(x.workId, x.date));
     let best = null, bestDate = '';
-    activas.forEach(w => { if (fechas[w.id] && fechas[w.id] > bestDate) { bestDate = fechas[w.id]; best = w.name; } });
+    activas.forEach(w => { if (fechas[w.id] && fechas[w.id] > bestDate) { bestDate = fechas[w.id]; best = String(w.name).trim(); } });
     return best;
   }
   function wizardAskStep() {
@@ -1651,7 +1668,8 @@
     let buttons = s.buttons || [];
     let hint = '';
     if (s.worksList) {
-      const obras = ((G.store.data && G.store.data.works) || []).filter(w => w.status === 'activa');
+      /* El 100% de las obras activas con nombre válido: nunca "undefined" */
+      const obras = ((G.store.data && G.store.data.works) || []).filter(w => w.status === 'activa' && w.name && String(w.name).trim());
       if (!obras.length) {
         const pend = wizardBubble('⚠️ Todavía no tenés obras activas. Primero creá una obra: decime <b>"crear una obra"</b> y empezamos por ahí.');
         const wrap = document.createElement('div');
@@ -1665,7 +1683,7 @@
       /* Smart Default: la obra sugerida (foco reciente) va PRIMERA en 1 clic */
       const sug = suggestedWork();
       const orden = sug ? [sug].concat(obras.filter(w => w.name !== sug)) : obras;
-      buttons = orden.map(w => w.name);
+      buttons = orden.map(w => String(w.name).trim());
       if (sug) hint = '💡 Obra sugerida: <b>' + esc(sug) + '</b>';
     } else if (s.empsList) {
       const emps = ((G.store.data && G.store.data.employees) || []).filter(e => e.active !== false);
@@ -1703,9 +1721,9 @@
       buttons = assets.map(x => x.name + (x.location ? ' · en obra' : ' · depósito'));
       /* Los botones llevan el sufijo como texto, pero el valor capturado es el nombre */
     } else if (s.assignList) {
-      /* Destinos: depósito, mantenimiento y obras activas */
-      const obras = ((G.store.data && G.store.data.works) || []).filter(w => w.status === 'activa');
-      buttons = ['📦 En depósito', '🔧 En mantenimiento'].concat(obras.map(w => w.name));
+      /* Destinos: depósito, mantenimiento y TODAS las obras activas con nombre */
+      const obras = ((G.store.data && G.store.data.works) || []).filter(w => w.status === 'activa' && w.name && String(w.name).trim());
+      buttons = ['📦 En depósito', '🔧 En mantenimiento'].concat(obras.map(w => String(w.name).trim()));
     }
 
     const pend = wizardBubble((hint ? hint + '<br>' : '') + '🤖 ' + s.ask);
@@ -2199,5 +2217,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, PILL_WIZARD, suggestedWork, frequentEmployees, findAssetMention, findWorkMention, detectDestino, normFecha, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, PILL_WIZARD, suggestedWork, frequentEmployees, findAssetMention, findWorkMention, detectDestino, normFecha, flatText, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
 })(typeof window !== 'undefined' ? window : globalThis);

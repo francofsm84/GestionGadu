@@ -165,6 +165,18 @@ okk(AI.WIZARD_STEPS.herramienta.some(s => s.buttons && s.buttons.length), 'herra
 okk(AI.WIZARD_STEPS.agendar[0].buttons.length === 3, 'agendar · tipo con chips');
 okk(AI.WIZARD_STEPS.empleado.some(s => s.buttons && s.buttons.length >= 7), 'empleado · oficio con chips');
 
+console.log('== 11) Puente obras ↔ asistente: 100% de obras, sin undefined ==');
+const wCac = S.add('works', { name: 'Casa Ángel Cámara', code: 'OB-CAC', clientId: null, location: '', status: 'activa', budgetTotal: 0, advanceFisico: 0, startDate: S.todayISO(), endDate: '', description: '' });
+S.add('works', { name: undefined, code: 'OB-BAD', clientId: null, location: '', status: 'activa', budgetTotal: 0, advanceFisico: 0, startDate: S.todayISO(), endDate: '', description: '' });
+const iOk = await AI.execFormAction({ modulo: 'ingreso', campos: { monto: 20000, concepto: 'Adelanto', obra: 'Casa Ángel Cámara' } });
+okk(iOk && iOk.saved === true, 'ingreso vinculado a la obra correcta por nombre');
+const inc11 = S.data.incomes.find(x => x.amount === 20000);
+okk(!!inc11 && inc11.workId === wCac.id, 'workId correcto (jamás undefined)');
+okk(typeof AI.suggestedWork() === 'string' && AI.suggestedWork() !== 'undefined', 'obra sugerida nunca es undefined');
+okk(AI.findWorkMention('cobrar un adelanto para casa angel camara') === 'Casa Ángel Cámara', '"casa angel camara" (sin acentos) resuelve a la obra real');
+okk(AI.findWorkMention('obra que no existe en absoluto') === null, 'obra inexistente → null');
+okk(AI.flatText('Ángel Cámara') === 'angel camara', 'comparación sin acentos');
+
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }
