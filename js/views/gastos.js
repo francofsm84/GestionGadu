@@ -48,6 +48,7 @@
       state.tab = e.currentTarget.dataset.tab;
       state.cat = 'todas';
       state.work = 'todas';
+      state.sel = [];   // la selección en lote es por solapa: limpiar al cambiar
       view.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === state.tab));
       view.querySelector('#contentWrap').innerHTML = contentHTML();
       bindContent(view);

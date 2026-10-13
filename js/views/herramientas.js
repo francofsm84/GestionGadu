@@ -158,12 +158,18 @@
         '<div class="field"><label>Estado</label><select class="select" id="fStatus">' +
         S.ASSET_STATUS.map(s => '<option value="' + s + '"' + (a && a.status === s ? ' selected' : '') + '>' + (s === 'operativo' ? 'Operativo' : s === 'en reparación' ? 'En reparación' : 'Dado de baja') + '</option>').join('') +
         '</select></div>' +
-        '<div class="field"><label>Fecha de compra</label><input class="input" type="date" id="fDate" value="' + (a ? a.purchaseDate : S.todayISO()) + '"></div>' +
+        '<div class="field"><label>Fecha de compra (calendario)</label><input class="input" type="date" id="fDate" value="' + (a ? a.purchaseDate : S.todayISO()) + '"></div>' +
         '<div class="field"><label>Costo de compra ($) *</label><input class="input" type="number" id="fCost" min="0" step="1000" value="' + (a ? a.cost : '') + '" placeholder="0"></div>' +
         '<div class="field"><label>Proveedor</label><select class="select" id="fProv">' +
         UI.selectOptions(S.data.contacts.filter(c => c.type === 'proveedor').map(c => ({ v: c.id, l: c.name })), a ? a.supplierId : '', true, 'Sin proveedor') +
         '</select></div>' +
         '<div class="field"><label>Notas</label><input class="input" id="fNotes" value="' + UI.escapeHtml(a ? a.notes : '') + '" placeholder="Opcional"></div>' +
+        (!isEdit
+          ? '<div class="field span-2"><label>Impacto en el Libro Contable</label><select class="select" id="fImpacto">' +
+            '<option value="no" selected>Solo inventario (sin impacto contable)</option>' +
+            '<option value="si">Sumar al Libro Contable como inversión (gasto)</option>' +
+            '</select><span class="form-hint">Si lo sumás, la compra aparece en Contabilidad → Gastos con la categoría "Herramientas / Equipamiento" en la fecha elegida.</span></div>'
+          : '') +
         '</div>',
       footer: '<button class="btn btn-ghost" data-cancel>Cancelar</button><button class="btn btn-primary" data-save>' + (isEdit ? 'Guardar cambios' : 'Registrar activo') + '</button>',
     });
@@ -188,9 +194,20 @@
       } else {
         payload.maintenance = [];
         payload.location = null;
-        payload.usages = [{ from: S.todayISO(), workId: null, notes: 'Compra' }];
+        payload.usages = [{ from: payload.purchaseDate, workId: null, notes: 'Compra' }];
         S.add('assets', payload);
-        UI.toast('Activo registrado');
+        /* Impacto contable opcional: registra la compra como gasto de inversión */
+        if (m.panel.querySelector('#fImpacto').value === 'si') {
+          S.add('expenses', {
+            type: 'general', workId: null, date: payload.purchaseDate, amount: cost,
+            category: 'Herramientas / Equipamiento', providerId: payload.supplierId || null,
+            employeeId: null, expenseKind: null,
+            description: 'Compra de herramienta: ' + name, invoiceNumber: '', paymentMethod: 'Efectivo',
+          });
+          UI.toast('Activo registrado y sumado al Libro Contable');
+        } else {
+          UI.toast('Activo registrado (solo inventario)');
+        }
       }
       m.close();
       G.router.refresh();

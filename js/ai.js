@@ -91,7 +91,7 @@
       { key: 'nota', ask: '¿Alguna nota del movimiento? (si no, decime "no sé")' },
     ],
     agendar: [
-      { key: 'tipo', ask: '¿Qué tipo de compromiso es?', buttons: ['Visita', 'Entrega', 'Evento'] },
+      { key: 'tipo', ask: '¿Qué tipo de compromiso es?', buttons: ['Reunión', 'Visita', 'Entrega', 'Tarea', 'Evento'] },
       { key: 'fecha', ask: '¿Para qué día? (ej. mañana, 15/04, 2026-04-15)' },
       { key: 'titulo', ask: '¿Qué compromiso anotamos?' },
       { key: 'hora', ask: '¿A qué hora? (si no, decime "no sé")' },
@@ -847,15 +847,24 @@
         return { ok: true, label: 'herramienta ' + hname + ' → ' + dest + (cambiado ? '' : ' (ya estaba así)'), coll: 'assets', id: a ? a.id : aid };
       }
       if (mod === 'agendar') {
-        /* Agendar un compromiso (visita / entrega / evento) con fecha válida */
-        const tipo = /^entrega/.test(String(c.tipo || '')) ? 'entrega' : /^evento/.test(String(c.tipo || '')) ? 'evento' : 'visita';
+        /* Agendar un compromiso multirubro (reunión / visita / entrega /
+           tarea / evento) con fecha válida */
+        const tf = flatText(String(c.tipo || ''));
+        const tipo = /^reunion/.test(tf) ? 'reunion'
+          : /^visita/.test(tf) ? 'visita'
+          : /^entrega/.test(tf) ? 'entrega'
+          : /^tarea/.test(tf) ? 'tarea'
+          : /^evento/.test(tf) ? 'evento'
+          : 'visita';
         const fecha = normFecha(c.fecha);
         if (!fecha) return null;   // sin fecha válida no se agenda
         const titulo = String(c.titulo || '').trim();
         if (!titulo) return null;
         const creado = S.add('compromisos', {
-          fecha, hora: c.hora || '', tipo, titulo,
-          lugar: c.lugar || '', contactoId: null, notas: '', estado: 'pendiente',
+          fecha, hora: c.hora || '', horaFin: c.horaFin || '', tipo, titulo,
+          modalidad: c.modalidad || 'presencial',
+          lugar: c.lugar || '', enlace: c.enlace || '',
+          contactoId: null, notas: '', estado: 'pendiente',
         });
         return { ok: true, label: 'compromiso "' + titulo.slice(0, 40) + '" para el ' + fecha, coll: 'compromisos', id: creado.id };
       }
@@ -1250,8 +1259,13 @@
       return { modulo: 'asignar', campos: {} };
     }
     /* 0.56) Agendar compromisos: "agendar una visita mañana a la obra X" */
-    if (/agend[aá]|program[aá]|anot[aá]m[eé]?\s+(?:una? )?(?:visita|entrega|evento)|visita\s+(?:hoy|mañana|pasado)|entrega\s+(?:hoy|mañana|pasado|el\s)/.test(t)) {
-      const tipo = /entrega|entregar/.test(t) ? 'entrega' : /evento|reuni[oó]n|asado|inauguraci/.test(t) ? 'evento' : 'visita';
+    if (/agend[aá]|program[aá]|anot[aá]m[eé]?\s+(?:una? )?(?:visita|entrega|evento|reuni[oó]n|tarea)|visita\s+(?:hoy|mañana|pasado)|entrega\s+(?:hoy|mañana|pasado|el\s)/.test(t)) {
+      const tf = flatText(t);
+      const tipo = /entrega|entregar/.test(tf) ? 'entrega'
+        : /reunion/.test(tf) ? 'reunion'
+        : /tarea/.test(tf) ? 'tarea'
+        : /evento|asado|inauguraci/.test(tf) ? 'evento'
+        : 'visita';
       const fecha = normFecha(t);
       const lugar = findWorkMention(t);
       const campos = { tipo, titulo: text, hora: '' };
@@ -1914,7 +1928,7 @@
     if (s.key === 'fecha') {
       finalVal = normFecha(val) || val;
     } else if (s.key === 'tipo' && op.modulo === 'agendar') {
-      finalVal = val.toLowerCase();
+      finalVal = flatText(val);   // "Reunión" → "reunion": clave canónica del multirubro
     } else if ((s.key === 'monto' || s.key === 'tarifa' || s.key === 'costo' || s.key === 'presupuesto' || s.key === 'horas' || s.key === 'porcentaje')) {
       /* "4 hs" → "4" · "5000 pesos" → "5000" */
       finalVal = String(extractNumber(val));

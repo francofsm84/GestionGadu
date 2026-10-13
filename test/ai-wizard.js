@@ -162,7 +162,7 @@ okk(AI.WIZARD_STEPS.gasto.some(s => s.catsList), 'gasto · categoría con chips'
 okk(AI.WIZARD_STEPS.gasto.some(s => s.worksList), 'gasto · obra con chips');
 okk(AI.WIZARD_STEPS.ingreso.some(s => s.worksList), 'ingreso · obra con chips');
 okk(AI.WIZARD_STEPS.herramienta.some(s => s.buttons && s.buttons.length), 'herramienta · tipo con chips');
-okk(AI.WIZARD_STEPS.agendar[0].buttons.length === 3, 'agendar · tipo con chips');
+okk(AI.WIZARD_STEPS.agendar[0].buttons.length === 5 && JSON.stringify(AI.WIZARD_STEPS.agendar[0].buttons) === JSON.stringify(['Reunión', 'Visita', 'Entrega', 'Tarea', 'Evento']), 'agendar · tipo con chips multirubro');
 okk(AI.WIZARD_STEPS.empleado.some(s => s.buttons && s.buttons.length >= 7), 'empleado · oficio con chips');
 
 console.log('== 11) Puente obras ↔ asistente: 100% de obras, sin undefined ==');
