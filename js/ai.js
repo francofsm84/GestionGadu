@@ -344,7 +344,16 @@
       const lb = e.target && e.target.closest ? e.target.closest('[data-ledger]') : null;
       if (lb) { ledgerMenu = false; startWizard(lb.dataset.ledger, {}); return; }
       const tb = e.target && e.target.closest ? e.target.closest('[data-tools]') : null;
-      if (tb) { toolsMenu = false; startWizard(tb.dataset.tools === 'asignar' ? 'asignar' : tb.dataset.tools, {}); return; }
+      if (tb) {
+        toolsMenu = false;
+        if (tb.dataset.tools === 'ver') {
+          setOpen(false);
+          try { if (G.router && G.router.navigate) G.router.navigate('#/herramientas'); } catch (e2) {}
+          return;
+        }
+        startWizard(tb.dataset.tools === 'asignar' ? 'asignar' : tb.dataset.tools, {});
+        return;
+      }
       const ub = e.target && e.target.closest ? e.target.closest('[data-undo]') : null;
       if (ub) { undoSave(); return; }
       const rb = e.target && e.target.closest ? e.target.closest('[data-role]') : null;
@@ -916,11 +925,11 @@
     scrollToEnd();
   }
 
-  /* Submenú "Herramientas" → [Asignar] [Cargar] [Jornada] */
+  /* Submenú "Herramientas y Máquinas" → ver / cargar / asignar / jornada */
   function addToolsButtons(pend) {
     const wrap = document.createElement('div');
     wrap.className = 'ai-actions';
-    [['asignar', '📦 Asignar herramienta'], ['herramienta', '🛠️ Cargar herramienta'], ['jornada', '👷 Cargar jornada']].forEach(t => {
+    [['ver', '👁️ Ver herramientas'], ['herramienta', '🛠️ Cargar nueva herramienta'], ['asignar', '📦 Asignar herramienta'], ['jornada', '👷 Cargar jornada']].forEach(t => {
       const b = document.createElement('button');
       b.className = 'btn btn-soft btn-sm';
       b.textContent = t[1];
@@ -988,7 +997,7 @@
       { k: 'contabilidad', e: '💰', l: 'Contabilidad' },
       { k: 'hoy', e: '👷', l: '¿Quién trabajó hoy?' },
       { k: 'new-presupuesto', e: '📄', l: 'Nuevo presupuesto' },
-      { k: 'herramientas', e: '🛠️', l: 'Herramientas / Jornada' },
+      { k: 'herramientas', e: '🛠️', l: 'Herramientas y Máquinas' },
     ];
     const admin = isAdminMode();
     builtMode = admin ? 'admin' : 'usuario';
@@ -1824,7 +1833,7 @@
       return;
     }
 
-    /* ===== 1e) Submenú Herramientas abierto ===== */
+    /* ===== 1e) Submenú Herramientas y Máquinas abierto ===== */
     if (toolsMenu) {
       const mt = msg.toLowerCase();
       if (/^(cancelar|cancela|salir|nada|no)\b/.test(mt)) {
@@ -1833,10 +1842,17 @@
         busy = false;
         return;
       }
+      if (/^(ver|ver herramientas)$/.test(mt)) {
+        toolsMenu = false;
+        setOpen(false);
+        try { if (G.router && G.router.navigate) G.router.navigate('#/herramientas'); } catch (e) {}
+        busy = false;
+        return;
+      }
       if (/^(asignar|asignar herramienta|mover herramienta)$/.test(mt)) { toolsMenu = false; startWizard('asignar', {}); busy = false; return; }
       if (/^(cargar|nueva|nuevo|alta|herramienta)$/.test(mt)) { toolsMenu = false; startWizard('herramienta', {}); busy = false; return; }
       if (/^(jornada)$/.test(mt)) { toolsMenu = false; startWizard('jornada', {}); busy = false; return; }
-      const pend = bubble('Tocá un botón: <b>Asignar herramienta</b>, <b>Cargar herramienta</b> o <b>Cargar jornada</b>.', 'bot');
+      const pend = bubble('Tocá un botón: <b>Ver herramientas</b>, <b>Cargar nueva herramienta</b>, <b>Asignar herramienta</b> o <b>Cargar jornada</b>.', 'bot');
       log.appendChild(pend);
       addToolsButtons(pend);
       scrollToEnd();

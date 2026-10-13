@@ -8,7 +8,9 @@
   const G = root.GADU, S = G.store, UI = G.ui;
   const state = { q: '', cat: 'todas' };
 
-  G.router.add('herramientas', 'herramientas', 'Herramientas y equipos', 'Inventario, ubicación, mantenimiento y rendimiento de tus equipos', render);
+  G.router.add('herramientas', 'herramientas', 'Herramientas y Máquinas', 'Inventario, ubicación, mantenimiento y rendimiento de tus equipos', render);
+  /* Acceso directo "Cargar nueva herramienta" desde el menú lateral */
+  G.actions.newAsset = () => openAssetModal();
 
   const ST_TONE = { 'operativo': ['Operativo', 'success'], 'en reparación': ['En reparación', 'warning'], 'dado de baja': ['Dado de baja', 'neutral'] };
   const CAT_ICON = {
@@ -66,7 +68,7 @@
       S.ASSET_CATS.map(c => '<option value="' + c + '"' + (state.cat === c ? ' selected' : '') + '>' + c + '</option>').join('') +
       '</select>' +
       '<div class="grow"></div>' +
-      '<button class="btn btn-primary" id="btnNew">' + UI.icon('plus', 16) + 'Nuevo activo</button>' +
+      '<button class="btn btn-primary" id="btnNew">' + UI.icon('plus', 16) + 'Cargar nueva herramienta</button>' +
       '</div>' +
       '<div id="listWrap">' + listHTML(filtered()) + '</div>';
 
@@ -146,7 +148,7 @@
   function openAssetModal(a) {
     const isEdit = !!a;
     const m = UI.openModal({
-      title: isEdit ? 'Editar activo' : 'Nuevo activo / herramienta',
+      title: isEdit ? 'Editar herramienta' : 'Cargar nueva herramienta',
       body:
         '<div class="grid-form">' +
         '<div class="field span-2"><label>Nombre *</label><input class="input" id="fName" value="' + UI.escapeHtml(a ? a.name : '') + '" placeholder="Ej.: Hormigonera 130 L, Amoladora…"></div>' +

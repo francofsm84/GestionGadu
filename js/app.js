@@ -66,10 +66,13 @@
       if (r) {
         const active = r === route.key || (route.key === 'obra' && r === 'obras') || (route.key === 'empleado' && r === 'empleados');
         a.classList.toggle('active', active);
-        /* La ruta activa destapa su grupo del acordeón (estructura visual) */
+        /* La ruta activa destapa su grupo y todas las categorías contenedoras */
         if (active) {
-          const g = a.closest('.nav-group');
-          if (g) g.classList.add('open');
+          let g = a.closest('.nav-group');
+          while (g) {
+            g.classList.add('open');
+            g = g.parentElement ? g.parentElement.closest('.nav-group') : null;
+          }
         }
       }
     });
@@ -164,7 +167,7 @@
     document.querySelectorAll('.nav-link[data-route]').forEach(a => a.addEventListener('click', closeMobileSidebar));
     bind('btnBackup', 'click', closeMobileSidebar);
 
-    /* ---------- Acordeón del menú: categorías desplegables ---------- */
+    /* ---------- Acordeón del menú: categorías desplegables (con subgrupos) ---------- */
     document.querySelectorAll('.nav-group-head').forEach(h => {
       h.addEventListener('click', () => {
         const g = h.closest('.nav-group');
@@ -177,17 +180,40 @@
           return;
         }
         const estabaAbierto = g.classList.contains('open');
-        /* Acordeón clásico: una categoría abierta a la vez */
-        document.querySelectorAll('.nav-group.open').forEach(x => { if (x !== g) x.classList.remove('open'); });
+        /* Acordeón clásico: cierra los hermanos dentro del MISMO contenedor,
+           sin cerrar el grupo padre de un subgrupo anidado */
+        const contenedor = g.parentElement ? g.parentElement.closest('.nav-group') : null;
+        document.querySelectorAll('.nav-group.open').forEach(x => {
+          if (x === g) return;
+          if (contenedor) {
+            if (x === contenedor) return;        // nunca cerrar el contenedor
+            if (!contenedor.contains(x)) return; // ni grupos de otras categorías
+          }
+          x.classList.remove('open');
+        });
         g.classList.toggle('open', !estabaAbierto);
       });
     });
-    /* La categoría de la ruta actual arranca abierta */
+    /* La ruta activa destapa su subgrupo Y todas sus categorías contenedoras */
     const activo = document.querySelector('.nav-link[data-route].active');
     if (activo) {
-      const g = activo.closest('.nav-group');
-      if (g) g.classList.add('open');
+      let g = activo.closest('.nav-group');
+      while (g) {
+        g.classList.add('open');
+        g = g.parentElement ? g.parentElement.closest('.nav-group') : null;
+      }
     }
+    /* "Cargar nueva herramienta" desde el menú: abre el alta de equipamiento */
+    document.querySelectorAll('[data-nueva-herramienta]').forEach(el => {
+      el.addEventListener('click', e => {
+        e.preventDefault();
+        closeMobileSidebar();
+        try {
+          if (G.actions && G.actions.newAsset) { G.actions.newAsset(); return; }
+        } catch (err) { console.error(err); }
+        try { G.router.navigate('#/herramientas'); } catch (err) { console.error(err); }
+      });
+    });
   }
 
   /* ---------- Topbar ---------- */

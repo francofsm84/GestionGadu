@@ -152,8 +152,12 @@ button { font-family: inherit; }
 .nav-group.open .nav-group-body { grid-template-rows: 1fr; }
 .nav-group-inner { overflow: hidden; min-height: 0; }
 .nav-group-inner .nav-link { padding-left: 44px; font-size: 13px; font-weight: 500; }
+/* Subgrupo anidado (ej. Herramientas y Máquinas dentro de Recursos) */
+.nav-group-inner > .nav-group > .nav-group-head { padding-left: 28px; font-size: 13px; font-weight: 600; }
+.nav-group-inner > .nav-group > .nav-group-body > .nav-group-inner > .nav-link { padding-left: 62px; }
 /* Sub-enlace activo: la barra indicadora se mantiene en el borde de su grupo */
 .nav-group-inner .nav-link.active::before { left: 32px; }
+.nav-group-inner > .nav-group > .nav-group-body .nav-link.active::before { left: 50px; }
 .sidebar-foot { border-top: none; padding: 0; }
 /* Botón de colapsar estilo Canva: circular, centrado verticalmente en el borde derecho */
 #btnCollapse {
