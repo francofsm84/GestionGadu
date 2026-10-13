@@ -21,6 +21,7 @@ const noMock = [
   'gadux-scenario.js',
   'gadux-simulation.js',
   'licencia-smoke.js',
+  'onboarding-smoke.js',
   'css-check.js',
 ];
 

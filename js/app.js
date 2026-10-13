@@ -271,6 +271,7 @@
         '<button class="btn btn-soft-info" id="bPull">' + UI.icon('download') + 'Descargar mis datos</button>' +
         '<button class="btn btn-soft" id="bCloudTest">' + UI.icon('activity') + 'Probar conexión</button>' +
         '</div>' +
+        '<button class="btn btn-soft" id="bProfile" style="margin-top:10px">' + UI.icon('user', 15) + 'Completar mi perfil (onboarding)</button>' +
         '<label class="form-hint" style="display:block;margin-top:10px"><input type="checkbox" id="cAuto"' + (cfg.autoPush ? ' checked' : '') + ' style="accent-color:var(--primary)"> Sincronizar automáticamente cada vez que guardo</label>' +
         '<p class="form-hint" id="cloudStatus" style="margin-top:8px"></p>' +
         '<button class="btn btn-danger" id="bLogout" style="margin-top:10px">' + UI.icon('log-out', 15) + 'Cerrar sesión</button>' +
@@ -358,13 +359,16 @@
       S.save();
       if (e.target.checked) UI.toast('Sincronización automática activada', 'info');
     });
+    m.panel.querySelector('#bProfile').addEventListener('click', () => {
+      m.close();
+      try { if (G.onboarding && G.onboarding.open) G.onboarding.open(); } catch (e) {}
+    });
     m.panel.querySelector('#bCloudTest').addEventListener('click', async () => {
       setStatus('Probando conexión…');
       try {
         await G.sync.test();
         setStatus('✅ Conexión OK: todo listo para sincronizar.', true);
-      } catch (err) {
-        setStatus('❌ No se pudo conectar: ' + ((err && err.message) || err), false);
+      } catch (err) {        setStatus('❌ No se pudo conectar: ' + ((err && err.message) || err), false);
       }
     });
     m.panel.querySelector('#bPush').addEventListener('click', async () => {
@@ -892,6 +896,10 @@
     renderGlobalBanner();
     const pi = planInfo();
     if (pi.locked) { renderLock(); return; }
+
+    /* Onboarding "Antes de arrancar": solo usuarios nuevos sin datos.
+       Nunca bloquea el Dashboard (modal descartable sobre la app). */
+    try { if (G.onboarding && G.onboarding.maybeShow) G.onboarding.maybeShow(); } catch (e) {}
 
     const navAdmin = document.getElementById('navAdmin');
     if (navAdmin) navAdmin.hidden = !G.plan.isAdmin();
