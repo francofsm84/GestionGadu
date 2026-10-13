@@ -100,7 +100,7 @@
     jornada: [
       { key: 'empleado', ask: '¿A qué empleado le cargamos la jornada?', empsList: true },
       { key: 'obra', ask: '¿En qué obra trabajó?', worksList: true },
-      { key: 'horas', ask: '¿Cuántas horas trabajó? (ej. 8)' },
+      { key: 'horas', ask: '¿Cuántas horas trabajó?', buttons: ['4 hs', '8 hs'] },
     ],
   };
   /* Campos CLAVE obligatorios: sin ellos NUNCA se guarda (ni tilde verde) */
@@ -393,6 +393,12 @@
       if (rb) {
         const hostEl = rb.closest('.ai-msg') || rb.parentElement || rb;
         chooseRole(rb.dataset.role, hostEl);
+        return;
+      }
+      const fb = e.target && e.target.closest ? e.target.closest('[data-focus-input]') : null;
+      if (fb) {
+        /* "Escribir horas": enfoca el input del chat para tipear libremente */
+        try { if (input && input.focus) input.focus(); } catch (e2) {}
         return;
       }
       const b = e.target && e.target.closest ? e.target.closest('[data-wiz]') : null;
@@ -811,7 +817,7 @@
       if (mod === 'jornada') {
         const empId = c.empleado ? findId(d.employees, c.empleado, x => ((x.firstName || '') + ' ' + (x.lastName || '')).trim()) : null;
         const workId = c.obra ? findId(d.works, c.obra, x => workLabel(x)) : null;
-        const horas = Number(c.horas);
+        const horas = extractNumber(c.horas);   // acepta "8", "8 hs", "ocho horas y media" no, solo números
         if (!empId || !workId || !(horas > 0)) return null;   // empleado, obra y horas obligatorios
         const creado = S.add('attendance', { employeeId: empId, date: today, status: 'presente', hours: [{ workId, hours: horas }], notes: '' });
         return { ok: true, label: 'jornada de ' + c.empleado + ' (' + horas + 'h en ' + c.obra + ')', coll: 'attendance', id: creado.id };
@@ -1787,6 +1793,15 @@
       b.className = 'btn btn-soft btn-sm'; b.textContent = lb;
       b.dataset.wiz = lb; wrap.appendChild(b);
     });
+    /* Paso de horas: opción "Escribir horas" que enfoca el input del chat
+       (ingreso manual libre de la cantidad) */
+    if (s.key === 'horas') {
+      const fb = document.createElement('button');
+      fb.className = 'btn btn-soft btn-sm';
+      fb.textContent = '✍️ Escribir horas';
+      fb.dataset.focusInput = '1';
+      wrap.appendChild(fb);
+    }
     /* Sin botón "Saltear": todos los pasos se responden (o se cancela) */
     const cx = document.createElement('button');
     cx.className = 'btn btn-soft btn-sm'; cx.textContent = 'Cancelar';
@@ -1876,6 +1891,9 @@
       finalVal = normFecha(val) || val;
     } else if (s.key === 'tipo' && op.modulo === 'agendar') {
       finalVal = val.toLowerCase();
+    } else if ((s.key === 'monto' || s.key === 'tarifa' || s.key === 'costo' || s.key === 'presupuesto' || s.key === 'horas' || s.key === 'porcentaje')) {
+      /* "4 hs" → "4" · "5000 pesos" → "5000" */
+      finalVal = String(extractNumber(val));
     }
     op.campos[s.key] = noSe ? '' : finalVal;
     op.idx++;

@@ -306,6 +306,24 @@ function fail(msg) { console.error('✘ FALLO:', msg); process.exit(1); }
   if (!ingH) fail('el ingreso con concepto tocado no se guardó');
   console.log('  ✔ ingreso guardado con tilde verde (concepto elegido por chip)');
 
+  /* ============ FLUJO I: botones rápidos de horas (4 hs / 8 hs) ============ */
+  console.log('== I) Botones rápidos de horas de la jornada ==');
+  G.auth.SUPABASE_URL = 'http://localhost:9333';
+  AI._send('cargar una jornada');
+  if (!AI._pending() || AI._pending().modulo !== 'jornada') fail('no arrancó el wizard de jornada');
+  AI._wiz('Jorge Pérez');   // chip de empleado
+  AI._wiz('Obra E2E');      // chip de obra
+  AI._wiz('4 hs');          // botón rápido de horas
+  const t9 = Date.now();
+  while (Date.now() - t9 < 4000) {
+    const ult = log.children[log.children.length - 1];
+    if (ult && ult.innerHTML.indexOf('ai-success') >= 0) break;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  const jI = S.data.attendance.find(x => x.employeeId && x.hours && x.hours[0] && x.hours[0].hours === 4 && x.hours[0].workId === obra.id);
+  if (!jI) fail('las horas tocadas (4 hs) no se registraron correctamente');
+  console.log('  ✔ tocar [4 hs] registra la jornada con 4 horas vinculadas a la obra');
+
   console.log('\n──────────────────────────');
   console.log('✔ AI E2E PASADO — persistencia verificada de punta a punta');
   process.exit(0);

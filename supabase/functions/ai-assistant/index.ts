@@ -107,23 +107,32 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
   try {
-    const { message, context, mode, stream } = await req.json();
+    const { message, context, mode, stream, userId: providedUserId, service } = await req.json();
     const auth = req.headers.get("authorization") || "";
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-    // 1) Validar la sesión de Supabase (usuario autenticado)
-    const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: { apikey: anonKey, Authorization: auth },
-    });
-    if (!userRes.ok) {
-      return new Response(JSON.stringify({ error: "No autorizado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // 1) Validar la sesión de Supabase (usuario autenticado).
+    //    Modo servidor (conector de WhatsApp / omnicanal): llama con la service
+    //    role y el userId explícito — mismo motor, distinto canal. La web sigue
+    //    usando su token de sesión y no cambia en nada.
+    let userId = "";
+    if (service === true && serviceKey && auth === `Bearer ${serviceKey}` && typeof providedUserId === "string" && providedUserId) {
+      userId = providedUserId;
+    } else {
+      const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+        headers: { apikey: anonKey, Authorization: auth },
       });
+      if (!userRes.ok) {
+        return new Response(JSON.stringify({ error: "No autorizado" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const user = await userRes.json();
+      userId = user.id;
     }
-    const user = await userRes.json();
-    const userId = user.id;
 
     // Modo COO Virtual: enriquecer el contexto con métricas reales del SaaS
     let finalContext = context || "";

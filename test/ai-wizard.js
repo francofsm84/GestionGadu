@@ -202,6 +202,14 @@ okk(chips[0] === sug13, 'el primer botón es la obra sugerida con su texto real'
 okk(chips.indexOf('casa angel camara') >= 0, '"casa angel camara" presente entre los chips');
 okk(chips[0] !== '', 'primer botón no vacío (regresión del bug del botón transparente)');
 
+console.log('== 14) Botones rápidos de horas (jornada) ==');
+const stHoras = AI.WIZARD_STEPS.jornada.find(s => s.key === 'horas');
+okk(!!stHoras && JSON.stringify(stHoras.buttons) === JSON.stringify(['4 hs', '8 hs']), 'paso horas con botones rápidos [4 hs] [8 hs]');
+const rJ4 = await AI.execFormAction({ modulo: 'jornada', campos: { empleado: 'Jorge el Flaco', obra: 'Norma Molina', horas: '4 hs' } });
+okk(rJ4 && rJ4.saved === true, 'horas "4 hs" (botón) se aceptan y guardan');
+const j4 = S.data.attendance.find(x => x.hours && x.hours[0] && x.hours[0].hours === 4);
+okk(!!j4, 'el valor registrado es 4 (número, no texto)');
+
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }
