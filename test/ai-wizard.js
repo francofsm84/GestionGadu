@@ -177,6 +177,17 @@ okk(AI.findWorkMention('cobrar un adelanto para casa angel camara') === 'Casa Á
 okk(AI.findWorkMention('obra que no existe en absoluto') === null, 'obra inexistente → null');
 okk(AI.flatText('Ángel Cámara') === 'angel camara', 'comparación sin acentos');
 
+console.log('== 12) workLabel: todas las variantes del nombre de obra ==');
+okk(AI.workLabel({ name: 'Obra A' }) === 'Obra A', 'name → texto');
+okk(AI.workLabel({ nombre: 'Obra B' }) === 'Obra B', 'nombre → texto');
+okk(AI.workLabel({ titulo: 'Obra C' }) === 'Obra C', 'titulo → texto');
+okk(AI.workLabel({ nombreObra: 'Obra D' }) === 'Obra D', 'nombreObra → texto');
+okk(AI.workLabel({}) === '', 'sin propiedad → vacío (jamás "undefined")');
+const wLeg = S.add('works', { nombre: 'Casa Angel Camara', code: 'OB-2026-004', clientId: null, location: '', status: 'activa', budgetTotal: 0, advanceFisico: 0, startDate: S.todayISO(), endDate: '', description: '' });
+const iLeg = await AI.execFormAction({ modulo: 'ingreso', campos: { monto: 5000, concepto: 'Cobro', obra: 'Casa Angel Camara' } });
+const incLeg = S.data.incomes.find(x => x.amount === 5000);
+okk(iLeg && iLeg.saved === true && !!incLeg && incLeg.workId === wLeg.id, 'obra con propiedad `nombre` (legacy) vincula el ingreso al ID correcto');
+
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }

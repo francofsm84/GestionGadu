@@ -152,7 +152,7 @@
         const gastado = exps.filter(e => e.workId === w.id).reduce((a, b) => a + (Number(b.amount) || 0), 0);
         const presup = Number(w.budgetTotal) || 0;
         const pend = Math.max(0, presup - cobrado);
-        return w.name + ' (cobrado $' + cobrado + ', gastado $' + gastado + (presup ? ', pendiente por cobrar $' + pend : '') + ')';
+        return workLabel(w) + ' (cobrado $' + cobrado + ', gastado $' + gastado + (presup ? ', pendiente por cobrar $' + pend : '') + ')';
       });
       s += ' Obras y saldos: ' + ws.join('; ') + '.';
     }
@@ -696,12 +696,12 @@
       };
       /* Auto-asignación: si hay UNA sola obra activa, usarla sin preguntar */
       const autoWorkId = () => {
-        const activas = (d.works || []).filter(w => w.status === 'activa' && w.name);
+        const activas = (d.works || []).filter(w => w.status === 'activa' && workLabel(w));
         return activas.length === 1 ? activas[0].id : null;
       };
       const workName = (id) => {
         const w = (d.works || []).find(x => x.id === id);
-        return (w && w.name) || '';
+        return workLabel(w);
       };
       if (mod === 'gasto') {
         const amount = Number(c.monto);
@@ -710,7 +710,7 @@
         if (!cat) return null;   // categoría obligatoria (validación estricta)
         const desc = c.concepto || cat;
         const autoId = autoWorkId();
-        const workId = c.obra ? findId(d.works, c.obra, x => x.name) : autoId;
+        const workId = c.obra ? findId(d.works, c.obra, x => workLabel(x)) : autoId;
         /* Validación estricta: si hay obras activas y el gasto no está asignado,
            NO guardar como general en silencio → preguntar la obra en el chat */
         if (!workId && (d.works || []).some(w => w.status === 'activa')) return null;
@@ -763,7 +763,7 @@
         const amount = Number(c.monto);
         if (!(amount > 0)) return null;
         const autoId = autoWorkId();
-        const workId = c.obra ? findId(d.works, c.obra, x => x.name) : autoId;
+        const workId = c.obra ? findId(d.works, c.obra, x => workLabel(x)) : autoId;
         if (!workId) return null;   // sin obra única ni nombre → abrir formulario
         const creado = S.add('incomes', { workId, clientId: null, date: today, amount, concept: c.concepto || 'Cobro', incomeKind: 'pago', method: (S.METODOS && S.METODOS[0]) || 'Efectivo', reference: '', notes: '' });
         return { ok: true, label: 'ingreso de $' + amount + ' en ' + (workName(workId) || c.obra), coll: 'incomes', id: creado.id };
@@ -771,7 +771,7 @@
       if (mod === 'presupuesto') {
         const name = c.nombre || c.concepto || '';
         if (!name) return null;
-        const workId = c.obra ? findId(d.works, c.obra, x => x.name) : autoWorkId();
+        const workId = c.obra ? findId(d.works, c.obra, x => workLabel(x)) : autoWorkId();
         const total = Number(c.monto) || Number(c.presupuesto) || 0;
         const creado = S.add('budgets', { code: (S.nextCode ? S.nextCode('PR', 'budgets') : ''), clientId: null, workId: workId || null, name, date: today, validUntil: '', status: 'borrador', items: [], discount: 0, subtotal: total, total, notes: '' });
         return { ok: true, label: 'presupuesto ' + name, coll: 'budgets', id: creado.id };
@@ -784,7 +784,7 @@
       }
       if (mod === 'jornada') {
         const empId = c.empleado ? findId(d.employees, c.empleado, x => ((x.firstName || '') + ' ' + (x.lastName || '')).trim()) : null;
-        const workId = c.obra ? findId(d.works, c.obra, x => x.name) : null;
+        const workId = c.obra ? findId(d.works, c.obra, x => workLabel(x)) : null;
         const horas = Number(c.horas);
         if (!empId || !workId || !(horas > 0)) return null;   // empleado, obra y horas obligatorios
         const creado = S.add('attendance', { employeeId: empId, date: today, status: 'presente', hours: [{ workId, hours: horas }], notes: '' });
@@ -806,7 +806,7 @@
           cambiado = S.setAssetStatus(aid, 'en reparación', note || 'A mantenimiento') || cambiado;
           cambiado = S.moveAsset(aid, null, note || 'A mantenimiento') || cambiado;
         } else {
-          const wid = findId(d.works, dest, x => x.name);
+          const wid = findId(d.works, dest, x => workLabel(x));
           if (!wid) return null;
           cambiado = S.moveAsset(aid, wid, note || 'Asignada a la obra') || cambiado;
           cambiado = S.setAssetStatus(aid, 'operativo', note || 'Asignada a la obra') || cambiado;
@@ -1125,16 +1125,23 @@
     try { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
     catch (e) { return String(s || '').toLowerCase(); }
   }
+  /* Nombre de obra tolerante a TODAS las variaciones de la propiedad
+     (name / nombre / titulo / nombreObra): jamás devuelve "undefined" */
+  function workLabel(w) {
+    if (!w) return '';
+    const v = w.name || w.nombre || w.titulo || w.nombreObra || w.nombre_obra || '';
+    return String(v).trim();
+  }
   /* Resuelve una mención textual a una obra existente (nombre o cliente).
      Blindado: ignora obras sin nombre para nunca devolver "undefined". */
   function findWorkMention(t) {
     const d = G.store.data || {};
-    const works = (d.works || []).filter(w => w && w.name && String(w.name).trim());
+    const works = (d.works || []).filter(w => w && workLabel(w));
     if (!works.length) return null;
     const ft = flatText(t);
-    const nm = w => flatText(w.name);
+    const nm = w => flatText(workLabel(w));
     let hit = works.find(w => ft.includes(nm(w)) && nm(w).length >= 3);
-    if (hit) return String(hit.name).trim();
+    if (hit) return workLabel(hit);
     /* "obra de Pablo Molina" → busca por el cliente de la obra */
     const cm = t.match(/obra\s+(?:de|del)\s+([a-záéíóúñ][\wáéíóúñ\s'-]*?)(?=\s*(?:hoy|ayer|mañana|para|,|\.|$))/i);
     if (cm) {
@@ -1145,16 +1152,16 @@
       });
       if (cli) {
         const w = works.find(x => x.clientId === cli.id);
-        if (w) return String(w.name).trim();
+        if (w) return workLabel(w);
       }
       hit = works.find(w => nm(w).includes(frag) || frag.includes(nm(w)));
-      if (hit) return String(hit.name).trim();
+      if (hit) return workLabel(hit);
     }
     const words = ft.split(/\s+/).filter(w => w.length >= 5 && !/^(obra|hoy|ayer|mañana|asignar|mover|deje|cobre|pague|gaste|compre|deposito|mantenimiento)$/.test(w));
     for (const w of words) {
       /* Solo prefijos estrictos de palabras del nombre (evita falsos positivos) */
       hit = works.find(x => nm(x).split(/\s+/).some(p => p.length >= 5 && p.startsWith(w)));
-      if (hit) return String(hit.name).trim();
+      if (hit) return workLabel(hit);
     }
     return null;
   }
@@ -1291,8 +1298,9 @@
       }
     });
     (d.works || []).forEach(w => {
-      if (has(w.name)) {
-        out.push({ tipo: 'Obra', nombre: w.name, detail: (w.status || '') + (w.location ? ' · ' + w.location : '') + (w.budgetTotal ? ' · presupuesto $' + w.budgetTotal : ''), key: 'obras' });
+      const lbl = workLabel(w);
+      if (has(lbl)) {
+        out.push({ tipo: 'Obra', nombre: lbl, detail: (w.status || '') + (w.location ? ' · ' + w.location : '') + (w.budgetTotal ? ' · presupuesto $' + w.budgetTotal : ''), key: 'obras' });
       }
     });
     /* Cobertura completa: ingresos, gastos, presupuestos y seguros */
@@ -1638,23 +1646,23 @@
     return emps.slice().sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0));
   }
   /* Obra sugerida (Smart Default): foco de sesión o la de actividad más reciente.
-     Solo nombres válidos: jamás devuelve "undefined". */
+     Tolera todas las variantes del nombre: jamás devuelve "undefined". */
   function suggestedWork() {
     const d = G.store.data || {};
-    const activas = (d.works || []).filter(w => w.status === 'activa' && w.name && String(w.name).trim());
+    const activas = (d.works || []).filter(w => w.status === 'activa' && workLabel(w));
     if (!activas.length) return null;
     if (sessionFocus && sessionFocus.obra) {
-      const hit = activas.find(w => String(w.name).toLowerCase() === String(sessionFocus.obra).toLowerCase());
-      if (hit) return String(hit.name).trim();
+      const hit = activas.find(w => flatText(workLabel(w)) === flatText(sessionFocus.obra));
+      if (hit) return workLabel(hit);
     }
-    if (activas.length === 1) return String(activas[0].name).trim();
+    if (activas.length === 1) return workLabel(activas[0]);
     const fechas = {};
     const touch = (workId, date) => { if (workId && date && (!fechas[workId] || date > fechas[workId])) fechas[workId] = date; };
     (d.attendance || []).forEach(a => touch(a.hours && a.hours[0] && a.hours[0].workId, a.date));
     (d.expenses || []).forEach(x => touch(x.workId, x.date));
     (d.incomes || []).forEach(x => touch(x.workId, x.date));
     let best = null, bestDate = '';
-    activas.forEach(w => { if (fechas[w.id] && fechas[w.id] > bestDate) { bestDate = fechas[w.id]; best = String(w.name).trim(); } });
+    activas.forEach(w => { if (fechas[w.id] && fechas[w.id] > bestDate) { bestDate = fechas[w.id]; best = workLabel(w); } });
     return best;
   }
   function wizardAskStep() {
@@ -1668,8 +1676,8 @@
     let buttons = s.buttons || [];
     let hint = '';
     if (s.worksList) {
-      /* El 100% de las obras activas con nombre válido: nunca "undefined" */
-      const obras = ((G.store.data && G.store.data.works) || []).filter(w => w.status === 'activa' && w.name && String(w.name).trim());
+      /* El 100% de las obras activas con nombre válido (name/nombre/titulo/nombreObra) */
+      const obras = ((G.store.data && G.store.data.works) || []).filter(w => w.status === 'activa' && workLabel(w));
       if (!obras.length) {
         const pend = wizardBubble('⚠️ Todavía no tenés obras activas. Primero creá una obra: decime <b>"crear una obra"</b> y empezamos por ahí.');
         const wrap = document.createElement('div');
@@ -1682,8 +1690,8 @@
       }
       /* Smart Default: la obra sugerida (foco reciente) va PRIMERA en 1 clic */
       const sug = suggestedWork();
-      const orden = sug ? [sug].concat(obras.filter(w => w.name !== sug)) : obras;
-      buttons = orden.map(w => String(w.name).trim());
+      const orden = sug ? [sug].concat(obras.filter(w => workLabel(w) !== sug)) : obras;
+      buttons = orden.map(w => workLabel(w));
       if (sug) hint = '💡 Obra sugerida: <b>' + esc(sug) + '</b>';
     } else if (s.empsList) {
       const emps = ((G.store.data && G.store.data.employees) || []).filter(e => e.active !== false);
@@ -1722,8 +1730,8 @@
       /* Los botones llevan el sufijo como texto, pero el valor capturado es el nombre */
     } else if (s.assignList) {
       /* Destinos: depósito, mantenimiento y TODAS las obras activas con nombre */
-      const obras = ((G.store.data && G.store.data.works) || []).filter(w => w.status === 'activa' && w.name && String(w.name).trim());
-      buttons = ['📦 En depósito', '🔧 En mantenimiento'].concat(obras.map(w => String(w.name).trim()));
+      const obras = ((G.store.data && G.store.data.works) || []).filter(w => w.status === 'activa' && workLabel(w));
+      buttons = ['📦 En depósito', '🔧 En mantenimiento'].concat(obras.map(w => workLabel(w)));
     }
 
     const pend = wizardBubble((hint ? hint + '<br>' : '') + '🤖 ' + s.ask);
@@ -2217,5 +2225,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, PILL_WIZARD, suggestedWork, frequentEmployees, findAssetMention, findWorkMention, detectDestino, normFecha, flatText, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, PILL_WIZARD, suggestedWork, frequentEmployees, findAssetMention, findWorkMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
 })(typeof window !== 'undefined' ? window : globalThis);
