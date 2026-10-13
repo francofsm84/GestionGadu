@@ -760,11 +760,17 @@ canvas.chart { min-width: 0; max-width: 100%; }
   .user-cluster #btnUser { font-size: 12px; padding: 3px 9px; max-width: 110px; }
 }
 @media (max-width: 640px) {
-  /* Herramientas y Máquinas: acciones grandes, apiladas y fáciles de tocar */
+  /* Herramientas y Máquinas: tarjeta ajustada al ancho del celular */
+  .asset-card { min-width: 0; width: 100%; overflow-wrap: break-word; }
+  /* Métricas en parrilla 2×2: nunca se salen del recuadro */
+  .asset-stats { flex-wrap: wrap; gap: 8px 12px; }
+  .asset-stats span { flex: 1 1 40%; min-width: 0; overflow-wrap: break-word; }
+  /* Acciones en parrilla de 2 columnas; Mant. ocupa todo el ancho */
   .asset-foot { flex-wrap: wrap; gap: 8px; }
-  .asset-foot .btn { flex: 1 1 100%; min-height: 46px; justify-content: center; font-size: 14px; font-weight: 600; }
+  .asset-foot .btn { flex: 1 1 calc(50% - 4px); min-height: 46px; justify-content: center; font-size: 13.5px; font-weight: 600; }
+  .asset-foot .btn[data-maint] { flex: 1 1 100%; }
   .asset-foot .spacer { display: none; }
-  .asset-foot .icon-btn.sm { width: 44px; height: 44px; }
+  .asset-foot .icon-btn.sm { width: 44px; height: 44px; flex: none; }
   .asset-foot .icon-btn.sm[data-edit] { margin-left: auto; }
   /* Modales en celular: hoja inferior al 100% del ancho, cierre bien visible */
   .modal-overlay { padding: 0; align-items: flex-end; }
