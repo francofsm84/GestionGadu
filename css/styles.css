@@ -152,8 +152,10 @@ button { font-family: inherit; }
 .nav-group.open .nav-group-body { grid-template-rows: 1fr; }
 .nav-group-inner { overflow: hidden; min-height: 0; }
 .nav-group-inner .nav-link { padding-left: 44px; font-size: 13px; font-weight: 500; }
-/* Subgrupo anidado (ej. Herramientas y Máquinas dentro de Recursos) */
-.nav-group-inner > .nav-group > .nav-group-head { padding-left: 28px; font-size: 13px; font-weight: 600; }
+/* Subgrupo anidado (ej. Herramientas y Máquinas dentro de Recursos):
+   su cabecera queda AL MISMO NIVEL que los enlaces hermanos (Seguros),
+   y sus subopciones se indentan un nivel más */
+.nav-group-inner > .nav-group > .nav-group-head { padding-left: 44px; font-size: 13px; font-weight: 600; }
 .nav-group-inner > .nav-group > .nav-group-body > .nav-group-inner > .nav-link { padding-left: 62px; }
 /* Sub-enlace activo: la barra indicadora se mantiene en el borde de su grupo */
 .nav-group-inner .nav-link.active::before { left: 32px; }
