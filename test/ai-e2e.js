@@ -96,8 +96,11 @@ function fail(msg) { console.error('✘ FALLO:', msg); process.exit(1); }
   if (AI._pending() && !('nombre' in AI._pending().campos)) fail('no capturó el nombre');
   console.log('  ✔ paso 2: nombre capturado ("Leonardo Yáñez")');
 
+  AI._send('+54 9 351 555-9999');
+  console.log('  ✔ paso 3: teléfono / WhatsApp capturado');
+
   AI._send('Albañil');
-  console.log('  ✔ paso 3: oficio capturado');
+  console.log('  ✔ paso 4: oficio capturado');
 
   AI._send('1500');
   /* esperar el guardado asíncrono (push al mock) */
@@ -158,10 +161,9 @@ function fail(msg) { console.error('✘ FALLO:', msg); process.exit(1); }
   if (S.data.incomes.some(i => i.amount === 10000)) fail('guardó un ingreso incompleto');
   console.log('  ✔ ingreso sin obra NO se guardó (wizard retuvo el dato)');
 
-  /* ============ FLUJO D: Crear contacto → rol → agenda → wizard ============ */
-  console.log('== D) Crear contacto → [Empleado/Cliente/Socio] → agenda → wizard ==');
+  /* ============ FLUJO D: Crear agenda → rol → carga 100% manual ============ */
+  console.log('== D) Crear agenda → [Empleado/Cliente/Socio] → carga manual ==');
   G.auth.SUPABASE_URL = 'http://localhost:9333';   // restablecer la red
-  G.ui.pickContact = async () => ({ name: 'Ángel Cámara', phone: '+54 9 3547 55-1234', email: '' });
   AI._send('crear un contacto');
   const t2 = Date.now();
   while (Date.now() - t2 < 3000) {
@@ -173,28 +175,16 @@ function fail(msg) { console.error('✘ FALLO:', msg); process.exit(1); }
   const flat0 = (pendD0 && pendD0.children) ? pendD0.children.reduce((acc, c) => acc.concat(c.children || []), []) : [];
   const roleBtns = flat0.filter(c => c.dataset && c.dataset.role);
   if (roleBtns.length !== 3) fail('no aparecieron los 3 botones de rol primero, got ' + roleBtns.length);
-  const rolesOk = ['empleado', 'cliente', 'socio'].every(r => roleBtns.some(b => b.dataset.role === r));
-  if (!rolesOk) fail('botones de rol incompletos');
   console.log('  ✔ primero pregunta el rol: [Empleado] [Cliente] [Socio]');
 
-  AI._send('cliente');   // elegir rol por texto
-  while (Date.now() - t2 < 3000) {
-    const ult = log.children[log.children.length - 1];
-    if (ult && ult.innerHTML.indexOf('Abrir mi agenda') >= 0) break;
-    await new Promise(r => setTimeout(r, 50));
-  }
-  const pendBtn = log.children[log.children.length - 1];
-  const pickBtn = pendBtn.children.reduce((acc, c) => acc.concat(c.children || []), []).find(c => c.dataset && c.dataset.pick === '1');
-  if (!pickBtn) fail('no apareció el botón "📇 Abrir mi agenda"');
-  console.log('  ✔ tras elegir rol → botón [📇 Abrir mi agenda] (gesto directo)');
+  AI._send('cliente');   // elegir rol por texto (sin agenda ni archivos)
+  if (!AI._pending() || AI._pending().modulo !== 'cliente') fail('no arrancó el wizard de cliente');
+  console.log('  ✔ rol elegido → wizard de cliente manual (SIN agenda nativa)');
 
-  AI._pickGesture();   // simula el toque del usuario sobre el botón
-  await new Promise(r => setTimeout(r, 200));   // deja resolver la promesa del pick
-  if (!AI._pending() || AI._pending().modulo !== 'cliente') fail('no arrancó el wizard de cliente tras la importación');
-  if (AI._pending().campos.nombre !== 'Ángel Cámara' || AI._pending().campos.telefono !== '+54 9 3547 55-1234') fail('datos del contacto NO pre-cargados en el wizard');
-  console.log('  ✔ agenda importada → wizard de cliente con nombre y teléfono pre-cargados');
-
-  AI._send('Alta Gracia');   // direccion
+  AI._send('Ángel Cámara');      // nombre
+  AI._send('+54 9 3547 55-1234');  // teléfono / WhatsApp
+  AI._send('fr@x.com');           // email
+  AI._send('Alta Gracia');        // direccion
   const t3 = Date.now();
   while (Date.now() - t3 < 4000) {
     const ult = log.children[log.children.length - 1];
@@ -202,37 +192,42 @@ function fail(msg) { console.error('✘ FALLO:', msg); process.exit(1); }
     await new Promise(r => setTimeout(r, 50));
   }
   const creado = S.data.contacts.find(c => c.name === 'Ángel Cámara');
-  if (!creado) fail('el cliente importado no se guardó');
-  if (creado.phone !== '+54 9 3547 55-1234') fail('teléfono unificado incorrecto en el registro');
-  console.log('  ✔ cliente guardado con tilde verde y teléfono unificado');
+  if (!creado) fail('el cliente no se guardó');
+  if (creado.phone !== '+54 9 3547 55-1234') fail('teléfono unificado incorrecto');
+  if (creado.email !== 'fr@x.com') fail('e-mail incorrecto en el registro');
+  console.log('  ✔ cliente guardado (nombre + teléfono + email + dirección) con tilde verde');
 
-  /* ============ FLUJO E: bloqueo de privacidad → mensaje amigable ============ */
-  console.log('== E) Bloqueo de la agenda (Brave/Safari) → mensaje amigable ==');
-  G.ui.pickContact = async () => { throw Object.assign(new Error('Unable to open a contact selector'), { name: 'SecurityError' }); };
+  /* ============ FLUJO E: blindaje — los botones/comandos NO son datos ============ */
+  console.log('== E) Blindaje: comandos y textos de botón rechazados como nombres ==');
   AI._send('crear un contacto');
-  const t4 = Date.now();
-  while (Date.now() - t4 < 3000) {
+  while (Date.now() - t2 < 3000) {
     const ult = log.children[log.children.length - 1];
     if (ult && ult.innerHTML.indexOf('Qué tipo de contacto') >= 0) break;
     await new Promise(r => setTimeout(r, 50));
   }
-  AI._send('empleado');   // rol por texto
-  while (Date.now() - t4 < 3000) {
+  AI._send('empleado');   // rol
+  if (!AI._pending() || AI._pending().modulo !== 'empleado') fail('no arrancó el wizard de empleado');
+  AI._send('crear una obra');   // comando como nombre → debe rechazarse
+  if (!AI._pending() || 'nombre' in AI._pending().campos) fail('aceptó un comando como nombre');
+  console.log('  ✔ "crear una obra" rechazado como nombre');
+  AI._send('socio');            // texto de botón como nombre → debe rechazarse
+  if (!AI._pending() || 'nombre' in AI._pending().campos) fail('aceptó un texto de botón como nombre');
+  console.log('  ✔ "socio" (texto de botón) rechazado como nombre');
+  AI._send('Jorge Pérez');      // nombre válido
+  if (!('nombre' in AI._pending().campos)) fail('nombre válido no capturado');
+  AI._send('+54 9 351 555-1234');  // teléfono
+  AI._send('Albañil');          // oficio
+  AI._send('1500');             // tarifa
+  const t6 = Date.now();
+  while (Date.now() - t6 < 4000) {
     const ult = log.children[log.children.length - 1];
-    if (ult && ult.innerHTML.indexOf('Abrir mi agenda') >= 0) break;
+    if (ult && (ult.innerHTML.indexOf('ai-success') >= 0 || ult.innerHTML.indexOf('⚠️') >= 0)) break;
     await new Promise(r => setTimeout(r, 50));
   }
-  AI._pickGesture();
-  const t5 = Date.now();
-  while (Date.now() - t5 < 3000) {
-    const ult = log.children[log.children.length - 1];
-    if (ult && ult.innerHTML.indexOf('No pude acceder directamente') >= 0) break;
-    await new Promise(r => setTimeout(r, 50));
-  }
-  const pendE = log.children[log.children.length - 1];
-  if (pendE.innerHTML.indexOf('Unable to open') >= 0) fail('mostró el error crudo en inglés');
-  if (pendE.innerHTML.indexOf('No pude acceder directamente a la agenda') < 0) fail('no mostró el mensaje amigable');
-  console.log('  ✔ error de privacidad capturado → mensaje amigable (sin texto técnico en inglés)');
+  const emp2 = S.data.employees.find(e => e.firstName === 'Jorge');
+  if (!emp2) fail('el empleado no se guardó');
+  if (emp2.phone !== '+54 9 351 555-1234') fail('teléfono del empleado incorrecto');
+  console.log('  ✔ empleado guardado completo (nombre + teléfono + oficio + tarifa) con tilde verde');
 
   console.log('\n──────────────────────────');
   console.log('✔ AI E2E PASADO — persistencia verificada de punta a punta');

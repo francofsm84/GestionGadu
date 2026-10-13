@@ -43,18 +43,20 @@
      Los campos secundarios aceptan la respuesta "no sé" para continuar. */
   const WIZARD_STEPS = {
     empleado: [
-      { key: 'nombre', ask: 'Dale, ¿cómo se llama el empleado? (ej. "Jorge Pérez")' },
+      { key: 'nombre', ask: 'Dale, ¿cuál es su nombre y apellido? (ej. "Jorge Pérez")' },
+      { key: 'telefono', ask: '¿Su teléfono / WhatsApp?' },
       { key: 'oficio', ask: '¿Cuál es su oficio?', buttons: ['Albañil', 'Pintor', 'Plomero', 'Electricista', 'Carpintero', 'Yesero', 'Herrero'] },
       { key: 'tarifa', ask: '¿Cuánto cobra por hora? (ej. 1500; si no sabés, decime "no sé")' },
     ],
     cliente: [
-      { key: 'nombre', ask: '¿Cómo se llama el cliente? (ej. "Ángel Cámara")' },
-      { key: 'telefono', ask: '¿Su teléfono? (si no lo tenés, decime "no sé")' },
+      { key: 'nombre', ask: '¿Cuál es su nombre y apellido? (ej. "Ángel Cámara")' },
+      { key: 'telefono', ask: '¿Su teléfono / WhatsApp?' },
       { key: 'email', ask: '¿Su e-mail? (si no lo sabés, decime "no sé")' },
       { key: 'direccion', ask: '¿Su dirección? (si no la sabés, decime "no sé")' },
     ],
     socio: [
-      { key: 'nombre', ask: '¿Cómo se llama el socio?' },
+      { key: 'nombre', ask: '¿Cuál es su nombre y apellido?' },
+      { key: 'telefono', ask: '¿Su teléfono / WhatsApp?' },
       { key: 'porcentaje', ask: '¿Qué porcentaje de participación tiene? (ej. 50)' },
     ],
     obra: [
@@ -90,7 +92,7 @@
   };
   /* Campos CLAVE obligatorios: sin ellos NUNCA se guarda (ni tilde verde) */
   const WIZARD_REQUIRED = {
-    empleado: ['nombre', 'oficio'], cliente: ['nombre'], socio: ['nombre', 'porcentaje'], obra: ['nombre'],
+    empleado: ['nombre', 'telefono', 'oficio'], cliente: ['nombre', 'telefono'], socio: ['nombre', 'telefono', 'porcentaje'], obra: ['nombre'],
     gasto: ['monto', 'categoria', 'obra'], ingreso: ['monto', 'obra'],
     presupuesto: ['nombre', 'obra'], herramienta: ['nombre', 'categoria'],
     jornada: ['empleado', 'obra', 'horas'],
@@ -334,12 +336,6 @@
       if (rb) {
         const hostEl = rb.closest('.ai-msg') || rb.parentElement || rb;
         chooseRole(rb.dataset.role, hostEl);
-        return;
-      }
-      const pb = e.target && e.target.closest ? e.target.closest('[data-pick]') : null;
-      if (pb) {
-        const hostEl = pb.closest('.ai-msg') || pb.parentElement || pb;
-        handlePickGesture(hostEl);
         return;
       }
       const b = e.target && e.target.closest ? e.target.closest('[data-wiz]') : null;
@@ -710,7 +706,8 @@
         const fn = c.apellido ? c.nombre : (full.split(/\s+/)[0] || '');
         const ln = c.apellido || full.split(/\s+/).slice(1).join(' ');
         if (!fn) return null;
-        if (!c.oficio) return null;   // oficio obligatorio (validación estricta)
+        if (!c.oficio) return null;     // oficio obligatorio (validación estricta)
+        if (!c.telefono) return null;   // teléfono / WhatsApp obligatorio
         if (G.plan && G.plan.checkLimit && G.plan.checkLimit('empleados') === false) return null;
         S.add('employees', { firstName: fn, lastName: ln, phone: c.telefono || '', paymentData: '', hourlyRate: Number(c.tarifa) || 0, active: true, notes: 'Oficio: ' + c.oficio, photo: null });
         return { ok: true, label: 'empleado ' + (fn + ' ' + ln).trim() + ' (' + c.oficio + ')' };
@@ -829,6 +826,15 @@
     'new-jornada': 'cargar una jornada',
   };
   function firePill(k) {
+    if (k === 'new-contacto') {
+      /* Blindaje: el click activa DIRECTAMENTE el estado WAITING_CONTACT_TYPE.
+         El texto del botón NUNCA se interpreta como dato del usuario. */
+      const pend = bubble('', 'bot');
+      log.appendChild(pend);
+      scrollToEnd();
+      startContactFlow(pend);
+      return;
+    }
     const cmd = PILL_COMMANDS[k];
     if (cmd) {
       finalText = '';
@@ -850,7 +856,7 @@
     ];
     const pillsUser = [
       { k: 'new-obra', e: '🏗️', l: 'Nueva obra' },
-      { k: 'new-contacto', e: '👤', l: 'Crear contacto' },
+      { k: 'new-contacto', e: '👤', l: 'Crear agenda' },
       { k: 'new-gasto', e: '💸', l: 'Cargar gasto' },
       { k: 'new-ingreso', e: '💰', l: 'Nuevo ingreso' },
       { k: 'new-presupuesto', e: '📄', l: 'Nuevo presupuesto' },
@@ -1301,7 +1307,7 @@
     return pend;
   }
 
-  /* ---------- Flujo Agenda → Rol (Empleado / Cliente / Socio) ---------- */
+  /* ---------- Flujo "Crear agenda" → Rol → carga 100% manual ---------- */
   function addRoleButtons(pend) {
     const wrap = document.createElement('div');
     wrap.className = 'ai-actions';
@@ -1315,49 +1321,20 @@
     pend.appendChild(wrap);
   }
   function chooseRole(rol, pend) {
-    if (!pend) return;
-    contactStage = 'pick';
-    contactRole = rol === 'empleado' ? 'empleado' : rol === 'socio' ? 'socio' : 'cliente';
-    /* El toque del botón ES el gesto del usuario: disparar la agenda directo */
-    handlePickGesture(pend);
+    const mod = rol === 'empleado' ? 'empleado' : rol === 'socio' ? 'socio' : 'cliente';
+    contactStage = null;
+    contactRole = null;
+    /* SIN agenda nativa ni archivos: carga 100% conversacional */
+    startWizard(mod, {});
   }
   function startContactFlow(pend) {
-    /* Primero el ROL, después la importación */
+    /* Estado WAITING_CONTACT_TYPE: primero el ROL, después la carga manual */
     contactStage = 'rol';
     contactRole = null;
     pend.innerHTML = '¿Qué tipo de contacto querés crear?';
     addRoleButtons(pend);
     busy = false;
     scrollToEnd();
-  }
-
-  function handlePickGesture(pend) {
-    const rol = contactRole;
-    if (!rol) return;
-    const pickFn = (G.ui && G.ui.pickContact) ? G.ui.pickContact.bind(G.ui) : null;
-    if (!pickFn) {
-      pend.innerHTML = 'No pude acceder directamente a la agenda de tu navegador. Podés subir una tarjeta de contacto (.vcf) o dictarme el nombre y teléfono.';
-      scrollToEnd();
-      return;
-    }
-    pend.innerHTML = '📇 Abriendo tu agenda…';
-    scrollToEnd();
-    pickFn().then(cc => {
-      if (!cc) {
-        pend.innerHTML = '✋ Importación cancelada. Dictame el nombre y el teléfono y lo cargamos igual.';
-        scrollToEnd();
-        return;
-      }
-      contactStage = null;
-      const r = contactRole;
-      contactRole = null;
-      /* Arranca el wizard del rol elegido con los datos del contacto pre-cargados */
-      startWizard(r, { nombre: cc.name, telefono: cc.phone, email: cc.email });
-    }).catch(() => {
-      /* Nunca errores crudos en inglés: mensaje amigable y accionable */
-      pend.innerHTML = 'No pude acceder directamente a la agenda de tu navegador. Podés subir una tarjeta de contacto (.vcf) o dictarme el nombre y teléfono.';
-      scrollToEnd();
-    });
   }
   function wizardAskStep() {
     const op = pendingOp;
@@ -1428,6 +1405,19 @@
     if (op.idx >= steps.length) { finishWizard(); return; }
     wizardAskStep();
   }
+  /* Validador de nombres: rechaza comandos del sistema y textos de botones
+     para que NUNCA se guarden como datos de una persona. */
+  function isValidName(val) {
+    const t = String(val || '').toLowerCase().trim();
+    if (t.length < 2) return false;
+    /* Palabras sueltas reservadas (textos de botones) */
+    const reservedWord = /^(crear|cargar|agregar|alta de|nueva|nuevo|empleado|cliente|socio|contacto|agenda|obra|gasto|ingreso|presupuesto|herramienta|jornada|cancelar|cancela|salir|salí|nada|no|seguir|continuar|continuemos|dale|sí|si|buscame|buscar|ver|métricas|auditoría|importar|traer|abrir|cerrar)$/i;
+    if (reservedWord.test(t)) return false;
+    /* Frases que empiezan con un verbo de comando ("crear una obra", …) */
+    const commandPhrase = /^(crear|cargar|agregar|importar|traer|registr[aá]|alta de|nueva|nuevo|buscame|busca|ver |abrir|cerrar|suspend[eé]|activ[aá]|cambi[aá]|dale|extend[eé])\b/i;
+    if (commandPhrase.test(t)) return false;
+    return true;
+  }
   function wizardAdvance(answer) {
     const op = pendingOp;
     if (!op) return;
@@ -1440,6 +1430,11 @@
     /* Campos CLAVE vacíos → insistir sin avanzar; secundarios aceptan "no sé" */
     if (!val || (clave && noSe)) {
       wizardBubble('🤖 Necesito ese dato para poder continuar. ' + s.ask);
+      return;
+    }
+    /* Blindaje: el campo nombre rechaza comandos y textos de botones */
+    if (s.key === 'nombre' && !isValidName(val)) {
+      wizardBubble('🤖 Eso parece un comando, no un nombre. Escribí el nombre y apellido de la persona (ej. "Juan Pérez").');
       return;
     }
     op.campos[s.key] = noSe ? '' : val;
@@ -1568,8 +1563,8 @@
       busy = false;
       return;
     }
-    /* ===== 1c) Flujo de contacto: elegir rol / importar / dictar datos ===== */
-    if (contactStage) {
+    /* ===== 1c) Flujo "Crear agenda": esperando la elección de rol ===== */
+    if (contactStage === 'rol') {
       const mt = msg.toLowerCase();
       if (/^(cancelar|cancela|salir|nada|no)\b/.test(mt)) {
         contactStage = null; contactRole = null;
@@ -1577,35 +1572,15 @@
         busy = false;
         return;
       }
-      if (contactStage === 'rol') {
-        if (/^(empleado|cliente|socio)$/.test(mt)) {
-          contactStage = 'pick';
-          contactRole = mt;
-          const pend = bubble('Dale, vamos a crear un/a <b>' + mt + '</b>. Tocá el botón para importar desde tu agenda (o dictame el nombre y el teléfono):', 'bot');
-          log.appendChild(pend);
-          const wrap = document.createElement('div');
-          wrap.className = 'ai-actions';
-          const b = document.createElement('button');
-          b.className = 'btn btn-soft btn-sm';
-          b.textContent = '📇 Abrir mi agenda';
-          b.dataset.pick = '1';
-          wrap.appendChild(b);
-          pend.appendChild(wrap);
-          scrollToEnd();
-        } else {
-          const pend = bubble('Tocá un botón: <b>Empleado</b>, <b>Cliente</b> o <b>Socio</b>.', 'bot');
-          log.appendChild(pend);
-          addRoleButtons(pend);
-          scrollToEnd();
-        }
+      if (/^(empleado|cliente|socio)$/.test(mt)) {
+        chooseRole(mt, null);
         busy = false;
         return;
       }
-      /* stage 'pick': el usuario dictó el nombre → arrancar el wizard del rol */
-      const rol = contactRole;
-      contactStage = null;
-      contactRole = null;
-      startWizard(rol, { nombre: msg });
+      const pend = bubble('Tocá un botón: <b>Empleado</b>, <b>Cliente</b> o <b>Socio</b>.', 'bot');
+      log.appendChild(pend);
+      addRoleButtons(pend);
+      scrollToEnd();
       busy = false;
       return;
     }
@@ -1727,5 +1702,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _pickGesture: () => { const pend = log && log.children[log.children.length - 1]; if (pend) handlePickGesture(pend); } };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole };
 })(typeof window !== 'undefined' ? window : globalThis);

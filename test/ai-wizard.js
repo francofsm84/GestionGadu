@@ -37,8 +37,10 @@ okk(JSON.stringify(AI.localIntent('nuevo presupuesto reforma cocina')) === JSON.
 okk(JSON.stringify(AI.localIntent('cargar un gasto')) === JSON.stringify({ modulo: 'gasto', campos: {} }), 'gasto sin monto → guiado');
 
 console.log('== 3) Completitud mínima por módulo (validación estricta) ==');
-okk(AI.isCompleteWizard('empleado', { nombre: 'Jorge' }) === false, 'empleado sin oficio → incompleto');
-okk(AI.isCompleteWizard('empleado', { nombre: 'Jorge', oficio: 'Albañil' }) === true, 'empleado con nombre y oficio → completo');
+okk(AI.isCompleteWizard('empleado', { nombre: 'Jorge' }) === false, 'empleado sin teléfono/oficio → incompleto');
+okk(AI.isCompleteWizard('empleado', { nombre: 'Jorge', telefono: '123', oficio: 'Albañil' }) === true, 'empleado completo (nombre + teléfono + oficio) → listo');
+okk(AI.isCompleteWizard('cliente', { nombre: 'X' }) === false, 'cliente sin teléfono → incompleto');
+okk(AI.isCompleteWizard('socio', { nombre: 'X', telefono: '123' }) === false, 'socio sin porcentaje → incompleto');
 okk(AI.isCompleteWizard('gasto', {}) === false, 'gasto vacío → incompleto');
 okk(AI.isCompleteWizard('gasto', { monto: 5000 }) === false, 'gasto SOLO con monto → incompleto (falta categoría y obra)');
 okk(AI.isCompleteWizard('gasto', { monto: 5000, categoria: 'Materiales', obra: 'X' }) === true, 'gasto completo → listo');
@@ -47,6 +49,13 @@ okk(AI.isCompleteWizard('obra', { nombre: 'X' }) === true, 'obra con nombre → 
 okk(AI.isCompleteWizard('presupuesto', { nombre: 'X' }) === false, 'presupuesto sin obra → incompleto');
 okk(AI.isCompleteWizard('jornada', { empleado: 'X', obra: 'Y', horas: 8 }) === true, 'jornada completa → listo');
 okk(AI.isCompleteWizard('jornada', { empleado: 'X' }) === false, 'jornada incompleta → retiene');
+
+console.log('== 3b) Blindaje de nombres (comandos/botones NO son datos) ==');
+okk(AI.isValidName('crear una obra') === false, 'rechaza comando');
+okk(AI.isValidName('empleado') === false, 'rechaza texto de botón');
+okk(AI.isValidName('socio') === false, 'rechaza texto de botón');
+okk(AI.isValidName('Juan Pérez') === true, 'acepta nombre válido');
+okk(AI.isValidName('Ángel Cámara') === true, 'acepta nombre compuesto');
 
 console.log('== 5) Guardado estricto: sin obra no se guarda como general ==');
 const otra = S.add('works', { name: 'Obra Dos', code: 'OB-2', clientId: null, location: '', status: 'activa', budgetTotal: 0, advanceFisico: 0, startDate: S.todayISO(), endDate: '', description: '' });
@@ -67,7 +76,7 @@ const r2 = await AI.execFormAction({ modulo: 'herramienta', campos: { nombre: 'A
 okk(r2 && r2.saved === true, 'herramienta guarda directo');
 const a = S.data.assets.find(x => x.name === 'Amoladora');
 okk(!!a && a.cost === 12000 && a.category === 'Herramienta eléctrica', 'herramienta con costo y categoría');
-const r3 = await AI.execFormAction({ modulo: 'empleado', campos: { nombre: 'Jorge el Flaco', oficio: 'Albañil', tarifa: 1500 } });
+const r3 = await AI.execFormAction({ modulo: 'empleado', campos: { nombre: 'Jorge el Flaco', telefono: '+54 9 351 555-1234', oficio: 'Albañil', tarifa: 1500 } });
 okk(r3 && r3.saved === true, 'empleado con oficio guarda');
 const e = S.data.employees.find(x => x.firstName === 'Jorge');
 okk(!!e && e.notes === 'Oficio: Albañil' && e.hourlyRate === 1500, 'empleado con oficio y tarifa persistidos');
