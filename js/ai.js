@@ -1125,12 +1125,20 @@
     try { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
     catch (e) { return String(s || '').toLowerCase(); }
   }
-  /* Nombre de obra tolerante a TODAS las variaciones de la propiedad
-     (name / nombre / titulo / nombreObra): jamás devuelve "undefined" */
+  /* Nombre de obra con fallback seguro de propiedades:
+     `nombre || name || titulo || nombreObra` — y rechaza los valores
+     basura "undefined"/"null" que dejan los registros viejos (así
+     "casa angel camara" se muestra SIEMPRE con su nombre real). */
   function workLabel(w) {
     if (!w) return '';
-    const v = w.name || w.nombre || w.titulo || w.nombreObra || w.nombre_obra || '';
-    return String(v).trim();
+    const cands = [w.nombre, w.name, w.titulo, w.nombreObra, w.nombre_obra];
+    for (let i = 0; i < cands.length; i++) {
+      const c = cands[i];
+      if (c == null) continue;
+      const s = String(c).trim();
+      if (s && !/^(undefined|null|nan|\[object\s+object\])$/i.test(s)) return s;
+    }
+    return '';   // sin nombre válido → se excluye de las listas (nunca "undefined")
   }
   /* Resuelve una mención textual a una obra existente (nombre o cliente).
      Blindado: ignora obras sin nombre para nunca devolver "undefined". */
