@@ -121,6 +121,33 @@ const sug = AI.suggestedWork();
 okk(!!sug && S.data.works.some(w => w.name === sug && w.status === 'activa'), 'obra sugerida es una obra activa real');
 okk(r1 && r1.coll === 'budgets' && r1.id, 'el guardado devuelve coll+id (Deshacer disponible)');
 
+console.log('== 8) NLP: entidades y ejecución directa (function calling) ==');
+const iAsig = AI.localIntent('asignar la amoladora a la obra de Norma Molina hoy');
+okk(iAsig && iAsig.modulo === 'asignar' && iAsig.campos.herramienta === 'Amoladora angular' && iAsig.campos.destino === 'Norma Molina', 'asignar: herramienta + obra extraídas de la frase');
+okk(AI.isCompleteWizard('asignar', iAsig.campos) === true, 'asignación completa → ejecución directa');
+const iDep = AI.localIntent('dejé la amoladora hoy en el depósito');
+okk(iDep && iDep.modulo === 'asignar' && iDep.campos.destino === '📦 En depósito', '"dejé en el depósito" → destino depósito');
+const iMan = AI.localIntent('mandá la amoladora a mantenimiento');
+okk(iMan && iMan.campos.destino === '🔧 En mantenimiento', '"a mantenimiento" → estado en reparación');
+const iCob = AI.localIntent('cobré 50000 de la obra Norma Molina');
+okk(iCob && iCob.modulo === 'ingreso' && iCob.campos.monto === 50000 && iCob.campos.obra === 'Norma Molina', 'ingreso: monto + obra extraídos');
+const iGas = AI.localIntent('gasté 3000 en materiales en la obra Norma Molina');
+okk(iGas && iGas.modulo === 'gasto' && iGas.campos.monto === 3000 && iGas.campos.obra === 'Norma Molina' && iGas.campos.categoria === 'Materiales', 'gasto: monto + categoría + obra');
+okk(AI.isCompleteWizard('gasto', iGas.campos) === true, 'gasto completo → ejecución directa');
+const rDir = await AI.execFormAction(iGas);
+okk(rDir && rDir.saved === true && rDir.coll === 'expenses', 'gasto por voz se guardó directo (function calling)');
+const iAg = AI.localIntent('agendar una visita mañana a la obra de Norma Molina');
+okk(iAg && iAg.modulo === 'agendar' && iAg.campos.tipo === 'visita' && iAg.campos.fecha === S.daysAhead(1), 'agendar: tipo + fecha + lugar extraídos');
+const rAg = await AI.execFormAction({ modulo: 'agendar', campos: { tipo: 'visita', fecha: S.daysAhead(1), titulo: 'Visita obra Norma Molina', hora: '', lugar: 'Norma Molina' } });
+okk(rAg && rAg.saved === true && rAg.coll === 'compromisos', 'compromiso agendado en el store');
+const comp = S.data.compromisos.find(c => c.tipo === 'visita');
+okk(!!comp && comp.fecha === S.daysAhead(1) && comp.estado === 'pendiente', 'fecha normalizada y persistida');
+okk(AI.normFecha('mañana') === S.daysAhead(1), 'normFecha: mañana');
+okk(AI.normFecha('15/04') === String(new Date().getFullYear()) + '-04-15', 'normFecha: dd/mm');
+okk(AI.normFecha('chau') === null, 'normFecha: inválida → null');
+const iCrear = AI.localIntent('crear una obra para Pablo Molina');
+okk(iCrear && iCrear.modulo === 'obra' && iCrear.campos.nombre === 'pablo molina', 'crear obra: nombre extraído');
+
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }

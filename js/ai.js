@@ -90,6 +90,13 @@
       { key: 'destino', ask: '¿A dónde va?', assignList: true },
       { key: 'nota', ask: '¿Alguna nota del movimiento? (si no, decime "no sé")' },
     ],
+    agendar: [
+      { key: 'tipo', ask: '¿Qué tipo de compromiso es?', buttons: ['Visita', 'Entrega', 'Evento'] },
+      { key: 'fecha', ask: '¿Para qué día? (ej. mañana, 15/04, 2026-04-15)' },
+      { key: 'titulo', ask: '¿Qué compromiso anotamos?' },
+      { key: 'hora', ask: '¿A qué hora? (si no, decime "no sé")' },
+      { key: 'lugar', ask: '¿Dónde es? (si no, decime "no sé")' },
+    ],
     jornada: [
       { key: 'empleado', ask: '¿A qué empleado le cargamos la jornada?', empsList: true },
       { key: 'obra', ask: '¿En qué obra trabajó?', worksList: true },
@@ -98,7 +105,7 @@
   };
   /* Campos CLAVE obligatorios: sin ellos NUNCA se guarda (ni tilde verde) */
   const WIZARD_REQUIRED = {
-    empleado: ['nombre', 'telefono', 'oficio'], cliente: ['nombre', 'telefono'], socio: ['nombre', 'telefono', 'porcentaje'], obra: ['nombre'], asignar: ['herramienta', 'destino'],
+    empleado: ['nombre', 'telefono', 'oficio'], cliente: ['nombre', 'telefono'], socio: ['nombre', 'telefono', 'porcentaje'], obra: ['nombre'], asignar: ['herramienta', 'destino'], agendar: ['tipo', 'fecha', 'titulo'],
     gasto: ['monto', 'categoria', 'obra'], ingreso: ['monto', 'obra'],
     presupuesto: ['nombre', 'obra'], herramienta: ['nombre', 'categoria'],
     jornada: ['empleado', 'obra', 'horas'],
@@ -800,6 +807,19 @@
         const a = d.assets.find(x => x.id === aid);
         return { ok: true, label: 'herramienta ' + hname + ' → ' + dest + (cambiado ? '' : ' (ya estaba así)'), coll: 'assets', id: a ? a.id : aid };
       }
+      if (mod === 'agendar') {
+        /* Agendar un compromiso (visita / entrega / evento) con fecha válida */
+        const tipo = /^entrega/.test(String(c.tipo || '')) ? 'entrega' : /^evento/.test(String(c.tipo || '')) ? 'evento' : 'visita';
+        const fecha = normFecha(c.fecha);
+        if (!fecha) return null;   // sin fecha válida no se agenda
+        const titulo = String(c.titulo || '').trim();
+        if (!titulo) return null;
+        const creado = S.add('compromisos', {
+          fecha, hora: c.hora || '', tipo, titulo,
+          lugar: c.lugar || '', contactoId: null, notas: '', estado: 'pendiente',
+        });
+        return { ok: true, label: 'compromiso "' + titulo.slice(0, 40) + '" para el ' + fecha, coll: 'compromisos', id: creado.id };
+      }
     } catch (e) { return null; }
     return null;
   }
@@ -1071,6 +1091,77 @@
 
   /* Intents locales de respaldo: si la IA no responde (pico/timeout),
      interpretamos la orden con patrones simples. */
+  /* ---------- NLP: extracción de entidades reales del store ---------- */
+  /* Resuelve una mención textual a una herramienta/equipo existente.
+     Reúne coincidencias por nombre completo Y por palabras y elige
+     siempre el nombre más largo/específico (evita "Amoladora" vs "Amoladora angular"). */
+  function findAssetMention(t) {
+    const assets = ((G.store.data && G.store.data.assets) || []).filter(a => a.status !== 'dado de baja');
+    if (!assets.length) return null;
+    const excl = /^(obra|hoy|ayer|mañana|depósito|deposito|mantenimiento|taller|asignar|mover|dejé|deje|mandar|manda|mandá|ubicar|destinar|devolver|guardar|guardé|herramienta|máquina|maquina|equipo)$/;
+    const words = t.split(/\s+/).filter(w => w.length >= 4 && !excl.test(w));
+    const cand = [];
+    assets.forEach(a => {
+      const parts = a.name.toLowerCase().split(/\s+/);
+      const sub = t.includes(a.name.toLowerCase());
+      const word = words.some(w => parts.some(p => p.length >= 4 && (p.startsWith(w) || w.startsWith(p))));
+      if (sub || word) cand.push(a.name);
+    });
+    if (!cand.length) return null;
+    cand.sort((a, b) => b.length - a.length);
+    return cand[0];
+  }
+  /* Resuelve una mención textual a una obra existente (nombre o cliente) */
+  function findWorkMention(t) {
+    const d = G.store.data || {};
+    const works = d.works || [];
+    if (!works.length) return null;
+    let hit = works.find(w => t.includes(w.name.toLowerCase()));
+    if (hit) return hit.name;
+    /* "obra de Pablo Molina" → busca por el cliente de la obra */
+    const cm = t.match(/obra\s+(?:de|del)\s+([a-záéíóúñ][\wáéíóúñ\s'-]*?)(?=\s*(?:hoy|ayer|mañana|para|,|\.|$))/i);
+    if (cm) {
+      const frag = cm[1].trim().toLowerCase();
+      const cli = (d.contacts || []).find(c => c.name.toLowerCase().includes(frag) || frag.includes(c.name.toLowerCase()));
+      if (cli) {
+        const w = works.find(x => x.clientId === cli.id);
+        if (w) return w.name;
+      }
+      hit = works.find(w => w.name.toLowerCase().includes(frag) || frag.includes(w.name.toLowerCase()));
+      if (hit) return hit.name;
+    }
+    const words = t.split(/\s+/).filter(w => w.length >= 5 && !/^(obra|hoy|ayer|mañana|asignar|mover|dejé|deje|cobré|cobre|pagué|pague|gasté|gaste|compré|compre|depósito|deposito|mantenimiento)$/.test(w));
+    for (const w of words) {
+      /* Solo prefijos estrictos de palabras del nombre (evita falsos positivos) */
+      hit = works.find(x => x.name.toLowerCase().split(/\s+/).some(p => p.length >= 5 && p.startsWith(w)));
+      if (hit) return hit.name;
+    }
+    return null;
+  }
+  /* Destino de una orden de asignación: depósito / mantenimiento / obra */
+  function detectDestino(t) {
+    if (/dep[oó]sito|guardada|a\s+casa|de\s+vuelta/.test(t)) return '📦 En depósito';
+    if (/mantenimiento|reparaci[oó]n|taller|service|arregl/.test(t)) return '🔧 En mantenimiento';
+    return findWorkMention(t);
+  }
+  /* Normaliza fechas conversacionales → ISO (hoy/mañana/pasado mañana/dd/mm/iso).
+     Acepta la fecha suelta o embebida dentro de una frase. */
+  function normFecha(val) {
+    const v = String(val || '').trim().toLowerCase().replace(/^para\s+/, '').replace(/^el\s+/, '');
+    const today = (G.store && G.store.todayISO) ? G.store.todayISO() : new Date().toISOString().slice(0, 10);
+    if (/^hoy$/.test(v) || /\bhoy\b/.test(v)) return today;
+    if (/^mañana$|^manana$/.test(v) || /\bmañana\b|\bmanana\b/.test(v)) return (G.store && G.store.daysAhead) ? G.store.daysAhead(1) : v;
+    if (/pasado\s+mañana|pasado\s+manana/.test(v)) return (G.store && G.store.daysAhead) ? G.store.daysAhead(2) : v;
+    const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (iso) return iso[0];
+    const ddmm = v.match(/(?:^|\D)(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?(?:\D|$)/);
+    if (ddmm) {
+      const y = ddmm[3] || String(new Date().getFullYear());
+      return y + '-' + ddmm[2].padStart(2, '0') + '-' + ddmm[1].padStart(2, '0');
+    }
+    return null;
+  }
+
   function localIntent(text) {
     const t = String(text || '').toLowerCase();
     /* 0.5) Crear un contacto → primero elegir rol (Empleado/Cliente/Socio) */
@@ -1078,11 +1169,28 @@
         /contacto\s+(?:desde\s+la\s+agenda|de\s+la\s+agenda|nuevo)/.test(t)) {
       return { modulo: 'contacto', campos: {} };
     }
-    /* 0.55) Asignar / mover una herramienta a una obra o cambiar su estado */
-    if (/(?:asignar|mover|mandar|ubicar|destinar|devolver)\s+(?:una? |la |el )?(?:herramienta|m[aá]quina|equipo|amoladora|hormigonera|andamio|camioneta|sierra|rotomartillo)/.test(t) ||
+    /* 0.55) Asignar / mover una herramienta → NLP con entidades (function calling):
+       "Asignar la Amoladora a la obra de Pablo Molina hoy" / "Dejé la amoladora en el depósito" */
+    if (/(?:asignar|asigne|asigná|mover|muevo|mové|mandar|mand[aá]|mandame|ubicar|destinar|devolver|devolví|devolvi|dejé|deje|dejo|dejó|dejamos|guardar|guardé|guarde|guardamos)\s+(?:una? |la |el )?(?:herramienta|m[aá]quina|equipo|amoladora|hormigonera|andamio|camioneta|sierra|rotomartillo|taladro|mezcladora)/.test(t) ||
         /herramienta\s+(?:a|en)\s+(?:la\s+)?obra/.test(t) ||
         /(?:asignar|mover)\s+herramientas?/.test(t)) {
+      const asset = findAssetMention(t);
+      const destino = detectDestino(t);
+      const nota = /hoy/.test(t) ? 'Por chat: ' + t : t;
+      if (asset && destino) return { modulo: 'asignar', campos: { herramienta: asset, destino, nota } };
+      if (asset) return { modulo: 'asignar', campos: { herramienta: asset } };
+      if (destino) return { modulo: 'asignar', campos: { destino } };
       return { modulo: 'asignar', campos: {} };
+    }
+    /* 0.56) Agendar compromisos: "agendar una visita mañana a la obra X" */
+    if (/agend[aá]|program[aá]|anot[aá]m[eé]?\s+(?:una? )?(?:visita|entrega|evento)|visita\s+(?:hoy|mañana|pasado)|entrega\s+(?:hoy|mañana|pasado|el\s)/.test(t)) {
+      const tipo = /entrega|entregar/.test(t) ? 'entrega' : /evento|reuni[oó]n|asado|inauguraci/.test(t) ? 'evento' : 'visita';
+      const fecha = normFecha(t);
+      const lugar = findWorkMention(t);
+      const campos = { tipo, titulo: text, hora: '' };
+      if (fecha) campos.fecha = fecha;
+      if (lugar) campos.lugar = lugar;
+      return { modulo: 'agendar', campos };
     }
     /* 0) Compra de herramienta/equipamiento → flujo de inversión (herramienta) */
     if (/(?:comprar|compré|compre|compra|compro|invertir en|inversión en)\s+(?:una |un |la |el )?/.test(t) &&
@@ -1097,11 +1205,11 @@
     if (crear) {
       const modulo = crear[1];
       const resto = t.slice(t.indexOf(crear[0]) + crear[0].length).trim();
-      const nombre = resto.replace(/^(que se llame|llamado|llamada|de nombre|de|a)\s+/i, '').trim();
+      const nombre = resto.replace(/^(que se llame|llamado|llamada|de nombre|de|a|para)\s+/i, '').trim();
       if (nombre) return { modulo, campos: { nombre } };
       return { modulo, campos: {} };
     }
-    /* 2) Gastos/ingresos: con monto se ejecuta, sin monto se guía en el chat */
+    /* 2) Gastos/ingresos: NLP con entidades — con monto se ejecuta, sin monto se guía en el chat */
     const kind = /gasto|gast[ée]|pagu[ée]|compr[ée]|comprar/.test(t) ? 'gasto'
       : /ingreso|cobr[ée]|cobro|anticipo|adelanto|certificaci/.test(t) ? 'ingreso'
       : null;
@@ -1111,11 +1219,15 @@
     const monto = Number(m[0].replace(/\./g, '').replace(',', '.'));
     if (!(monto > 0)) return { modulo: kind, campos: {} };
     const campos = { monto };
+    /* Entidad obra: "de la obra X" / "en la obra X" / mención directa */
+    const obra = findWorkMention(t);
+    if (obra) campos.obra = obra;
     if (kind === 'gasto') {
       const cat = t.match(/(material|combustible|nafta|gasoil|mano de obra|jornal|flete|subcontrat|alquiler|mantenimiento|herramienta|equipamiento|equipo|sueldo|seguro|impuesto|servicio)/);
       if (cat) campos.categoria = normCat(cat[1]);
+      campos.comprobante = '';   // comprobante opcional → ejecución directa sin preguntar
     } else {
-      campos.concepto = /anticipo|adelanto/.test(t) ? 'Adelanto' : 'Cobro';
+      campos.concepto = /anticipo|adelanto/.test(t) ? 'Adelanto' : (/certificaci/.test(t) ? 'Certificación' : 'Cobro');
     }
     return { modulo: kind, campos };
   }
@@ -1664,8 +1776,19 @@
         wizardBubble('🤖 Ese e-mail no parece válido (ej. nombre@dominio.com). ' + s.ask);
         return;
       }
+      if (s.key === 'fecha' && !normFecha(val)) {
+        wizardBubble('🤖 No entendí esa fecha. Decime "hoy", "mañana", "pasado mañana" o una fecha (ej. 15/04 o 2026-04-15).');
+        return;
+      }
     }
-    op.campos[s.key] = noSe ? '' : val;
+    /* Normalización por campo antes de guardar */
+    let finalVal = val;
+    if (s.key === 'fecha') {
+      finalVal = normFecha(val) || val;
+    } else if (s.key === 'tipo' && op.modulo === 'agendar') {
+      finalVal = val.toLowerCase();
+    }
+    op.campos[s.key] = noSe ? '' : finalVal;
     op.idx++;
     wizardAskNext();
   }
@@ -1823,6 +1946,21 @@
         busy = false;
         return;
       }
+      /* Instrucción conversacional directa dentro del contexto ("cobré $50000 de la obra X") */
+      const int = localIntent(msg);
+      if (int && (int.modulo === 'ingreso' || int.modulo === 'gasto')) {
+        ledgerMenu = false;
+        rememberTurn('usuario', msg);
+        if (isCompleteWizard(int.modulo, int.campos)) {
+          const pend = bubble('', 'bot');
+          log.appendChild(pend);
+          execFormAction(int).then(res => { renderSaveResult(pend, res); busy = false; scrollToEnd(); });
+          return;
+        }
+        startWizard(int.modulo, int.campos);
+        busy = false;
+        return;
+      }
       if (/^ingresos?$/.test(mt)) { ledgerMenu = false; startWizard('ingreso', {}); busy = false; return; }
       if (/^gastos?$/.test(mt)) { ledgerMenu = false; startWizard('gasto', {}); busy = false; return; }
       const pend = bubble('Tocá un botón: <b>Ingresos</b> o <b>Gastos</b>.', 'bot');
@@ -1839,6 +1977,21 @@
       if (/^(cancelar|cancela|salir|nada|no)\b/.test(mt)) {
         toolsMenu = false;
         wizardBubble('✋ Operación cancelada.');
+        busy = false;
+        return;
+      }
+      /* Instrucción conversacional directa ("asignar la amoladora a la obra X") */
+      const int = localIntent(msg);
+      if (int && (int.modulo === 'asignar' || int.modulo === 'herramienta' || int.modulo === 'jornada')) {
+        toolsMenu = false;
+        rememberTurn('usuario', msg);
+        if (isCompleteWizard(int.modulo, int.campos)) {
+          const pend = bubble('', 'bot');
+          log.appendChild(pend);
+          execFormAction(int).then(res => { renderSaveResult(pend, res); busy = false; scrollToEnd(); });
+          return;
+        }
+        startWizard(int.modulo, int.campos);
         busy = false;
         return;
       }
@@ -1977,5 +2130,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, PILL_WIZARD, suggestedWork, frequentEmployees, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave() };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, PILL_WIZARD, suggestedWork, frequentEmployees, findAssetMention, findWorkMention, detectDestino, normFecha, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave() };
 })(typeof window !== 'undefined' ? window : globalThis);
