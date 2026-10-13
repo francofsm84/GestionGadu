@@ -255,6 +255,7 @@
   let pendingOp = null;   // operación guiada en curso: { modulo, campos, idx }
   let pendingAdmin = null;   // acción de admin pendiente de confirmación: { uid, patch, label }
   let adminWizard = null;    // alta express de usuarios en curso: { idx, campos }
+  let pendingRole = null;    // contacto importado esperando rol: { nombre, telefono, email }
   let voicePref = null;
   let currentUid = null;  // usuario autenticado dueño de la memoria del agente
   /* Memoria de sesión: última obra/cliente tratado, para que los comandos
@@ -326,6 +327,8 @@
         else if (k === 'wiz') adminWizardAdvance(adm.dataset.arg || '');
         return;
       }
+      const rb = e.target && e.target.closest ? e.target.closest('[data-role]') : null;
+      if (rb) { chooseRole(rb.dataset.role); return; }
       const b = e.target && e.target.closest ? e.target.closest('[data-wiz]') : null;
       if (!b) return;
       const v = b.dataset.wiz;
@@ -775,6 +778,7 @@
      en el chat, sin redirigir a módulos externos) */
   const PILL_COMMANDS = {
     'new-obra': 'cargar una obra',
+    'new-contacto': 'importar un contacto',
     'new-empleado': 'cargar un empleado',
     'new-cliente': 'cargar un cliente',
     'new-gasto': 'cargar un gasto',
@@ -805,6 +809,7 @@
     ];
     const pillsUser = [
       { k: 'new-obra', e: '🏗️', l: 'Nueva obra' },
+      { k: 'new-contacto', e: '📇', l: 'Agregar contacto' },
       { k: 'new-empleado', e: '👷', l: 'Nuevo empleado' },
       { k: 'new-cliente', e: '👤', l: 'Nuevo cliente' },
       { k: 'new-gasto', e: '💸', l: 'Cargar gasto' },
@@ -886,6 +891,11 @@
      interpretamos la orden con patrones simples. */
   function localIntent(text) {
     const t = String(text || '').toLowerCase();
+    /* 0.5) Importar un contacto desde la agenda → elegir rol (Empleado/Cliente/Socio) */
+    if (/(?:importar|cargar|agregar|traer|alta de)\s+(?:un |una |el |la )?contacto\b/.test(t) ||
+        /contacto\s+(?:desde\s+la\s+agenda|de\s+la\s+agenda|nuevo)/.test(t)) {
+      return { modulo: 'contacto', campos: {} };
+    }
     /* 0) Compra de herramienta/equipamiento → flujo de inversión (herramienta) */
     if (/(?:comprar|compré|compre|compra|compro|invertir en|inversión en)\s+(?:una |un |la |el )?/.test(t) &&
         /(herramienta|equipo|equipamiento|máquina|maquina|amoladora|taladro|sierra|compresor|andamio|mezcladora|hormigonera|moladora)/.test(t)) {
@@ -1006,7 +1016,7 @@
     pend.appendChild(wrap);
     speak('Encontré ' + results.length + ' resultado' + (results.length > 1 ? 's' : '') + '.');
     busy = false;
-    log.scrollTop = log.scrollHeight;
+    scrollToEnd();
   }
 
   /* ---------- COO Virtual (Super Admin): comandos conversacionales ---------- */
@@ -1235,11 +1245,70 @@
     return /^(cu[aá]nto|c[uó]mo|d[oó]nde|cu[aá]l|cu[aá]ndo|qu[eé] es|mostrame|mostráme|ver|muestrame)/i.test(String(text || '').trim());
   }
 
+  /* Scroll automático al final del chat: ninguna burbuja ni la caja de texto
+     deben quedar ocultas por debajo (incluye scrollIntoView del último mensaje) */
+  function scrollToEnd() {
+    try {
+      if (!log) return;
+      scrollToEnd();
+      const last = log.lastElementChild || (log.children && log.children[log.children.length - 1]);
+      if (last && last.scrollIntoView) last.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    } catch (e) {}
+  }
   function wizardBubble(html) {
     const pend = bubble(html, 'bot');
     log.appendChild(pend);
-    log.scrollTop = log.scrollHeight;
+    scrollToEnd();
     return pend;
+  }
+
+  /* ---------- Flujo Agenda → Rol (Empleado / Cliente / Socio) ---------- */
+  function addRoleButtons(pend) {
+    const wrap = document.createElement('div');
+    wrap.className = 'ai-actions';
+    ['Empleado', 'Cliente', 'Socio'].forEach(rol => {
+      const b = document.createElement('button');
+      b.className = 'btn btn-soft btn-sm';
+      b.textContent = rol;
+      b.dataset.role = rol.toLowerCase();
+      wrap.appendChild(b);
+    });
+    pend.appendChild(wrap);
+  }
+  function chooseRole(rol) {
+    const p = pendingRole;
+    pendingRole = null;
+    if (!p) return;
+    const mod = rol === 'empleado' ? 'empleado' : rol === 'socio' ? 'socio' : 'cliente';
+    /* Arranca el wizard del rol elegido con los datos del contacto pre-cargados */
+    startWizard(mod, { nombre: p.nombre, telefono: p.telefono, email: p.email });
+  }
+  function startContactFlow(pend) {
+    const pickFn = (G.ui && G.ui.pickContact) ? G.ui.pickContact.bind(G.ui) : null;
+    if (!pickFn) {
+      pend.innerHTML = '📇 En este navegador no puedo abrir la agenda automáticamente. Decime el rol y el nombre (ej. "empleado Juan Pérez") y lo cargamos igual.';
+      busy = false;
+      scrollToEnd();
+      return;
+    }
+    pend.innerHTML = '📇 Abriendo tu agenda…';
+    pickFn().then(cc => {
+      if (!cc) {
+        pend.innerHTML = '✋ Importación cancelada. Si querés, cargá los datos a mano: decime "empleado", "cliente" o "socio" y el nombre.';
+        busy = false;
+        scrollToEnd();
+        return;
+      }
+      pendingRole = { nombre: cc.name, telefono: cc.phone, email: cc.email };
+      pend.innerHTML = '📇 Importé a <b>' + esc(cc.name || '') + '</b>' + (cc.phone ? ' <span class="muted small">(' + esc(cc.phone) + ')</span>' : '') + '.<br>¿Qué rol tendrá este contacto?';
+      addRoleButtons(pend);
+      busy = false;
+      scrollToEnd();
+    }).catch(err => {
+      pend.innerHTML = '⚠️ No pude abrir la agenda: ' + esc(String((err && err.message) || err)) + '. Podés dictar el nombre y el rol (ej. "empleado Juan Pérez").';
+      busy = false;
+      scrollToEnd();
+    });
   }
   function wizardAskStep() {
     const op = pendingOp;
@@ -1431,7 +1500,7 @@
     input.value = '';
     finalText = '';
     log.appendChild(bubble(renderText(msg), 'user'));
-    log.scrollTop = log.scrollHeight;
+    scrollToEnd();
 
     /* ===== 1) Operación guiada en curso (wizard): responder / cancelar / continuar ===== */
     if (pendingOp) {
@@ -1450,10 +1519,22 @@
       busy = false;
       return;
     }
+    /* ===== 1c) Contacto importado esperando rol ===== */
+    if (pendingRole) {
+      const mt = msg.toLowerCase();
+      if (/^(empleado|cliente|socio)$/.test(mt)) { chooseRole(mt); busy = false; return; }
+      if (/^(cancelar|nada|no)\b/.test(mt)) { pendingRole = null; wizardBubble('✋ Operación cancelada.'); busy = false; return; }
+      const pend = bubble('Tocá un botón: <b>Empleado</b>, <b>Cliente</b> o <b>Socio</b>.', 'bot');
+      log.appendChild(pend);
+      addRoleButtons(pend);
+      scrollToEnd();
+      busy = false;
+      return;
+    }
 
     const pend = bubble('Pensando…', 'bot');
     log.appendChild(pend);
-    log.scrollTop = log.scrollHeight;
+    scrollToEnd();
     const sess = G.auth.getSession();
     if (!sess) { pend.innerHTML = 'Necesitás iniciar sesión para usar el asistente.'; busy = false; return; }
     /* Búsqueda local instantánea: "buscame a X" / "¿dónde está X?" → respuesta
@@ -1468,12 +1549,19 @@
       const adm = adminIntent(msg);
       if (adm) {
         rememberTurn('usuario', msg);
-        handleAdminIntent(adm, pend).finally(() => { busy = false; log.scrollTop = log.scrollHeight; });
+        handleAdminIntent(adm, pend).finally(() => { busy = false; scrollToEnd(); });
         return;
       }
     }
+    /* ===== 2.5) Importar contacto desde la agenda → elegir rol ===== */
+    const lc = localIntent(msg);
+    if (lc && lc.modulo === 'contacto') {
+      rememberTurn('usuario', msg);
+      startContactFlow(pend);
+      return;
+    }
     /* ===== 3) Creación guiada universal: la carga se resuelve 100% en el chat ===== */
-    const li = localIntent(msg);
+    const li = lc;
     if (li && WIZARD_STEPS[li.modulo]) {
       rememberTurn('usuario', msg);
       if (isCompleteWizard(li.modulo, li.campos)) {
@@ -1485,7 +1573,7 @@
             startWizard(li.modulo, li.campos);
           }
           busy = false;
-          log.scrollTop = log.scrollHeight;
+          scrollToEnd();
         });
         return;
       }
@@ -1500,7 +1588,7 @@
     callAI(payload, (chunk) => {
       streamedText += chunk;
       pend.innerHTML = renderText(streamedText);
-      log.scrollTop = log.scrollHeight;
+      scrollToEnd();
     })
       .then(async data => {
         const replyText = data.reply || streamedText || 'Sin respuesta.';
