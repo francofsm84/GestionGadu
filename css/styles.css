@@ -901,6 +901,8 @@ body.no-session .app { display: none; }
 .ai-bot { align-self: flex-start; background: var(--surface-2); color: var(--text); border-bottom-left-radius: 4px; }
 .ai-user { align-self: flex-end; background: var(--primary); color: var(--on-primary); border-bottom-right-radius: 4px; }
 .ai-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+/* Chips de opciones del chat: táctiles, sin doble-tap ni resaltado fantasma */
+.ai-actions .btn { touch-action: manipulation; -webkit-tap-highlight-color: transparent; min-height: 38px; }
 /* Tarjeta de éxito con tilde verde (confirmación de carga completada) */
 .ai-success {
   display: flex; gap: 10px; align-items: center;

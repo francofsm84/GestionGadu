@@ -284,6 +284,28 @@ function fail(msg) { console.error('✘ FALLO:', msg); process.exit(1); }
   if (AI._pending() || AI._ledger() || AI._tools()) fail('cancelar no limpió el estado por completo');
   console.log('  ✔ cancelar limpia todos los estados colgados');
 
+  /* ============ FLUJO H: chips de concepto (toque táctil) avanzan el flujo ============ */
+  console.log('== H) Chips de concepto del ingreso: tocar → inyecta y avanza ==');
+  G.auth.SUPABASE_URL = 'http://localhost:9333';
+  AI._send('cargar un ingreso');
+  if (!AI._pending() || AI._pending().modulo !== 'ingreso') fail('no arrancó el wizard de ingreso');
+  AI._send('10000');            // monto
+  AI._wiz('Cobro');             // toque del chip [Cobro] → inyecta texto y avanza
+  if (!AI._pending() || 'concepto' in AI._pending().campos === false || AI._pending().campos.concepto !== 'Cobro') fail('el chip no inyectó el concepto');
+  const ultH = log.children[log.children.length - 2];
+  if (!ultH || ultH.innerHTML.indexOf('Cobro') < 0) fail('el texto del chip no quedó visible en el chat');
+  console.log('  ✔ tocar [Cobro] inyecta el texto y avanza al paso de obra');
+  AI._send('Obra E2E');         // obra → guardado directo
+  const t8 = Date.now();
+  while (Date.now() - t8 < 4000) {
+    const ult = log.children[log.children.length - 1];
+    if (ult && ult.innerHTML.indexOf('ai-success') >= 0) break;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  const ingH = S.data.incomes.find(x => x.concept === 'Cobro' && x.amount === 10000);
+  if (!ingH) fail('el ingreso con concepto tocado no se guardó');
+  console.log('  ✔ ingreso guardado con tilde verde (concepto elegido por chip)');
+
   console.log('\n──────────────────────────');
   console.log('✔ AI E2E PASADO — persistencia verificada de punta a punta');
   process.exit(0);

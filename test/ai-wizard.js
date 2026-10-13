@@ -155,6 +155,16 @@ okk(AI.searchIntent('¿dónde está la amoladora?') === 'amoladora', 'searchInte
 const res9 = AI.searchStore('amoladora');
 okk(res9.some(r => r.tipo === 'Herramienta' && /En (mantenimiento|depósito|uso)/.test(r.detail)), 'búsqueda devuelve estado + ubicación claros');
 
+console.log('== 10) Chips obligatorios para opciones predefinidas ==');
+const stConcepto = AI.WIZARD_STEPS.ingreso.find(s => s.key === 'concepto');
+okk(!!stConcepto && JSON.stringify(stConcepto.buttons) === JSON.stringify(['Cobro', 'Adelanto', 'Certificación']), 'ingreso · concepto con chips [Cobro][Adelanto][Certificación]');
+okk(AI.WIZARD_STEPS.gasto.some(s => s.catsList), 'gasto · categoría con chips');
+okk(AI.WIZARD_STEPS.gasto.some(s => s.worksList), 'gasto · obra con chips');
+okk(AI.WIZARD_STEPS.ingreso.some(s => s.worksList), 'ingreso · obra con chips');
+okk(AI.WIZARD_STEPS.herramienta.some(s => s.buttons && s.buttons.length), 'herramienta · tipo con chips');
+okk(AI.WIZARD_STEPS.agendar[0].buttons.length === 3, 'agendar · tipo con chips');
+okk(AI.WIZARD_STEPS.empleado.some(s => s.buttons && s.buttons.length >= 7), 'empleado · oficio con chips');
+
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }

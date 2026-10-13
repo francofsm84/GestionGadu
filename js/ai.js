@@ -72,7 +72,7 @@
     ],
     ingreso: [
       { key: 'monto', ask: '¿De cuánto es el ingreso? (ej. 10000)' },
-      { key: 'concepto', ask: '¿Qué concepto? (Cobro, Adelanto, Certificación…; si no sabés, decime "no sé")' },
+      { key: 'concepto', ask: '¿Qué concepto?', buttons: ['Cobro', 'Adelanto', 'Certificación'] },
       { key: 'obra', ask: '¿A qué obra corresponde?', worksList: true },
     ],
     presupuesto: [
@@ -372,9 +372,13 @@
       const b = e.target && e.target.closest ? e.target.closest('[data-wiz]') : null;
       if (!b) return;
       const v = b.dataset.wiz;
-      if (v === '__cancel__') cancelWizard();
-      else if (v === '__continue__') { if (pendingOp) wizardAskNext(); }
-      else wizardAdvance(v);
+      if (v === '__cancel__') { cancelWizard(); return; }
+      if (v === '__continue__') { if (pendingOp) wizardAskNext(); return; }
+      /* Opción rápida táctil: inyecta el texto elegido como respuesta visible
+         del usuario y avanza automáticamente al siguiente paso del flujo */
+      appendLog(bubble(renderText(v), 'user'));
+      scrollToEnd();
+      wizardAdvance(v);
     });
     document.getElementById('aiFab').addEventListener('click', toggle);
     document.getElementById('aiClose').addEventListener('click', () => setOpen(false));
@@ -2195,5 +2199,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, PILL_WIZARD, suggestedWork, frequentEmployees, findAssetMention, findWorkMention, detectDestino, normFecha, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave() };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, PILL_WIZARD, suggestedWork, frequentEmployees, findAssetMention, findWorkMention, detectDestino, normFecha, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
 })(typeof window !== 'undefined' ? window : globalThis);
