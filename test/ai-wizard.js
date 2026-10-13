@@ -89,6 +89,18 @@ okk(!!j && j.hours[0].hours === 8 && j.hours[0].workId === obra.id, 'jornada con
 const rSinJ = await AI.execFormAction({ modulo: 'jornada', campos: { empleado: 'Jorge el Flaco' } });
 okk(rSinJ && rSinJ.saved === false, 'jornada incompleta → NO guarda');
 
+console.log('== 6) Asistencia diaria: empleados frecuentes + obra sugerida ==');
+const eA = S.add('employees', { firstName: 'Frecuente', lastName: 'Uno', phone: '+1', paymentData: '', hourlyRate: 0, active: true, notes: '', photo: null });
+const eB = S.add('employees', { firstName: 'Ocasional', lastName: 'Dos', phone: '+2', paymentData: '', hourlyRate: 0, active: true, notes: '', photo: null });
+S.add('attendance', { employeeId: eA.id, date: S.todayISO(), status: 'presente', hours: [{ workId: obra.id, hours: 8 }], notes: '' });
+S.add('attendance', { employeeId: eA.id, date: S.todayISO(), status: 'presente', hours: [{ workId: obra.id, hours: 6 }], notes: '' });
+S.add('attendance', { employeeId: eB.id, date: '2026-01-05', status: 'presente', hours: [{ workId: obra.id, hours: 8 }], notes: '' });
+const orden = AI.frequentEmployees([eB, eA]);
+okk(orden[0].id === eA.id, 'el empleado con más actividad reciente va primero');
+const sug = AI.suggestedWork();
+okk(!!sug && S.data.works.some(w => w.name === sug && w.status === 'activa'), 'obra sugerida es una obra activa real');
+okk(r1 && r1.coll === 'budgets' && r1.id, 'el guardado devuelve coll+id (Deshacer disponible)');
+
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }

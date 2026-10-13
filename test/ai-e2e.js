@@ -230,6 +230,40 @@ function fail(msg) { console.error('✘ FALLO:', msg); process.exit(1); }
   if (emp2.phone !== '+54 9 351 555-1234') fail('teléfono del empleado incorrecto');
   console.log('  ✔ empleado guardado completo (nombre + teléfono + oficio + tarifa) con tilde verde');
 
+  /* ============ FLUJO F: Contabilidad ([Ingresos][Gastos]) + Deshacer ============ */
+  console.log('== F) Menú Contabilidad + tarjeta Tap-to-Confirm con Deshacer ==');
+  G.auth.SUPABASE_URL = 'http://localhost:9333';
+  AI._pill('contabilidad');
+  while (Date.now() - t6 < 3000) {
+    const ult = log.children[log.children.length - 1];
+    if (ult && ult.innerHTML.indexOf('Qué querés cargar') >= 0) break;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  const pendL = log.children[log.children.length - 1];
+  const ledgerBtns = pendL.children.reduce((acc, c) => acc.concat(c.children || []), []).filter(c => c.dataset && c.dataset.ledger);
+  if (ledgerBtns.length !== 2) fail('no aparecieron [Ingresos][Gastos], got ' + ledgerBtns.length);
+  console.log('  ✔ pill Contabilidad → botones [Ingresos] [Gastos]');
+  AI._send('gastos');   // elegir por texto
+  if (!AI._pending() || AI._pending().modulo !== 'gasto') fail('no arrancó el wizard de gasto');
+  AI._send('5000');
+  AI._send('Materiales');
+  AI._send('Obra E2E');
+  AI._send('no sé');
+  const t7 = Date.now();
+  while (Date.now() - t7 < 4000) {
+    const ult = log.children[log.children.length - 1];
+    if (ult && ult.innerHTML.indexOf('ai-success') >= 0) break;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  const pendOK = log.children[log.children.length - 1];
+  if (pendOK.innerHTML.indexOf('data-undo') < 0) fail('la tarjeta de éxito no incluye el botón Deshacer');
+  if (!AI._lastSaved() || AI._lastSaved().coll !== 'expenses') fail('no se registró el último guardado para Deshacer');
+  const antesUndo = S.data.expenses.length;
+  console.log('  ✔ gasto guardado con tarjeta verde + botón [↩ Deshacer]');
+  AI._undo();
+  if (S.data.expenses.length !== antesUndo - 1) fail('Deshacer no eliminó el gasto');
+  console.log('  ✔ Deshacer eliminó el registro y refrescó');
+
   console.log('\n──────────────────────────');
   console.log('✔ AI E2E PASADO — persistencia verificada de punta a punta');
   process.exit(0);

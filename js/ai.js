@@ -262,6 +262,8 @@
   let adminWizard = null;    // alta express de usuarios en curso: { idx, campos }
   let contactStage = null;   // flujo de contacto: 'rol' (elegir tipo) · 'pick' (importar/dictar datos)
   let contactRole = null;    // rol elegido (empleado|cliente|socio) mientras contactStage === 'pick'
+  let ledgerMenu = false;    // submenú "Contabilidad" abierto ([Ingresos] [Gastos])
+  let lastSaved = null;      // último registro creado { coll, id, label } para "Deshacer"
   let voicePref = null;
   let currentUid = null;  // usuario autenticado dueño de la memoria del agente
   /* Memoria de sesión: última obra/cliente tratado, para que los comandos
@@ -333,6 +335,10 @@
         else if (k === 'wiz') adminWizardAdvance(adm.dataset.arg || '');
         return;
       }
+      const lb = e.target && e.target.closest ? e.target.closest('[data-ledger]') : null;
+      if (lb) { ledgerMenu = false; startWizard(lb.dataset.ledger, {}); return; }
+      const ub = e.target && e.target.closest ? e.target.closest('[data-undo]') : null;
+      if (ub) { undoSave(); return; }
       const rb = e.target && e.target.closest ? e.target.closest('[data-role]') : null;
       if (rb) {
         const hostEl = rb.closest('.ai-msg') || rb.parentElement || rb;
@@ -678,12 +684,12 @@
            NO guardar como general en silencio → preguntar la obra en el chat */
         if (!workId && (d.works || []).some(w => w.status === 'activa')) return null;
         const esObra = !!workId;
-        S.add('expenses', {
+        const creado = S.add('expenses', {
           type: esObra ? 'obra' : 'general', workId: workId || null, date: today, amount,
           category: cat, providerId: null, employeeId: null, expenseKind: null,
           description: desc, invoiceNumber: c.comprobante || '', paymentMethod: (S.METODOS && S.METODOS[0]) || 'Efectivo',
         });
-        return { ok: true, label: 'gasto de $' + amount + ' (' + desc + ')' + (esObra ? ' en ' + workName(workId) : '') };
+        return { ok: true, label: 'gasto de $' + amount + ' (' + desc + ')' + (esObra ? ' en ' + workName(workId) : ''), coll: 'expenses', id: creado.id };
       }
       if (mod === 'cliente' || mod === 'socio') {
         const name = c.nombre || '';
@@ -691,7 +697,7 @@
         const tipo = mod === 'socio' ? 'socio' : 'cliente';
         if (tipo === 'socio' && !c.porcentaje) return null;   // porcentaje obligatorio en socios
         const extra = tipo === 'socio' ? { percent: Number(c.porcentaje) || 0, active: true } : {};
-        S.add('contacts', {
+        const creado = S.add('contacts', {
           type: tipo, name,
           nombre: name.split(/\s+/)[0] || name,
           apellido: name.split(/\s+/).slice(1).join(' '),
@@ -700,7 +706,7 @@
           ...extra,
         });
         setFocus(mod, { nombre: name });
-        return { ok: true, label: (tipo === 'socio' ? 'socio ' : 'cliente ') + name };
+        return { ok: true, label: (tipo === 'socio' ? 'socio ' : 'cliente ') + name, coll: 'contacts', id: creado.id };
       }
       if (mod === 'empleado') {
         const full = c.nombre || '';
@@ -710,17 +716,17 @@
         if (!c.oficio) return null;     // oficio obligatorio (validación estricta)
         if (!c.telefono) return null;   // teléfono / WhatsApp obligatorio
         if (G.plan && G.plan.checkLimit && G.plan.checkLimit('empleados') === false) return null;
-        S.add('employees', { firstName: fn, lastName: ln, phone: c.telefono || '', paymentData: '', hourlyRate: Number(c.tarifa) || 0, active: true, notes: 'Oficio: ' + c.oficio, photo: null });
-        return { ok: true, label: 'empleado ' + (fn + ' ' + ln).trim() + ' (' + c.oficio + ')' };
+        const creado = S.add('employees', { firstName: fn, lastName: ln, phone: c.telefono || '', paymentData: '', hourlyRate: Number(c.tarifa) || 0, active: true, notes: 'Oficio: ' + c.oficio, photo: null });
+        return { ok: true, label: 'empleado ' + (fn + ' ' + ln).trim() + ' (' + c.oficio + ')', coll: 'employees', id: creado.id };
       }
       if (mod === 'obra') {
         const name = c.nombre || '';
         if (!name) return null;
         if (G.plan && G.plan.checkLimit && G.plan.checkLimit('obras') === false) return null;
         const clientId = c.cliente ? findId((d.contacts || []).filter(x => x.type === 'cliente'), c.cliente, x => x.name) : null;
-        S.add('works', { name, code: (S.nextCode ? S.nextCode('OB', 'works') : ''), clientId: clientId || null, location: c.ubicacion || c.direccion || '', status: 'activa', budgetTotal: Number(c.presupuesto) || 0, advanceFisico: 0, startDate: today, endDate: '', description: '' });
+        const creado = S.add('works', { name, code: (S.nextCode ? S.nextCode('OB', 'works') : ''), clientId: clientId || null, location: c.ubicacion || c.direccion || '', status: 'activa', budgetTotal: Number(c.presupuesto) || 0, advanceFisico: 0, startDate: today, endDate: '', description: '' });
         setFocus(mod, { nombre: name });
-        return { ok: true, label: 'obra ' + name };
+        return { ok: true, label: 'obra ' + name, coll: 'works', id: creado.id };
       }
       if (mod === 'ingreso') {
         const amount = Number(c.monto);
@@ -728,30 +734,30 @@
         const autoId = autoWorkId();
         const workId = c.obra ? findId(d.works, c.obra, x => x.name) : autoId;
         if (!workId) return null;   // sin obra única ni nombre → abrir formulario
-        S.add('incomes', { workId, clientId: null, date: today, amount, concept: c.concepto || 'Cobro', incomeKind: 'pago', method: (S.METODOS && S.METODOS[0]) || 'Efectivo', reference: '', notes: '' });
-        return { ok: true, label: 'ingreso de $' + amount + ' en ' + (workName(workId) || c.obra) };
+        const creado = S.add('incomes', { workId, clientId: null, date: today, amount, concept: c.concepto || 'Cobro', incomeKind: 'pago', method: (S.METODOS && S.METODOS[0]) || 'Efectivo', reference: '', notes: '' });
+        return { ok: true, label: 'ingreso de $' + amount + ' en ' + (workName(workId) || c.obra), coll: 'incomes', id: creado.id };
       }
       if (mod === 'presupuesto') {
         const name = c.nombre || c.concepto || '';
         if (!name) return null;
         const workId = c.obra ? findId(d.works, c.obra, x => x.name) : autoWorkId();
         const total = Number(c.monto) || Number(c.presupuesto) || 0;
-        S.add('budgets', { code: (S.nextCode ? S.nextCode('PR', 'budgets') : ''), clientId: null, workId: workId || null, name, date: today, validUntil: '', status: 'borrador', items: [], discount: 0, subtotal: total, total, notes: '' });
-        return { ok: true, label: 'presupuesto ' + name };
+        const creado = S.add('budgets', { code: (S.nextCode ? S.nextCode('PR', 'budgets') : ''), clientId: null, workId: workId || null, name, date: today, validUntil: '', status: 'borrador', items: [], discount: 0, subtotal: total, total, notes: '' });
+        return { ok: true, label: 'presupuesto ' + name, coll: 'budgets', id: creado.id };
       }
       if (mod === 'herramienta') {
         const name = c.nombre || '';
         if (!name) return null;
-        S.add('assets', { name, category: c.categoria || 'Herramienta', purchaseDate: today, cost: Number(c.monto) || Number(c.costo) || 0, status: 'operativo', supplierId: null, notes: c.ubicacion ? 'En: ' + c.ubicacion : '', maintenance: [] });
-        return { ok: true, label: 'herramienta ' + name };
+        const creado = S.add('assets', { name, category: c.categoria || 'Herramienta', purchaseDate: today, cost: Number(c.monto) || Number(c.costo) || 0, status: 'operativo', supplierId: null, notes: c.ubicacion ? 'En: ' + c.ubicacion : '', maintenance: [] });
+        return { ok: true, label: 'herramienta ' + name, coll: 'assets', id: creado.id };
       }
       if (mod === 'jornada') {
         const empId = c.empleado ? findId(d.employees, c.empleado, x => ((x.firstName || '') + ' ' + (x.lastName || '')).trim()) : null;
         const workId = c.obra ? findId(d.works, c.obra, x => x.name) : null;
         const horas = Number(c.horas);
         if (!empId || !workId || !(horas > 0)) return null;   // empleado, obra y horas obligatorios
-        S.add('attendance', { employeeId: empId, date: today, status: 'presente', hours: [{ workId, hours: horas }], notes: '' });
-        return { ok: true, label: 'jornada de ' + c.empleado + ' (' + horas + 'h en ' + c.obra + ')' };
+        const creado = S.add('attendance', { employeeId: empId, date: today, status: 'presente', hours: [{ workId, hours: horas }], notes: '' });
+        return { ok: true, label: 'jornada de ' + c.empleado + ' (' + horas + 'h en ' + c.obra + ')', coll: 'attendance', id: creado.id };
       }
     } catch (e) { return null; }
     return null;
@@ -775,19 +781,38 @@
         } else {
           throw new Error('sincronización no disponible');
         }
-        return { saved: true, label: saved.label, synced: true };
+        return { saved: true, label: saved.label, coll: saved.coll, id: saved.id, synced: true };
       } catch (e) {
-        return { saved: true, label: saved.label, synced: false, error: String((e && e.message) || e) };
+        return { saved: true, label: saved.label, coll: saved.coll, id: saved.id, synced: false, error: String((e && e.message) || e) };
       }
     }
     return { saved: false, modulo: mod };   // sin modal: la conversación continúa
+  }
+
+  /* Tarjeta de resumen "Tap-to-Confirm": tilde verde + opción temporal Deshacer */
+  function summaryCardHtml(res) {
+    return '<div class="ai-success"><span class="ai-success-ico">✔</span>' +
+      '<div class="ai-success-txt"><b>¡Listo! Carga completada</b><br>' + esc(res.label) + '</div></div>' +
+      (res.coll && res.id
+        ? '<div class="ai-actions"><button class="btn btn-soft btn-sm" data-undo="1">↩ Deshacer</button></div>'
+        : '');
+  }
+  function undoSave() {
+    const r = lastSaved;
+    lastSaved = null;
+    if (!r || !r.coll || !r.id) return;
+    try { if (G.store && G.store.remove) G.store.remove(r.coll, r.id); } catch (e) {}
+    try { if (G.sync && G.sync.push) G.sync.push(G.store.data); } catch (e) {}
+    try { if (G.router && G.router.refresh) G.router.refresh(); } catch (e) {}
+    wizardBubble('↩ Listo, deshice la carga de ' + (r.label || '') + '. Si querés volver a cargarla, decímelo.');
   }
 
   /* Renderiza el resultado del guardado: tilde verde SOLO si sync confirmó */
   function renderSaveResult(pend, res) {
     if (!res || !res.saved) return false;
     if (res.synced) {
-      pend.innerHTML = successCard(res.label);
+      lastSaved = (res.coll && res.id) ? { coll: res.coll, id: res.id, label: res.label } : null;
+      pend.innerHTML = summaryCardHtml(res);
       speak('¡Listo! Guardé ' + res.label);
       if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
     } else {
@@ -822,6 +847,7 @@
     'new-presupuesto': 'presupuesto',
     'herramientas': 'herramienta',
     'new-jornada': 'jornada',
+    'hoy': 'jornada',       // "¿Quién trabajó hoy?"
   };
   /* Claves que entran por "Crear agenda" (rol → carga manual) */
   const CONTACT_KEYS = ['new-contacto', 'new-empleado', 'new-cliente'];
@@ -833,10 +859,39 @@
     contactRole = null;
     adminWizard = null;
     pendingAdmin = null;
+    ledgerMenu = false;
+  }
+
+  /* Submenú "Contabilidad" → [Ingresos] [Gastos] */
+  function addLedgerButtons(pend) {
+    const wrap = document.createElement('div');
+    wrap.className = 'ai-actions';
+    ['Ingresos', 'Gastos'].forEach(lb => {
+      const b = document.createElement('button');
+      b.className = 'btn btn-soft btn-sm';
+      b.textContent = lb;
+      b.dataset.ledger = lb === 'Ingresos' ? 'ingreso' : 'gasto';
+      wrap.appendChild(b);
+    });
+    pend.appendChild(wrap);
+  }
+  function startLedgerMenu(pend) {
+    ledgerMenu = true;
+    pend.innerHTML = '¿Qué querés cargar?';
+    addLedgerButtons(pend);
+    busy = false;
+    scrollToEnd();
   }
 
   function firePill(k) {
     resetFlows();   // cambio de flujo → limpiar estados anteriores colgados
+    if (k === 'contabilidad') {
+      const pend = bubble('', 'bot');
+      log.appendChild(pend);
+      scrollToEnd();
+      startLedgerMenu(pend);
+      return;
+    }
     if (CONTACT_KEYS.indexOf(k) >= 0) {
       /* Blindaje: activa el estado WAITING_CONTACT_TYPE sin pasar texto */
       const pend = bubble('', 'bot');
@@ -869,8 +924,8 @@
     const pillsUser = [
       { k: 'new-obra', e: '🏗️', l: 'Nueva obra' },
       { k: 'new-contacto', e: '👤', l: 'Crear agenda' },
-      { k: 'new-gasto', e: '💸', l: 'Cargar gasto' },
-      { k: 'new-ingreso', e: '💰', l: 'Nuevo ingreso' },
+      { k: 'contabilidad', e: '💰', l: 'Contabilidad' },
+      { k: 'hoy', e: '👷', l: '¿Quién trabajó hoy?' },
       { k: 'new-presupuesto', e: '📄', l: 'Nuevo presupuesto' },
       { k: 'herramientas', e: '🛠️', l: 'Herramientas / Jornada' },
     ];
@@ -1348,6 +1403,37 @@
     busy = false;
     scrollToEnd();
   }
+  /* Empleados frecuentes primero (más actividad en los últimos 30 días) */
+  function frequentEmployees(emps) {
+    const d = G.store.data || {};
+    const att = d.attendance || [];
+    const hace30 = Date.now() - 30 * 86400000;
+    const counts = {};
+    att.forEach(a => {
+      const t = new Date(a.date || '').getTime();
+      if (!isNaN(t) && t >= hace30) counts[a.employeeId] = (counts[a.employeeId] || 0) + 1;
+    });
+    return emps.slice().sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0));
+  }
+  /* Obra sugerida (Smart Default): foco de sesión o la de actividad más reciente */
+  function suggestedWork() {
+    const d = G.store.data || {};
+    const activas = (d.works || []).filter(w => w.status === 'activa');
+    if (!activas.length) return null;
+    if (sessionFocus && sessionFocus.obra) {
+      const hit = activas.find(w => String(w.name).toLowerCase() === String(sessionFocus.obra).toLowerCase());
+      if (hit) return hit.name;
+    }
+    if (activas.length === 1) return activas[0].name;
+    const fechas = {};
+    const touch = (workId, date) => { if (workId && date && (!fechas[workId] || date > fechas[workId])) fechas[workId] = date; };
+    (d.attendance || []).forEach(a => touch(a.hours && a.hours[0] && a.hours[0].workId, a.date));
+    (d.expenses || []).forEach(x => touch(x.workId, x.date));
+    (d.incomes || []).forEach(x => touch(x.workId, x.date));
+    let best = null, bestDate = '';
+    activas.forEach(w => { if (fechas[w.id] && fechas[w.id] > bestDate) { bestDate = fechas[w.id]; best = w.name; } });
+    return best;
+  }
   function wizardAskStep() {
     const op = pendingOp;
     if (!op) return;
@@ -1357,6 +1443,7 @@
 
     /* Botones dinámicos con entidades REALES del store (obras / empleados) */
     let buttons = s.buttons || [];
+    let hint = '';
     if (s.worksList) {
       const obras = ((G.store.data && G.store.data.works) || []).filter(w => w.status === 'activa');
       if (!obras.length) {
@@ -1369,7 +1456,11 @@
         pend.appendChild(wrap);
         return;
       }
-      buttons = obras.map(w => w.name);
+      /* Smart Default: la obra sugerida (foco reciente) va PRIMERA en 1 clic */
+      const sug = suggestedWork();
+      const orden = sug ? [sug].concat(obras.filter(w => w.name !== sug)) : obras;
+      buttons = orden.map(w => w.name);
+      if (sug) hint = '💡 Obra sugerida: <b>' + esc(sug) + '</b>';
     } else if (s.empsList) {
       const emps = ((G.store.data && G.store.data.employees) || []).filter(e => e.active !== false);
       if (!emps.length) {
@@ -1382,7 +1473,8 @@
         pend.appendChild(wrap);
         return;
       }
-      buttons = emps.map(e => ((e.firstName || '') + ' ' + (e.lastName || '')).trim());
+      /* Empleados frecuentes primero (más actividad reciente) */
+      buttons = frequentEmployees(emps).map(e => ((e.firstName || '') + ' ' + (e.lastName || '')).trim());
     } else if (s.catsList) {
       /* Categorías REALES del store (obra + generales) + Herramientas/Equipamiento */
       const cats = ['Herramientas / Equipamiento']
@@ -1391,7 +1483,7 @@
       buttons = [...new Set(cats)];
     }
 
-    const pend = wizardBubble('🤖 ' + s.ask);
+    const pend = wizardBubble((hint ? hint + '<br>' : '') + '🤖 ' + s.ask);
     const wrap = document.createElement('div');
     wrap.className = 'ai-actions';
     buttons.forEach(lb => {
@@ -1494,7 +1586,8 @@
     const res = await execFormAction({ modulo: op.modulo, campos: op.campos });
     if (res && res.saved) {
       if (res.synced) {
-        wizardBubble(successCard(res.label));
+        lastSaved = (res.coll && res.id) ? { coll: res.coll, id: res.id, label: res.label } : null;
+        wizardBubble(summaryCardHtml(res));
         speak('¡Listo! Guardé ' + res.label);
         if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
       } else {
@@ -1626,6 +1719,25 @@
       return;
     }
 
+    /* ===== 1d) Submenú Contabilidad abierto ===== */
+    if (ledgerMenu) {
+      const mt = msg.toLowerCase();
+      if (/^(cancelar|cancela|salir|nada|no)\b/.test(mt)) {
+        ledgerMenu = false;
+        wizardBubble('✋ Operación cancelada.');
+        busy = false;
+        return;
+      }
+      if (/^ingresos?$/.test(mt)) { ledgerMenu = false; startWizard('ingreso', {}); busy = false; return; }
+      if (/^gastos?$/.test(mt)) { ledgerMenu = false; startWizard('gasto', {}); busy = false; return; }
+      const pend = bubble('Tocá un botón: <b>Ingresos</b> o <b>Gastos</b>.', 'bot');
+      log.appendChild(pend);
+      addLedgerButtons(pend);
+      scrollToEnd();
+      busy = false;
+      return;
+    }
+
     const pend = bubble('Pensando…', 'bot');
     log.appendChild(pend);
     scrollToEnd();
@@ -1743,5 +1855,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, PILL_WIZARD, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, PILL_WIZARD, suggestedWork, frequentEmployees, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave() };
 })(typeof window !== 'undefined' ? window : globalThis);
