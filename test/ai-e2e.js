@@ -166,13 +166,25 @@ function fail(msg) { console.error('✘ FALLO:', msg); process.exit(1); }
   const t2 = Date.now();
   while (Date.now() - t2 < 3000) {
     const ult = log.children[log.children.length - 1];
+    if (ult && ult.innerHTML.indexOf('Abrir mi agenda') >= 0) break;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  const pendBtn = log.children[log.children.length - 1];
+  const pickBtn = pendBtn.children.reduce((acc, c) => acc.concat(c.children || []), []).find(c => c.dataset && c.dataset.pick === '1');
+  if (!pickBtn) fail('no apareció el botón inline "📇 Abrir mi agenda"');
+  console.log('  ✔ botón inline [📇 Abrir mi agenda] renderizado (gesto directo)');
+
+  AI._pickGesture();   // simula el toque del usuario sobre el botón
+  await new Promise(r => setTimeout(r, 200));   // deja resolver la promesa del pick
+  while (Date.now() - t2 < 3000) {
+    const ult = log.children[log.children.length - 1];
     if (ult && ult.innerHTML.indexOf('rol tendrá') >= 0) break;
     await new Promise(r => setTimeout(r, 50));
   }
   const pendD = log.children[log.children.length - 1];
   const flat = (pendD && pendD.children) ? pendD.children.reduce((acc, c) => acc.concat(c.children || []), []) : [];
   const roleBtns = flat.filter(c => c.dataset && c.dataset.role);
-  if (roleBtns.length !== 3) fail('no aparecieron los botones [Empleado] [Cliente] [Socio], got ' + roleBtns.length);
+  if (roleBtns.length !== 3) fail('no aparecieron los botones [Empleado] [Cliente] [Socio], got ' + roleBtns.length + ' · innerHTML: ' + String(pendD && pendD.innerHTML).slice(0, 120) + ' · hijos: ' + (pendD ? pendD.children.length : 'sin pend'));
   const rolesOk = ['empleado', 'cliente', 'socio'].every(r => roleBtns.some(b => b.dataset.role === r));
   if (!rolesOk) fail('botones de rol incompletos');
   console.log('  ✔ agenda importada: "Ángel Cámara" + botones [Empleado] [Cliente] [Socio]');
@@ -193,6 +205,28 @@ function fail(msg) { console.error('✘ FALLO:', msg); process.exit(1); }
   if (!creado) fail('el cliente importado no se guardó');
   if (creado.phone !== '+54 9 3547 55-1234') fail('teléfono unificado incorrecto en el registro');
   console.log('  ✔ cliente guardado con tilde verde y teléfono unificado');
+
+  /* ============ FLUJO E: bloqueo de privacidad → mensaje amigable ============ */
+  console.log('== E) Bloqueo de la agenda (Brave/Safari) → mensaje amigable ==');
+  G.ui.pickContact = async () => { throw Object.assign(new Error('Unable to open a contact selector'), { name: 'SecurityError' }); };
+  AI._send('cargar un contacto');
+  const t4 = Date.now();
+  while (Date.now() - t4 < 3000) {
+    const ult = log.children[log.children.length - 1];
+    if (ult && ult.innerHTML.indexOf('Abrir mi agenda') >= 0) break;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  AI._pickGesture();
+  const t5 = Date.now();
+  while (Date.now() - t5 < 3000) {
+    const ult = log.children[log.children.length - 1];
+    if (ult && ult.innerHTML.indexOf('No pude acceder directamente') >= 0) break;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  const pendE = log.children[log.children.length - 1];
+  if (pendE.innerHTML.indexOf('Unable to open') >= 0) fail('mostró el error crudo en inglés');
+  if (pendE.innerHTML.indexOf('No pude acceder directamente a la agenda') < 0) fail('no mostró el mensaje amigable');
+  console.log('  ✔ error de privacidad capturado → mensaje amigable (sin texto técnico en inglés)');
 
   console.log('\n──────────────────────────');
   console.log('✔ AI E2E PASADO — persistencia verificada de punta a punta');

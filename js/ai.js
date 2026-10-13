@@ -329,6 +329,12 @@
       }
       const rb = e.target && e.target.closest ? e.target.closest('[data-role]') : null;
       if (rb) { chooseRole(rb.dataset.role); return; }
+      const pb = e.target && e.target.closest ? e.target.closest('[data-pick]') : null;
+      if (pb) {
+        const hostEl = pb.closest('.ai-msg') || pb.parentElement || pb;
+        handlePickGesture(hostEl);
+        return;
+      }
       const b = e.target && e.target.closest ? e.target.closest('[data-wiz]') : null;
       if (!b) return;
       const v = b.dataset.wiz;
@@ -1309,29 +1315,43 @@
     startWizard(mod, { nombre: p.nombre, telefono: p.telefono, email: p.email });
   }
   function startContactFlow(pend) {
+    /* La Contact Picker API exige un gesto directo del usuario: mostramos un
+       botón inline; al tocarlo se dispara la agenda nativa o el fallback. */
+    pend.innerHTML = '📇 Para importar tu contacto, tocá el botón (necesito tu toque directo para abrir la agenda):';
+    const wrap = document.createElement('div');
+    wrap.className = 'ai-actions';
+    const b = document.createElement('button');
+    b.className = 'btn btn-soft btn-sm';
+    b.textContent = '📇 Abrir mi agenda';
+    b.dataset.pick = '1';
+    wrap.appendChild(b);
+    pend.appendChild(wrap);
+    busy = false;
+    scrollToEnd();
+  }
+
+  function handlePickGesture(pend) {
     const pickFn = (G.ui && G.ui.pickContact) ? G.ui.pickContact.bind(G.ui) : null;
     if (!pickFn) {
-      pend.innerHTML = '📇 En este navegador no puedo abrir la agenda automáticamente. Decime el rol y el nombre (ej. "empleado Juan Pérez") y lo cargamos igual.';
-      busy = false;
+      pend.innerHTML = 'No pude acceder directamente a la agenda de tu navegador. Podés subir una tarjeta de contacto (.vcf) o dictarme el nombre y teléfono.';
       scrollToEnd();
       return;
     }
     pend.innerHTML = '📇 Abriendo tu agenda…';
+    scrollToEnd();
     pickFn().then(cc => {
       if (!cc) {
-        pend.innerHTML = '✋ Importación cancelada. Si querés, cargá los datos a mano: decime "empleado", "cliente" o "socio" y el nombre.';
-        busy = false;
+        pend.innerHTML = '✋ Importación cancelada. Si querés, dictame el nombre y el teléfono y lo cargamos igual.';
         scrollToEnd();
         return;
       }
       pendingRole = { nombre: cc.name, telefono: cc.phone, email: cc.email };
       pend.innerHTML = '📇 Importé a <b>' + esc(cc.name || '') + '</b>' + (cc.phone ? ' <span class="muted small">(' + esc(cc.phone) + ')</span>' : '') + '.<br>¿Qué rol tendrá este contacto?';
       addRoleButtons(pend);
-      busy = false;
       scrollToEnd();
-    }).catch(err => {
-      pend.innerHTML = '⚠️ No pude abrir la agenda: ' + esc(String((err && err.message) || err)) + '. Podés dictar el nombre y el rol (ej. "empleado Juan Pérez").';
-      busy = false;
+    }).catch(() => {
+      /* Nunca errores crudos en inglés: mensaje amigable y accionable */
+      pend.innerHTML = 'No pude acceder directamente a la agenda de tu navegador. Podés subir una tarjeta de contacto (.vcf) o dictarme el nombre y teléfono.';
       scrollToEnd();
     });
   }
@@ -1674,5 +1694,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _pendingRole: () => pendingRole, _pickGesture: () => { const pend = log && log.children[log.children.length - 1]; if (pend) handlePickGesture(pend); } };
 })(typeof window !== 'undefined' ? window : globalThis);

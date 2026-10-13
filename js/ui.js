@@ -275,17 +275,25 @@
 
   UI.pickContact = async () => {
     if (UI.contactsSupported()) {
-      const props = ['name', 'tel', 'email'];
-      const picked = await navigator.contacts.select(props, { multiple: false });
-      const c = picked && picked[0];
-      if (!c) return null;
-      return {
-        name: (c.name && c.name.join(' ')) || '',
-        phone: (c.tel && c.tel[0]) || '',
-        email: (c.email && c.email[0]) || '',
-      };
+      try {
+        const props = ['name', 'tel', 'email'];
+        const picked = await navigator.contacts.select(props, { multiple: false });
+        const c = picked && picked[0];
+        if (!c) return null;
+        return {
+          name: (c.name && c.name.join(' ')) || '',
+          phone: (c.tel && c.tel[0]) || '',
+          email: (c.email && c.email[0]) || '',
+        };
+      } catch (e) {
+        /* El usuario cerró la agenda → cancelar en silencio (sin fallback) */
+        if (e && /abort/i.test(String(e.name || ''))) return null;
+        /* Bloqueo de privacidad (Brave) o error del selector (iOS Safari):
+           caer automáticamente al fallback de archivo, sin errores crudos */
+        return UI.pickContactFallback();
+      }
     }
-    /* Navegador sin Contact Picker (escritorio): fallback con archivo */
+    /* Navegador sin Contact Picker (escritorio/iOS): fallback con archivo */
     return UI.pickContactFallback();
   };
   UI.parseVCF = parseVCF;
