@@ -216,6 +216,8 @@ body.sb-collapsed .main { margin-left: var(--sidebar-w-min); }
   min-width: 0;
 }
 .topbar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+/* Perfil de usuario: chip de plan + nombre (horizontal en escritorio) */
+.user-cluster { display: flex; align-items: center; gap: 8px; min-width: 0; flex-shrink: 0; }
 @supports (background: color-mix(in srgb, red 50%, blue)) {
   .topbar { background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(10px); }
 }
@@ -739,6 +741,13 @@ canvas.chart { min-width: 0; max-width: 100%; }
   .toast { max-width: none; }
   .kanban { scroll-snap-type: x mandatory; }
   .kanban-col { scroll-snap-align: start; }
+}
+@media (max-width: 768px) {
+  /* Móvil: la etiqueta de rol (Administrador) va DEBAJO del nombre,
+     liberando ancho horizontal para el título de la sección */
+  .user-cluster { flex-direction: column-reverse; align-items: flex-end; gap: 2px; }
+  .user-cluster .chip { max-width: 96px; font-size: 10.5px; padding: 1px 8px; line-height: 1.5; }
+  .user-cluster #btnUser { font-size: 12px; padding: 3px 9px; max-width: 110px; }
 }
 @media (max-width: 480px) {
   .kpi-grid, .kpi-grid.kpi-3, .kpi-grid.kpi-4, .kpi-grid.kpi-5 { grid-template-columns: 1fr; }
