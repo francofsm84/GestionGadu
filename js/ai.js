@@ -50,10 +50,12 @@
     cliente: [
       { key: 'nombre', ask: '¿Cómo se llama el cliente? (ej. "Ángel Cámara")' },
       { key: 'telefono', ask: '¿Su teléfono? (si no lo tenés, decime "no sé")' },
+      { key: 'email', ask: '¿Su e-mail? (si no lo sabés, decime "no sé")' },
       { key: 'direccion', ask: '¿Su dirección? (si no la sabés, decime "no sé")' },
     ],
     socio: [
       { key: 'nombre', ask: '¿Cómo se llama el socio?' },
+      { key: 'porcentaje', ask: '¿Qué porcentaje de participación tiene? (ej. 50)' },
     ],
     obra: [
       { key: 'nombre', ask: '¿Cómo se llama la obra? (ej. "Casa de Norma")' },
@@ -88,7 +90,7 @@
   };
   /* Campos CLAVE obligatorios: sin ellos NUNCA se guarda (ni tilde verde) */
   const WIZARD_REQUIRED = {
-    empleado: ['nombre', 'oficio'], cliente: ['nombre'], socio: ['nombre'], obra: ['nombre'],
+    empleado: ['nombre', 'oficio'], cliente: ['nombre'], socio: ['nombre', 'porcentaje'], obra: ['nombre'],
     gasto: ['monto', 'categoria', 'obra'], ingreso: ['monto', 'obra'],
     presupuesto: ['nombre', 'obra'], herramienta: ['nombre', 'categoria'],
     jornada: ['empleado', 'obra', 'horas'],
@@ -255,7 +257,8 @@
   let pendingOp = null;   // operación guiada en curso: { modulo, campos, idx }
   let pendingAdmin = null;   // acción de admin pendiente de confirmación: { uid, patch, label }
   let adminWizard = null;    // alta express de usuarios en curso: { idx, campos }
-  let pendingRole = null;    // contacto importado esperando rol: { nombre, telefono, email }
+  let contactStage = null;   // flujo de contacto: 'rol' (elegir tipo) · 'pick' (importar/dictar datos)
+  let contactRole = null;    // rol elegido (empleado|cliente|socio) mientras contactStage === 'pick'
   let voicePref = null;
   let currentUid = null;  // usuario autenticado dueño de la memoria del agente
   /* Memoria de sesión: última obra/cliente tratado, para que los comandos
@@ -328,7 +331,11 @@
         return;
       }
       const rb = e.target && e.target.closest ? e.target.closest('[data-role]') : null;
-      if (rb) { chooseRole(rb.dataset.role); return; }
+      if (rb) {
+        const hostEl = rb.closest('.ai-msg') || rb.parentElement || rb;
+        chooseRole(rb.dataset.role, hostEl);
+        return;
+      }
       const pb = e.target && e.target.closest ? e.target.closest('[data-pick]') : null;
       if (pb) {
         const hostEl = pb.closest('.ai-msg') || pb.parentElement || pb;
@@ -685,12 +692,15 @@
         const name = c.nombre || '';
         if (!name) return null;
         const tipo = mod === 'socio' ? 'socio' : 'cliente';
+        if (tipo === 'socio' && !c.porcentaje) return null;   // porcentaje obligatorio en socios
+        const extra = tipo === 'socio' ? { percent: Number(c.porcentaje) || 0, active: true } : {};
         S.add('contacts', {
           type: tipo, name,
           nombre: name.split(/\s+/)[0] || name,
           apellido: name.split(/\s+/).slice(1).join(' '),
-          company: '', phone: c.telefono || '', whatsapp: '', email: '',
+          company: '', phone: c.telefono || '', whatsapp: '', email: c.email || '',
           address: c.direccion || '', notes: '', photo: null,
+          ...extra,
         });
         setFocus(mod, { nombre: name });
         return { ok: true, label: (tipo === 'socio' ? 'socio ' : 'cliente ') + name };
@@ -809,9 +819,9 @@
      en el chat, sin redirigir a módulos externos) */
   const PILL_COMMANDS = {
     'new-obra': 'cargar una obra',
-    'new-contacto': 'importar un contacto',
-    'new-empleado': 'cargar un empleado',
-    'new-cliente': 'cargar un cliente',
+    'new-contacto': 'crear un contacto',
+    'new-empleado': 'crear un contacto',   // entra por "Crear contacto" → elegir rol
+    'new-cliente': 'crear un contacto',
     'new-gasto': 'cargar un gasto',
     'new-ingreso': 'cargar un ingreso',
     'new-presupuesto': 'cargar un presupuesto',
@@ -840,9 +850,7 @@
     ];
     const pillsUser = [
       { k: 'new-obra', e: '🏗️', l: 'Nueva obra' },
-      { k: 'new-contacto', e: '📇', l: 'Agregar contacto' },
-      { k: 'new-empleado', e: '👷', l: 'Nuevo empleado' },
-      { k: 'new-cliente', e: '👤', l: 'Nuevo cliente' },
+      { k: 'new-contacto', e: '👤', l: 'Crear contacto' },
       { k: 'new-gasto', e: '💸', l: 'Cargar gasto' },
       { k: 'new-ingreso', e: '💰', l: 'Nuevo ingreso' },
       { k: 'new-presupuesto', e: '📄', l: 'Nuevo presupuesto' },
@@ -922,8 +930,8 @@
      interpretamos la orden con patrones simples. */
   function localIntent(text) {
     const t = String(text || '').toLowerCase();
-    /* 0.5) Importar un contacto desde la agenda → elegir rol (Empleado/Cliente/Socio) */
-    if (/(?:importar|cargar|agregar|traer|alta de)\s+(?:un |una |el |la )?contacto\b/.test(t) ||
+    /* 0.5) Crear un contacto → primero elegir rol (Empleado/Cliente/Socio) */
+    if (/(?:importar|cargar|agregar|traer|alta de|crear)\s+(?:un |una |el |la )?contacto\b/.test(t) ||
         /contacto\s+(?:desde\s+la\s+agenda|de\s+la\s+agenda|nuevo)/.test(t)) {
       return { modulo: 'contacto', campos: {} };
     }
@@ -1306,31 +1314,26 @@
     });
     pend.appendChild(wrap);
   }
-  function chooseRole(rol) {
-    const p = pendingRole;
-    pendingRole = null;
-    if (!p) return;
-    const mod = rol === 'empleado' ? 'empleado' : rol === 'socio' ? 'socio' : 'cliente';
-    /* Arranca el wizard del rol elegido con los datos del contacto pre-cargados */
-    startWizard(mod, { nombre: p.nombre, telefono: p.telefono, email: p.email });
+  function chooseRole(rol, pend) {
+    if (!pend) return;
+    contactStage = 'pick';
+    contactRole = rol === 'empleado' ? 'empleado' : rol === 'socio' ? 'socio' : 'cliente';
+    /* El toque del botón ES el gesto del usuario: disparar la agenda directo */
+    handlePickGesture(pend);
   }
   function startContactFlow(pend) {
-    /* La Contact Picker API exige un gesto directo del usuario: mostramos un
-       botón inline; al tocarlo se dispara la agenda nativa o el fallback. */
-    pend.innerHTML = '📇 Para importar tu contacto, tocá el botón (necesito tu toque directo para abrir la agenda):';
-    const wrap = document.createElement('div');
-    wrap.className = 'ai-actions';
-    const b = document.createElement('button');
-    b.className = 'btn btn-soft btn-sm';
-    b.textContent = '📇 Abrir mi agenda';
-    b.dataset.pick = '1';
-    wrap.appendChild(b);
-    pend.appendChild(wrap);
+    /* Primero el ROL, después la importación */
+    contactStage = 'rol';
+    contactRole = null;
+    pend.innerHTML = '¿Qué tipo de contacto querés crear?';
+    addRoleButtons(pend);
     busy = false;
     scrollToEnd();
   }
 
   function handlePickGesture(pend) {
+    const rol = contactRole;
+    if (!rol) return;
     const pickFn = (G.ui && G.ui.pickContact) ? G.ui.pickContact.bind(G.ui) : null;
     if (!pickFn) {
       pend.innerHTML = 'No pude acceder directamente a la agenda de tu navegador. Podés subir una tarjeta de contacto (.vcf) o dictarme el nombre y teléfono.';
@@ -1341,14 +1344,15 @@
     scrollToEnd();
     pickFn().then(cc => {
       if (!cc) {
-        pend.innerHTML = '✋ Importación cancelada. Si querés, dictame el nombre y el teléfono y lo cargamos igual.';
+        pend.innerHTML = '✋ Importación cancelada. Dictame el nombre y el teléfono y lo cargamos igual.';
         scrollToEnd();
         return;
       }
-      pendingRole = { nombre: cc.name, telefono: cc.phone, email: cc.email };
-      pend.innerHTML = '📇 Importé a <b>' + esc(cc.name || '') + '</b>' + (cc.phone ? ' <span class="muted small">(' + esc(cc.phone) + ')</span>' : '') + '.<br>¿Qué rol tendrá este contacto?';
-      addRoleButtons(pend);
-      scrollToEnd();
+      contactStage = null;
+      const r = contactRole;
+      contactRole = null;
+      /* Arranca el wizard del rol elegido con los datos del contacto pre-cargados */
+      startWizard(r, { nombre: cc.name, telefono: cc.phone, email: cc.email });
     }).catch(() => {
       /* Nunca errores crudos en inglés: mensaje amigable y accionable */
       pend.innerHTML = 'No pude acceder directamente a la agenda de tu navegador. Podés subir una tarjeta de contacto (.vcf) o dictarme el nombre y teléfono.';
@@ -1564,15 +1568,44 @@
       busy = false;
       return;
     }
-    /* ===== 1c) Contacto importado esperando rol ===== */
-    if (pendingRole) {
+    /* ===== 1c) Flujo de contacto: elegir rol / importar / dictar datos ===== */
+    if (contactStage) {
       const mt = msg.toLowerCase();
-      if (/^(empleado|cliente|socio)$/.test(mt)) { chooseRole(mt); busy = false; return; }
-      if (/^(cancelar|nada|no)\b/.test(mt)) { pendingRole = null; wizardBubble('✋ Operación cancelada.'); busy = false; return; }
-      const pend = bubble('Tocá un botón: <b>Empleado</b>, <b>Cliente</b> o <b>Socio</b>.', 'bot');
-      log.appendChild(pend);
-      addRoleButtons(pend);
-      scrollToEnd();
+      if (/^(cancelar|cancela|salir|nada|no)\b/.test(mt)) {
+        contactStage = null; contactRole = null;
+        wizardBubble('✋ Operación cancelada.');
+        busy = false;
+        return;
+      }
+      if (contactStage === 'rol') {
+        if (/^(empleado|cliente|socio)$/.test(mt)) {
+          contactStage = 'pick';
+          contactRole = mt;
+          const pend = bubble('Dale, vamos a crear un/a <b>' + mt + '</b>. Tocá el botón para importar desde tu agenda (o dictame el nombre y el teléfono):', 'bot');
+          log.appendChild(pend);
+          const wrap = document.createElement('div');
+          wrap.className = 'ai-actions';
+          const b = document.createElement('button');
+          b.className = 'btn btn-soft btn-sm';
+          b.textContent = '📇 Abrir mi agenda';
+          b.dataset.pick = '1';
+          wrap.appendChild(b);
+          pend.appendChild(wrap);
+          scrollToEnd();
+        } else {
+          const pend = bubble('Tocá un botón: <b>Empleado</b>, <b>Cliente</b> o <b>Socio</b>.', 'bot');
+          log.appendChild(pend);
+          addRoleButtons(pend);
+          scrollToEnd();
+        }
+        busy = false;
+        return;
+      }
+      /* stage 'pick': el usuario dictó el nombre → arrancar el wizard del rol */
+      const rol = contactRole;
+      contactStage = null;
+      contactRole = null;
+      startWizard(rol, { nombre: msg });
       busy = false;
       return;
     }
@@ -1694,5 +1727,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _pendingRole: () => pendingRole, _pickGesture: () => { const pend = log && log.children[log.children.length - 1]; if (pend) handlePickGesture(pend); } };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _pickGesture: () => { const pend = log && log.children[log.children.length - 1]; if (pend) handlePickGesture(pend); } };
 })(typeof window !== 'undefined' ? window : globalThis);

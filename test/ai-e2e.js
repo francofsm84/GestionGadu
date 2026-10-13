@@ -158,12 +158,26 @@ function fail(msg) { console.error('✘ FALLO:', msg); process.exit(1); }
   if (S.data.incomes.some(i => i.amount === 10000)) fail('guardó un ingreso incompleto');
   console.log('  ✔ ingreso sin obra NO se guardó (wizard retuvo el dato)');
 
-  /* ============ FLUJO D: Agenda → Rol (Empleado/Cliente/Socio) ============ */
-  console.log('== D) Importar contacto de la agenda → elegir rol ==');
+  /* ============ FLUJO D: Crear contacto → rol → agenda → wizard ============ */
+  console.log('== D) Crear contacto → [Empleado/Cliente/Socio] → agenda → wizard ==');
   G.auth.SUPABASE_URL = 'http://localhost:9333';   // restablecer la red
   G.ui.pickContact = async () => ({ name: 'Ángel Cámara', phone: '+54 9 3547 55-1234', email: '' });
-  AI._send('cargar un contacto');
+  AI._send('crear un contacto');
   const t2 = Date.now();
+  while (Date.now() - t2 < 3000) {
+    const ult = log.children[log.children.length - 1];
+    if (ult && ult.innerHTML.indexOf('Qué tipo de contacto') >= 0) break;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  const pendD0 = log.children[log.children.length - 1];
+  const flat0 = (pendD0 && pendD0.children) ? pendD0.children.reduce((acc, c) => acc.concat(c.children || []), []) : [];
+  const roleBtns = flat0.filter(c => c.dataset && c.dataset.role);
+  if (roleBtns.length !== 3) fail('no aparecieron los 3 botones de rol primero, got ' + roleBtns.length);
+  const rolesOk = ['empleado', 'cliente', 'socio'].every(r => roleBtns.some(b => b.dataset.role === r));
+  if (!rolesOk) fail('botones de rol incompletos');
+  console.log('  ✔ primero pregunta el rol: [Empleado] [Cliente] [Socio]');
+
+  AI._send('cliente');   // elegir rol por texto
   while (Date.now() - t2 < 3000) {
     const ult = log.children[log.children.length - 1];
     if (ult && ult.innerHTML.indexOf('Abrir mi agenda') >= 0) break;
@@ -171,28 +185,14 @@ function fail(msg) { console.error('✘ FALLO:', msg); process.exit(1); }
   }
   const pendBtn = log.children[log.children.length - 1];
   const pickBtn = pendBtn.children.reduce((acc, c) => acc.concat(c.children || []), []).find(c => c.dataset && c.dataset.pick === '1');
-  if (!pickBtn) fail('no apareció el botón inline "📇 Abrir mi agenda"');
-  console.log('  ✔ botón inline [📇 Abrir mi agenda] renderizado (gesto directo)');
+  if (!pickBtn) fail('no apareció el botón "📇 Abrir mi agenda"');
+  console.log('  ✔ tras elegir rol → botón [📇 Abrir mi agenda] (gesto directo)');
 
   AI._pickGesture();   // simula el toque del usuario sobre el botón
   await new Promise(r => setTimeout(r, 200));   // deja resolver la promesa del pick
-  while (Date.now() - t2 < 3000) {
-    const ult = log.children[log.children.length - 1];
-    if (ult && ult.innerHTML.indexOf('rol tendrá') >= 0) break;
-    await new Promise(r => setTimeout(r, 50));
-  }
-  const pendD = log.children[log.children.length - 1];
-  const flat = (pendD && pendD.children) ? pendD.children.reduce((acc, c) => acc.concat(c.children || []), []) : [];
-  const roleBtns = flat.filter(c => c.dataset && c.dataset.role);
-  if (roleBtns.length !== 3) fail('no aparecieron los botones [Empleado] [Cliente] [Socio], got ' + roleBtns.length + ' · innerHTML: ' + String(pendD && pendD.innerHTML).slice(0, 120) + ' · hijos: ' + (pendD ? pendD.children.length : 'sin pend'));
-  const rolesOk = ['empleado', 'cliente', 'socio'].every(r => roleBtns.some(b => b.dataset.role === r));
-  if (!rolesOk) fail('botones de rol incompletos');
-  console.log('  ✔ agenda importada: "Ángel Cámara" + botones [Empleado] [Cliente] [Socio]');
-
-  AI._send('cliente');   // elegir rol por texto (los botones usan la misma ruta)
-  if (!AI._pending() || AI._pending().modulo !== 'cliente') fail('no arrancó el wizard de cliente');
+  if (!AI._pending() || AI._pending().modulo !== 'cliente') fail('no arrancó el wizard de cliente tras la importación');
   if (AI._pending().campos.nombre !== 'Ángel Cámara' || AI._pending().campos.telefono !== '+54 9 3547 55-1234') fail('datos del contacto NO pre-cargados en el wizard');
-  console.log('  ✔ rol elegido → wizard de cliente con nombre y teléfono pre-cargados');
+  console.log('  ✔ agenda importada → wizard de cliente con nombre y teléfono pre-cargados');
 
   AI._send('Alta Gracia');   // direccion
   const t3 = Date.now();
@@ -209,8 +209,14 @@ function fail(msg) { console.error('✘ FALLO:', msg); process.exit(1); }
   /* ============ FLUJO E: bloqueo de privacidad → mensaje amigable ============ */
   console.log('== E) Bloqueo de la agenda (Brave/Safari) → mensaje amigable ==');
   G.ui.pickContact = async () => { throw Object.assign(new Error('Unable to open a contact selector'), { name: 'SecurityError' }); };
-  AI._send('cargar un contacto');
+  AI._send('crear un contacto');
   const t4 = Date.now();
+  while (Date.now() - t4 < 3000) {
+    const ult = log.children[log.children.length - 1];
+    if (ult && ult.innerHTML.indexOf('Qué tipo de contacto') >= 0) break;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  AI._send('empleado');   // rol por texto
   while (Date.now() - t4 < 3000) {
     const ult = log.children[log.children.length - 1];
     if (ult && ult.innerHTML.indexOf('Abrir mi agenda') >= 0) break;
