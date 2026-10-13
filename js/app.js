@@ -202,32 +202,21 @@
         } else {
           UI.toast('Función no disponible', 'error');
         }
-        const qm = $id('quickMenu');
-        if (qm) qm.hidden = true;
       });
     });
+    /* Botón "+": disparador directo del Asistente Virtual (sin menú desplegable).
+       Sus acciones rápidas (Nueva obra, Contabilidad, ¿Quién trabajó hoy?, …)
+       viven dentro del propio chat. */
     const more = $id('btnMore');
-    const menu = $id('quickMenu');
-    if (more && menu) {
-      more.addEventListener('click', e => { e.stopPropagation(); menu.hidden = !menu.hidden; });
-      document.addEventListener('click', () => { menu.hidden = true; });
+    if (more) {
+      more.addEventListener('click', e => {
+        e.stopPropagation();
+        try {
+          if (G.ai && G.ai.open) G.ai.open();
+          else UI.toast('El asistente no está disponible', 'error');
+        } catch (err) { console.error(err); }
+      });
     }
-    /* Menú "+" simplificado: solo accesos agrupados (navegación) y asistente */
-    document.querySelectorAll('[data-menu-nav]').forEach(el => {
-      el.addEventListener('click', e => {
-        e.stopPropagation();
-        const k = el.getAttribute('data-menu-nav');
-        try { G.router.navigate('#/' + k); } catch (err) { console.error(err); }
-        if (menu) menu.hidden = true;
-      });
-    });
-    document.querySelectorAll('[data-menu-ai]').forEach(el => {
-      el.addEventListener('click', e => {
-        e.stopPropagation();
-        try { if (G.ai && G.ai.open) G.ai.open(); } catch (err) { console.error(err); }
-        if (menu) menu.hidden = true;
-      });
-    });
     bind('btnTheme', 'click', () => {
       const d = S.data;
       if (!d || !d.settings) return;

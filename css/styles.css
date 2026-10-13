@@ -212,9 +212,8 @@ body.sb-collapsed .main { margin-left: var(--sidebar-w-min); }
   min-width: 0;
 }
 .topbar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.quick-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-/* En el panel de administración se ocultan las acciones rápidas operativas */
-body.on-admin .quick-actions, body.on-admin .menu-wrap { display: none !important; }
+/* En el panel de administración se oculta el botón "+" (acciones operativas) */
+body.on-admin .btn-more { display: none !important; }
 @supports (background: color-mix(in srgb, red 50%, blue)) {
   .topbar { background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(10px); }
 }
@@ -223,7 +222,6 @@ body.on-admin .quick-actions, body.on-admin .menu-wrap { display: none !importan
 .topbar-title h1 { font-size: 17px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-title p { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .btn-more { display: inline-flex; }
-.menu-sep { height: 1px; background: var(--border); margin: 4px 6px; }
 .sync-indicator { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; flex: none; }
 /* Topbar móvil: trunca las insignias largas (plan/usuario) para no desbordar
    y deja los botones fijos del extremo (+ y tema) siempre visibles */
@@ -247,18 +245,6 @@ body.on-admin .quick-actions, body.on-admin .menu-wrap { display: none !importan
 .plan-price { font-size: 19px; font-weight: 700; }
 .plan-feats { list-style: none; margin: 4px 0 10px; display: grid; gap: 4px; font-size: 12.5px; color: var(--muted); }
 .plan-feats li::before { content: '✓ '; color: var(--success); }
-.menu-wrap { position: static; }
-.menu {
-  position: absolute; top: calc(100% + 8px); right: 12px; min-width: 215px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
-  box-shadow: var(--shadow); padding: 6px; z-index: 70;
-}
-.menu-item {
-  display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px;
-  border: none; background: none; color: var(--text); border-radius: 8px;
-  font-size: 13.5px; cursor: pointer; text-align: left;
-}
-.menu-item:hover { background: var(--surface-2); }
 
 /* ---------- Layout y grillas ---------- */
 .view { flex: 1; width: 100%; max-width: 1440px; margin: 0 auto; padding: 22px; display: flex; flex-direction: column; gap: 18px; }
@@ -683,7 +669,6 @@ canvas.chart { min-width: 0; max-width: 100%; }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 1280px) {
-  .quick-actions { display: none; }
   .btn-more { display: inline-flex; }
   .kpi-grid.kpi-5 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
   .kpi-grid.kpi-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
