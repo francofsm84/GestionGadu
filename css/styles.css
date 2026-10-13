@@ -246,6 +246,7 @@ body.sb-collapsed .main { margin-left: var(--sidebar-w-min); }
 /* ---------- Layout y grillas ---------- */
 .view { flex: 1; width: 100%; max-width: 1440px; margin: 0 auto; padding: 22px; display: flex; flex-direction: column; gap: 18px; }
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 14px; min-width: 0; max-width: 100%; }
+.kpi-grid.kpi-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .kpi-grid.kpi-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .kpi-grid.kpi-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .charts-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 16px; min-width: 0; max-width: 100%; }
@@ -736,7 +737,7 @@ canvas.chart { min-width: 0; max-width: 100%; }
   .kanban-col { scroll-snap-align: start; }
 }
 @media (max-width: 480px) {
-  .kpi-grid, .kpi-grid.kpi-4, .kpi-grid.kpi-5 { grid-template-columns: 1fr; }
+  .kpi-grid, .kpi-grid.kpi-3, .kpi-grid.kpi-4, .kpi-grid.kpi-5 { grid-template-columns: 1fr; }
   .cards-grid { grid-template-columns: 1fr; }
   .topbar-actions { gap: 4px; }
   .topbar .chip { max-width: 88px; }
