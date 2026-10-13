@@ -90,6 +90,12 @@
       { key: 'destino', ask: '¿A dónde va?', assignList: true },
       { key: 'nota', ask: '¿Alguna nota del movimiento? (si no, decime "no sé")' },
     ],
+    pago: [
+      { key: 'empleado', ask: '¿A qué empleado le pagamos?', empsList: true },
+      { key: 'tipo', ask: '¿Qué tipo de pago es?', buttons: ['Adelanto', 'Pago de jornada / semana'] },
+      { key: 'monto', ask: '¿Cuánto le pagamos? (ej. 50000 · 100mil · 100.000)' },
+      { key: 'obra', ask: '¿A qué obra imputamos el gasto?', worksList: true },
+    ],
     agendar: [
       { key: 'tipo', ask: '¿Qué tipo de compromiso es?', buttons: ['Reunión', 'Visita', 'Entrega', 'Tarea', 'Evento'] },
       { key: 'fecha', ask: '¿Para qué día? (ej. mañana, 15/04, 2026-04-15)' },
@@ -105,7 +111,7 @@
   };
   /* Campos CLAVE obligatorios: sin ellos NUNCA se guarda (ni tilde verde) */
   const WIZARD_REQUIRED = {
-    empleado: ['nombre', 'telefono', 'oficio'], cliente: ['nombre', 'telefono'], socio: ['nombre', 'telefono', 'porcentaje'], obra: ['nombre'], asignar: ['herramienta', 'destino'], agendar: ['tipo', 'fecha', 'titulo'],
+    empleado: ['nombre', 'telefono', 'oficio'], cliente: ['nombre', 'telefono'], socio: ['nombre', 'telefono', 'porcentaje'], obra: ['nombre'], asignar: ['herramienta', 'destino'], agendar: ['tipo', 'fecha', 'titulo'], pago: ['empleado', 'tipo', 'monto', 'obra'],
     gasto: ['monto', 'categoria', 'obra'], ingreso: ['monto', 'obra'],
     presupuesto: ['nombre', 'obra'], herramienta: ['nombre', 'categoria'],
     jornada: ['empleado', 'obra', 'horas'],
@@ -868,6 +874,27 @@
         });
         return { ok: true, label: 'compromiso "' + titulo.slice(0, 40) + '" para el ' + fecha, coll: 'compromisos', id: creado.id };
       }
+      if (mod === 'pago') {
+        /* Pago / Adelanto a empleado: impacto DOBLE.
+           1) Gasto en el libro (categoría Mano de obra, obra imputada).
+           2) El saldo del empleado se actualiza solo: RR.HH. lo deriva de
+              los gastos con employeeId + expenseKind (adelanto o sueldo). */
+        const empId = c.empleado ? findId(d.employees, c.empleado, x => ((x.firstName || '') + ' ' + (x.lastName || '')).trim()) : null;
+        const workId = c.obra ? findId(d.works, c.obra, x => workLabel(x)) : null;
+        const monto = extractNumber(c.monto);
+        if (!empId || !workId || !(monto > 0)) return null;   // empleado, obra y monto obligatorios
+        const esAdelanto = /adelanto|anticipo/i.test(String(c.tipo || ''));   // insensible a mayúsculas ("Adelanto")
+        const emp = d.employees.find(x => x.id === empId);
+        const full = emp ? ((emp.firstName || '') + ' ' + (emp.lastName || '')).trim() : String(c.empleado || '');
+        const creado = S.add('expenses', {
+          type: 'obra', workId, date: today, amount: monto,
+          category: 'Mano de obra', providerId: null, employeeId: empId,
+          expenseKind: esAdelanto ? 'adelanto' : 'sueldo',
+          description: (esAdelanto ? 'Adelanto a ' : 'Pago a ') + full,
+          invoiceNumber: '', paymentMethod: (S.METODOS && S.METODOS[0]) || 'Efectivo',
+        });
+        return { ok: true, label: (esAdelanto ? 'adelanto' : 'pago') + ' de $' + monto + ' a ' + full + (workName(workId) ? ' (' + workName(workId) + ')' : ''), coll: 'expenses', id: creado.id };
+      }
     } catch (e) { return null; }
     return null;
   }
@@ -957,6 +984,7 @@
     'herramientas': 'herramienta',
     'new-jornada': 'jornada',
     'hoy': 'jornada',       // "¿Quién trabajó hoy?"
+    'pago': 'pago',         // "Pago / Adelanto a empleado"
   };
   /* Claves que entran por "Crear agenda" (rol → carga manual) */
   const CONTACT_KEYS = ['new-contacto', 'new-empleado', 'new-cliente'];
@@ -1062,6 +1090,7 @@
     const pillsUser = [
       { k: 'new-obra', e: '🏗️', l: 'Nueva obra' },
       { k: 'new-contacto', e: '👤', l: 'Crear agenda' },
+      { k: 'pago', e: '💸', l: 'Pago / Adelanto' },
       { k: 'contabilidad', e: '💰', l: 'Contabilidad' },
       { k: 'hoy', e: '👷', l: '¿Quién trabajó hoy?' },
       { k: 'new-presupuesto', e: '📄', l: 'Nuevo presupuesto' },
@@ -1181,6 +1210,23 @@
     }
     return '';   // sin nombre válido → se excluye de las listas (nunca "undefined")
   }
+  /* Resuelve una mención textual a un empleado activo (nombre completo).
+     Devuelve el nombre ORIGINAL (no el normalizado) para mostrar en chips. */
+  function findEmployeeMention(t) {
+    const emps = ((G.store.data && G.store.data.employees) || []).filter(e => e.active !== false && e.firstName);
+    if (!emps.length) return null;
+    const ft = flatText(t);
+    const cand = [];
+    emps.forEach(e => {
+      const original = ((e.firstName || '') + ' ' + (e.lastName || '')).trim();
+      const nm = flatText(original);
+      if (nm.length >= 3 && ft.includes(nm)) cand.push(original);
+      else if (nm.split(/\s+/).some(p => p.length >= 4 && ft.includes(p))) cand.push(original);
+    });
+    if (!cand.length) return null;
+    cand.sort((a, b) => flatText(b).length - flatText(a).length);
+    return cand[0];
+  }
   /* Resuelve una mención textual a una obra existente (nombre o cliente).
      Blindado: ignora obras sin nombre para nunca devolver "undefined". */
   function findWorkMention(t) {
@@ -1272,6 +1318,17 @@
       if (fecha) campos.fecha = fecha;
       if (lugar) campos.lugar = lugar;
       return { modulo: 'agendar', campos };
+    }
+    /* 0.57) Pago / Adelanto a empleado → impacto doble (gasto + saldo) */
+    if (/(?:pagarle|pagar|pagale|pagá|pago|adelanto|anticipo|sueldo|semana|quincena)/.test(t) &&
+        findEmployeeMention(t) && !/gasto/.test(t)) {
+      const emp = findEmployeeMention(t);
+      const tipo = /adelanto|anticipo/.test(t) ? 'Adelanto' : 'Pago de jornada / semana';
+      const monto = parseMoney(t);
+      const obra = findWorkMention(t);
+      const campos = { empleado: emp, tipo, monto: monto > 0 ? monto : '' };
+      if (obra) campos.obra = obra;
+      return { modulo: 'pago', campos };
     }
     /* 0) Compra de herramienta/equipamiento → flujo de inversión (herramienta) */
     if (/(?:comprar|compré|compre|compra|compro|invertir en|inversión en)\s+(?:una |un |la |el )?/.test(t) &&
@@ -2340,5 +2397,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, findEmployeeMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
 })(typeof window !== 'undefined' ? window : globalThis);

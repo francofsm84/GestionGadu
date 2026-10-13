@@ -223,6 +223,25 @@ const g100 = S.data.expenses.find(x => x.amount === 100000);
 okk(r100 && r100.saved === true && !!g100, 'monto "100.000" se guarda completo ($100.000, no $100)');
 okk(!S.data.expenses.some(x => x.amount === 100), 'no quedó ningún gasto truncado en $100');
 
+console.log('== 16) Pago / Adelanto a empleado (impacto doble) ==');
+const iPago = AI.localIntent('adelanto de 50mil a Jorge el Flaco en la obra Norma Molina');
+okk(iPago && iPago.modulo === 'pago' && iPago.campos.empleado === 'Jorge el Flaco' && iPago.campos.monto === 50000 && iPago.campos.tipo === 'Adelanto' && iPago.campos.obra === 'Norma Molina', 'adelanto: empleado + monto + tipo + obra extraídos');
+okk(AI.isCompleteWizard('pago', iPago.campos) === true, 'adelanto completo → ejecución directa');
+const rPag = await AI.execFormAction(iPago);
+okk(rPag && rPag.saved === true && rPag.coll === 'expenses', 'adelanto guardado como gasto');
+const ePag = S.data.expenses.find(x => x.amount === 50000 && x.employeeId);
+okk(!!ePag && ePag.category === 'Mano de obra' && ePag.expenseKind === 'adelanto' && ePag.workId === obra.id, 'gasto: categoría Mano de obra + obra + empleado vinculados');
+const jorge = S.data.employees.find(e => e.firstName === 'Jorge');
+const avances = S.data.expenses.filter(x => x.employeeId === jorge.id && x.expenseKind === 'adelanto');
+okk(avances.some(x => x.id === ePag.id), 'saldo de adelantos del empleado actualizado automáticamente');
+const rSuel = await AI.execFormAction({ modulo: 'pago', campos: { empleado: 'Jorge el Flaco', tipo: 'Pago de jornada / semana', monto: '200.000', obra: 'Norma Molina' } });
+okk(rSuel && rSuel.saved === true, 'pago de jornada con "200.000" guarda el monto completo');
+const eSuel = S.data.expenses.find(x => x.amount === 200000 && x.employeeId);
+okk(!!eSuel && eSuel.expenseKind === 'sueldo', 'pago de jornada → expenseKind sueldo (legajo del empleado)');
+const rBadPago = await AI.execFormAction({ modulo: 'pago', campos: { empleado: 'Jorge el Flaco', tipo: 'Adelanto' } });
+okk(rBadPago && rBadPago.saved === false, 'pago incompleto (sin monto/obra) NO guarda');
+okk(AI.PILL_WIZARD['pago'] === 'pago', 'pill rápido Pago / Adelanto → wizard pago');
+
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }
