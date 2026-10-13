@@ -360,6 +360,24 @@
       setTimeout(() => { try { tip.classList.add('show'); } catch (e) {} }, 1200);
       setTimeout(hideTip, 9000);
     }
+
+    /* Desbloqueo de audio en iOS (Safari): el TTS queda mudo hasta el primer
+       gesto del usuario. Un touch/click/keydown "destraba" el sintetizador. */
+    let audioUnlocked = false;
+    const unlockAudio = () => {
+      if (audioUnlocked || !window.speechSynthesis) return;
+      audioUnlocked = true;
+      try { window.speechSynthesis.resume(); } catch (e) {}
+      try {
+        const u = new SpeechSynthesisUtterance(' ');
+        u.volume = 0;
+        u.rate = 10;
+        window.speechSynthesis.speak(u);
+      } catch (e) {}
+    };
+    ['touchstart', 'click', 'keydown'].forEach(ev => {
+      try { window.addEventListener(ev, unlockAudio); } catch (e) {}
+    });
   }
 
   /* Dictado por voz (Web Speech API) — estilo "pulsar para hablar":
@@ -438,7 +456,14 @@
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const mic = document.getElementById('aiMic');
     if (!SR) {
-      if (G.ui && G.ui.toast) G.ui.toast('Tu navegador no soporta dictado por voz. Probá con Chrome o Edge.', 'error');
+      /* Degradación elegante (Safari/iOS no soporta SpeechRecognition):
+         aviso claro en el chat + toast, sin errores de consola. */
+      if (G.ui && G.ui.toast) G.ui.toast('Tu navegador no soporta dictado por voz. Escribí tu mensaje y lo cargamos igual.', 'error');
+      try {
+        const pend = bubble('🎙️ Este navegador (Safari/iOS) no permite dictar por voz. <b>Escribí tu mensaje acá abajo</b>: el asistente responde igual de bien.', 'bot');
+        log.appendChild(pend);
+        scrollToEnd();
+      } catch (e) {}
       return;
     }
     if (listening) { stopRec(); return; }   // 2ª pulsación = dejar de escuchar (sin enviar)
@@ -499,11 +524,11 @@
     if (/es[-_]us/.test(l)) return 3;
     return 4;                                  // resto de LATAM (cl, co, pe…)
   }
-  /* Género inferido del nombre de la voz (listas ampliadas de voces latinas) */
+  /* Género inferido del nombre de la voz (listas ampliadas: Android/Google + iOS) */
   function voiceGender(v) {
     const n = (v.name || '').toLowerCase();
-    if (/(helena|laura|sabina|paulina|monica|soledad|esperanza|maria|marta|carmen|luciana|valentina|sara|camila|rosa|ana|gabriela|isabela|ximena|veronica|andrea|mariana|cecilia|paloma|penelope|frida|josefina|female|mujer|femenina)/.test(n)) return 'Femenina';
-    if (/(pablo|jorge|diego|carlos|juan|miguel|andres|raul|javier|pedro|gonzalo|alonso|enrique|rodrigo|leonardo|matias|emiliano|sergio|ramon|guillermo|bruno|male|hombre|masculina)/.test(n)) return 'Masculina';
+    if (/(helena|laura|sabina|paulina|monica|mónica|soledad|esperanza|maria|marta|carmen|luciana|valentina|sara|camila|rosa|ana|gabriela|isabela|ximena|veronica|andrea|mariana|cecilia|paloma|penelope|frida|josefina|sofia|sofía|marisol|fernanda|milena|florencia|female|mujer|femenina)/.test(n)) return 'Femenina';
+    if (/(pablo|jorge|diego|carlos|juan|miguel|andres|raul|javier|pedro|gonzalo|alonso|enrique|rodrigo|leonardo|matias|emiliano|sergio|ramon|guillermo|bruno|facundo|felipe|martin|martín|ricardo|male|hombre|masculina)/.test(n)) return 'Masculina';
     return '';
   }
   /* Etiqueta descriptiva: "Español latino · Femenina — Argentina · Sabina" */
