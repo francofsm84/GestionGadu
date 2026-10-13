@@ -216,13 +216,39 @@
     const opts = [];
     if (/(oficio|profesi[oó]n|qu[eé] hace|rubro)/.test(t)) {
       ['Albañil', 'Pintor', 'Plomero', 'Electricista', 'Carpintero', 'Yesero', 'Herrero'].forEach(o => opts.push({ label: o, send: 'oficio ' + o }));
+    } else if (/(confirm[aá]|est[aá]s seguro|procedo|quer[eé]s que|dale\?|seguimos\?)/.test(t) && t.indexOf('?') >= 0) {
+      /* Confirmaciones: chips táctiles Sí / No para no escribir en el celular */
+      opts.push({ label: 'Sí', send: 'sí' });
+      opts.push({ label: 'No', send: 'no' });
+    } else if (/(cobro|adelanto|certificaci[oó]n)/.test(t)) {
+      /* Concepto de ingreso: chips canónicos del flujo contable */
+      ['Cobro', 'Adelanto', 'Certificación'].forEach(c => opts.push({ label: c, send: 'concepto ' + c }));
+    } else if (/(un? ingreso o un? gasto|un? gasto o un? ingreso|ingreso o gasto|gasto o ingreso|tipo de movimiento|qu[eé] (quer[eé]s|necesit[aá]s) (cargar|registrar|anotar))/.test(t)) {
+      /* Tipo de movimiento: ingreso o gasto */
+      opts.push({ label: '💰 Ingreso', send: 'ingreso' });
+      opts.push({ label: '💸 Gasto', send: 'gasto' });
+    } else if (/(gasto de obra|gasto general|de obra o general|obra o general)/.test(t)) {
+      /* Tipo de gasto: directo de obra vs general */
+      opts.push({ label: '🏗️ Gasto de obra', send: 'gasto de obra' });
+      opts.push({ label: '📋 Gasto general', send: 'gasto general' });
     } else if (/(categor[ií]a|tipo de gasto)/.test(t)) {
       /* Categorías REALES del store + Herramientas/Equipamiento */
       const cats = ['Herramientas / Equipamiento'].concat((G.store && G.store.CATS_OBRA) || []).concat((G.store && G.store.CATS_GENERAL) || []);
       [...new Set(cats)].forEach(c => opts.push({ label: c, send: 'categoría ' + c }));
     } else if (/(qu[eé] obra|cu[aá]l obra|a qu[eé] obra|en qu[eé] obra)/.test(t)) {
       const works = (G.store.data && G.store.data.works) || [];
-      works.slice(0, 6).forEach(w => opts.push({ label: w.name, send: 'obra ' + w.name }));
+      /* Fallback seguro del nombre (nombre || name || titulo || nombreObra || nombre_obra)
+         para nunca renderizar "undefined": el botón muestra "nombre - código"
+         (ej. "casa angel camara - OB-2026-004") y el envío usa el nombre real,
+         que el flujo contable resuelve contra el identificador real de la obra. */
+      works.slice(0, 6).forEach(w => {
+        if (!w) return;
+        const raw = w.nombre || w.name || w.titulo || w.nombreObra || w.nombre_obra;
+        const name = String(raw == null ? '' : raw).trim();
+        const safeName = name && !/^(undefined|null|nan|\[object\s+object\])$/i.test(name) ? name : 'Obra sin nombre';
+        const label = safeName + (w.code ? ' - ' + w.code : '');
+        opts.push({ label: label, send: 'obra ' + safeName });
+      });
     }
     return opts;
   }
@@ -1235,6 +1261,10 @@
       if (m) campos.costo = Number(m[0].replace(/\./g, '').replace(',', '.'));
       return { modulo: 'herramienta', campos };
     }
+    /* Preguntas NUNCA disparan formularios de creación: "¿puedo crear una obra?",
+       "¿cuánto gasté en la obra X?", "¿cuánto balance hay?" → se responden como
+       consulta (búsqueda/IA), no como alta. Evita bucles y formularios erróneos. */
+    if (isQuery(t)) return null;
     /* 1) Crear entidades: "crear/cargar empleado|obra|cliente|socio|presupuesto [nombre]" */
     const crear = t.match(/(?:crear|crea|agregar|alta de|nueva|nuevo|cargar|carga|cárgame|cargame|cargá)\s+(?:un |una |el |la |a )?(empleado|obra|cliente|socio|presupuesto|herramienta|jornada)\b/i);
     if (crear) {
@@ -1270,10 +1300,10 @@
   /* Búsqueda inteligente: "buscame a X" / "¿dónde está X?" → consulta el store */
   function searchIntent(text) {
     const t = String(text || '').toLowerCase();
-    const m = t.match(/(?:buscame|buscame a|búscame|busca|buscar|dónde está|donde esta|dónde anda|donde anda|dónde quedó|donde quedo)\s+(.+)/i);
+    const m = t.match(/(?:buscame|buscame a|búscame|busca|buscar|dónde está|donde esta|dónde anda|donde anda|dónde quedó|donde quedo|qu[eé] pas[oó] con|qui[eé]n tiene|encontr[aá]me)\s+(.+)/i);
     if (!m) return null;
-    const q = m[1].trim().replace(/[?.!¡¿]+$/g, '').replace(/^(la|el|a|un|una|los|las)\s+/i, '').toLowerCase();
-    if (q.length < 2 || q.split(/\s+/).length > 5) return null;
+    const q = m[1].trim().replace(/[?.!¡¿]+$/g, '').replace(/^(la|el|a|un|una|los|las|mi|mis|nuestra|nuestro)\s+/i, '').toLowerCase();
+    if (q.length < 2 || q.split(/\s+/).length > 8) return null;
     return q;
   }
 
@@ -1584,7 +1614,7 @@
     return req.every(k => c[k] !== undefined && c[k] !== null && String(c[k]).trim() !== '');
   }
   function isQuery(text) {
-    return /^(cu[aá]nto|c[uó]mo|d[oó]nde|cu[aá]l|cu[aá]ndo|qu[eé] es|mostrame|mostráme|ver|muestrame)/i.test(String(text || '').trim());
+    return /^[¿¡]?\s*(cu[aá]nto|c[uó]mo|d[oó]nde|cu[aá]l|cu[aá]ndo|qu[eé]|puedo|pod[eé]s|podemos|se puede|mostrame|mostráme|ver|muestrame)/i.test(String(text || '').trim());
   }
 
   /* Scroll automático al final del chat: ninguna burbuja ni la caja de texto
@@ -1673,6 +1703,14 @@
     activas.forEach(w => { if (fechas[w.id] && fechas[w.id] > bestDate) { bestDate = fechas[w.id]; best = workLabel(w); } });
     return best;
   }
+  /* Etiquetas de los chips de obras: sugerida PRIMERA, todas con texto válido
+     (nunca vacías → jamás botones transparentes ni "undefined") */
+  function workChipLabels() {
+    const obras = ((G.store.data && G.store.data.works) || []).filter(w => w.status === 'activa' && workLabel(w));
+    const labels = obras.map(w => workLabel(w)).filter(l => l);
+    const sug = suggestedWork();
+    return sug ? [sug].concat(labels.filter(l => l !== sug)) : labels;
+  }
   function wizardAskStep() {
     const op = pendingOp;
     if (!op) return;
@@ -1684,9 +1722,9 @@
     let buttons = s.buttons || [];
     let hint = '';
     if (s.worksList) {
-      /* El 100% de las obras activas con nombre válido (name/nombre/titulo/nombreObra) */
-      const obras = ((G.store.data && G.store.data.works) || []).filter(w => w.status === 'activa' && workLabel(w));
-      if (!obras.length) {
+      /* El 100% de las obras activas con nombre válido, sugerida primero */
+      const labels = workChipLabels();
+      if (!labels.length) {
         const pend = wizardBubble('⚠️ Todavía no tenés obras activas. Primero creá una obra: decime <b>"crear una obra"</b> y empezamos por ahí.');
         const wrap = document.createElement('div');
         wrap.className = 'ai-actions';
@@ -1698,8 +1736,7 @@
       }
       /* Smart Default: la obra sugerida (foco reciente) va PRIMERA en 1 clic */
       const sug = suggestedWork();
-      const orden = sug ? [sug].concat(obras.filter(w => workLabel(w) !== sug)) : obras;
-      buttons = orden.map(w => workLabel(w));
+      buttons = labels;
       if (sug) hint = '💡 Obra sugerida: <b>' + esc(sug) + '</b>';
     } else if (s.empsList) {
       const emps = ((G.store.data && G.store.data.employees) || []).filter(e => e.active !== false);
@@ -1850,7 +1887,7 @@
   }
   async function finishWizard() {
     const op = pendingOp;
-    pendingOp = null;
+    resetFlows();   // limpieza inmediata del estado conversacional al finalizar
     if (!op) return;
     /* Esperar la confirmación REAL de persistencia antes de celebrar */
     const res = await execFormAction({ modulo: op.modulo, campos: op.campos });
@@ -2122,11 +2159,23 @@
     const sess = G.auth.getSession();
     if (!sess) { pend.innerHTML = 'Necesitás iniciar sesión para usar el asistente.'; busy = false; return; }
     /* Búsqueda local instantánea: "buscame a X" / "¿dónde está X?" → respuesta
-       inmediata desde el store con acceso directo (sin pasar por la IA) */
+       inmediata desde el store con acceso directo (sin pasar por la IA).
+       SIEMPRE corta acá: aunque no haya resultados, la consulta NUNCA deriva
+       a formularios de creación (obras, presupuestos, herramientas…). */
     const sq = searchIntent(msg);
     if (sq) {
       const found = searchStore(sq);
-      if (found.length) { handleSearchResults(sq, found, pend); return; }
+      if (found.length) {
+        handleSearchResults(sq, found, pend);
+      } else {
+        pend.innerHTML = '🔍 Busqué "<b>' + esc(sq) + '</b>" en herramientas, obras, empleados, contactos y movimientos, y no encontré coincidencias.<br>Probá con otro nombre o pedime "<b>ver herramientas</b>" para revisar lo cargado.';
+        rememberTurn('usuario', 'buscar ' + sq);
+        rememberTurn('asistente', 'no encontré ' + sq);
+        speak('No encontré nada con ese nombre.');
+        busy = false;
+        scrollToEnd();
+      }
+      return;
     }
     /* ===== 2) COO Virtual: comandos del Super Admin (SOLO con rol admin) ===== */
     if (esSuperAdmin()) {
@@ -2218,6 +2267,8 @@
                 : local.modulo === 'ingreso' ? 'Decime el monto (ej. "ingreso de 10000").'
                 : 'Decime el nombre y los datos que puedas (ej. "empleado Juan Pérez").';
               pend.innerHTML = renderText('Entendí tu pedido (' + local.modulo + '). ' + faltante);
+              /* Los chips táctiles se adjuntan SIEMPRE al mensaje del asistente */
+              addInlineOptions(pend, faltante);
             }
           });
         } else {
@@ -2233,5 +2284,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, PILL_WIZARD, suggestedWork, frequentEmployees, findAssetMention, findWorkMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
 })(typeof window !== 'undefined' ? window : globalThis);

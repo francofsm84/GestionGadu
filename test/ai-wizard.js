@@ -192,6 +192,16 @@ const iLeg = await AI.execFormAction({ modulo: 'ingreso', campos: { monto: 5000,
 const incLeg = S.data.incomes.find(x => x.amount === 5000);
 okk(iLeg && iLeg.saved === true && !!incLeg && incLeg.workId === wLeg.id, 'OB-2026-004 (name="undefined", nombre real) vincula el ingreso al ID correcto');
 
+console.log('== 13) Chips de obras: primer botón SIEMPRE con texto (nunca transparente) ==');
+const chips = AI.workChipLabels();
+okk(chips.length >= 3, 'lista TODAS las obras activas');
+okk(chips.every(l => typeof l === 'string' && l.trim().length > 0), 'ningún chip vacío (cero botones transparentes)');
+okk(!chips.some(l => /undefined/i.test(l)), 'ningún chip dice "undefined"');
+const sug13 = AI.suggestedWork();
+okk(chips[0] === sug13, 'el primer botón es la obra sugerida con su texto real');
+okk(chips.indexOf('casa angel camara') >= 0, '"casa angel camara" presente entre los chips');
+okk(chips[0] !== '', 'primer botón no vacío (regresión del bug del botón transparente)');
+
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }
