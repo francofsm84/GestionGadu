@@ -19,6 +19,14 @@
     'Otros': 'box',
   };
 
+  /* Estado unificado de la ficha: deriva de estado + ubicación actual */
+  function estadoDe(a) {
+    if (a.status === 'dado de baja') return ['Dado de baja', 'neutral', 'x-circle'];
+    if (a.status === 'en reparación') return ['En mantenimiento', 'warning', 'wrench'];
+    if (a.location) return ['Activa en uso', 'success', 'map-pin'];
+    return ['En depósito', 'neutral', 'box'];
+  }
+
   function filtered() {
     const q = state.q.toLowerCase();
     return S.data.assets.filter(a => {
@@ -92,7 +100,7 @@
   }
 
   function assetCard(a) {
-    const stl = ST_TONE[a.status] || ['', 'neutral'];
+    const est = estadoDe(a);
     const prov = S.contactById(a.supplierId);
     const m = (a.maintenance || []);
     const us = S.assetUsage(a);
@@ -101,7 +109,7 @@
       '<span class="asset-ico">' + UI.icon(CAT_ICON[a.category] || 'box', 20) + '</span>' +
       '<div class="asset-info"><strong>' + UI.escapeHtml(a.name) + '</strong>' +
       '<span class="muted small">' + UI.escapeHtml(a.category) + '</span></div>' +
-      UI.chip(stl[0], stl[1]) +
+      UI.chip(est[0], est[1], est[2]) +
       '</div>' +
       '<div class="contact-chips">' + locHTML(a) + '</div>' +
       '<div class="muted small">' + UI.icon('calendar', 13) + ' Comprada el ' + UI.fmtDate(a.purchaseDate) +
@@ -114,7 +122,7 @@
       '</div>' +
       '<div class="asset-foot">' +
       '<button class="btn btn-soft btn-sm" data-hist="' + a.id + '">' + UI.icon('eye', 14) + 'Historial</button>' +
-      '<button class="btn btn-soft btn-sm" data-ubicar="' + a.id + '">' + UI.icon('map-pin', 14) + 'Ubicar</button>' +
+      '<button class="btn btn-soft btn-sm" data-ubicar="' + a.id + '">' + UI.icon('map-pin', 14) + 'Mover / Estado</button>' +
       '<button class="btn btn-soft btn-sm" data-maint="' + a.id + '">' + UI.icon('wrench', 14) + 'Mant.</button>' +
       '<div class="spacer"></div>' +
       '<button class="icon-btn sm" data-edit="' + a.id + '" title="Editar">' + UI.icon('edit', 15) + '</button>' +
@@ -189,28 +197,43 @@
 
   function openUbicarModal(a) {
     const cur = a.location ? S.data.works.find(w => w.id === a.location) : null;
+    const est = estadoDe(a);
     const m = UI.openModal({
-      title: 'Ubicar · ' + a.name,
-      subtitle: cur ? 'Hoy está en: ' + cur.code + ' · ' + cur.name : 'Hoy está guardada en depósito.',
+      title: 'Mover / cambiar estado · ' + a.name,
+      subtitle: 'Hoy: ' + est[0] + (cur ? ' en ' + cur.code + ' · ' + cur.name : ' (guardada en depósito)') + '.',
       body:
         '<div class="grid-form">' +
-        '<div class="field span-2"><label>¿Dónde está ahora?</label><select class="select" id="fLoc">' +
+        '<div class="field"><label>Estado</label><select class="select" id="fStatus">' +
+        '<option value="">— Sin cambios —</option>' +
+        '<option value="en reparación">🔧 En mantenimiento</option>' +
+        '<option value="operativo">✅ Operativa (activa)</option>' +
+        '<option value="dado de baja">🚫 Dar de baja</option>' +
+        '</select></div>' +
+        '<div class="field span-2"><label>Obra asignada actual</label><select class="select" id="fLoc">' +
         '<option value="">📦 Guardada (depósito)</option>' +
         S.data.works.map(w => '<option value="' + w.id + '"' + (a.location === w.id ? ' selected' : '') + '>' + UI.escapeHtml(w.code + ' · ' + w.name) + (w.status !== 'activa' ? ' (' + w.status + ')' : '') + '</option>').join('') +
         '</select></div>' +
         '<div class="field span-2"><label>Nota del movimiento (opcional)</label><input class="input" id="fNotes" placeholder="Ej.: La llevó Juan a la obra…"></div>' +
         '</div>',
-      footer: '<button class="btn btn-ghost" data-cancel>Cancelar</button><button class="btn btn-primary" data-save>' + UI.icon('check', 15) + 'Guardar ubicación</button>',
+      footer: '<button class="btn btn-ghost" data-cancel>Cancelar</button><button class="btn btn-primary" data-save>' + UI.icon('check', 15) + 'Guardar</button>',
     });
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
     m.panel.querySelector('[data-save]').addEventListener('click', () => {
+      const status = m.panel.querySelector('#fStatus').value;
       const workId = m.panel.querySelector('#fLoc').value || null;
       const notes = m.panel.querySelector('#fNotes').value.trim();
-      const ok = S.moveAsset(a.id, workId, notes);
-      if (!ok) {
-        UI.toast('Ya está en ese lugar', 'info');
+      let cambios = 0;
+      /* El estado se registra primero (con nota), luego la ubicación.
+         Ambos dejan su rastro en el historial de trazabilidad. */
+      if (status) {
+        if (S.setAssetStatus(a.id, status, notes || ('Estado: ' + status))) cambios++;
+        if (status === 'operativo' && !workId) { /* "operativa" sin obra → queda en depósito */ }
+      }
+      if (S.moveAsset(a.id, workId, notes || (workId ? 'Asignada a la obra' : 'Guardada en depósito'))) cambios++;
+      if (!cambios) {
+        UI.toast('Sin cambios: ya estaba en ese estado y lugar', 'info');
       } else {
-        UI.toast(workId ? 'Herramienta asignada a la obra' : 'Herramienta guardada en depósito');
+        UI.toast('Actualizado: estado y ubicación guardados en el historial');
       }
       m.close();
       G.router.refresh();
@@ -266,8 +289,8 @@
       size: 'wide',
       body:
         '<div class="card-inset" style="margin-top:0">' +
-        '<h4>📦 Ubicación e historial de uso</h4>' +
-        locHTML(a) + ' <span class="form-hint">' + us.totalDays + ' días totales en obra · ' + us.log.length + ' movimientos</span>' +
+        '<h4>📦 Estado, ubicación e historial de uso</h4>' +
+        UI.chip(estadoDe(a)[0], estadoDe(a)[1], estadoDe(a)[2]) + ' ' + locHTML(a) + ' <span class="form-hint">' + us.totalDays + ' días totales en obra · ' + us.log.length + ' movimientos</span>' +
         (usoRows
           ? '<div class="table-wrap" style="margin-top:10px"><table class="data-table compact">' +
             '<thead><tr><th>Desde</th><th>Destino</th><th>Nota</th></tr></thead><tbody>' + usoRows + '</tbody></table></div>'

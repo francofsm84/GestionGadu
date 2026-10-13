@@ -89,6 +89,26 @@ okk(!!j && j.hours[0].hours === 8 && j.hours[0].workId === obra.id, 'jornada con
 const rSinJ = await AI.execFormAction({ modulo: 'jornada', campos: { empleado: 'Jorge el Flaco' } });
 okk(rSinJ && rSinJ.saved === false, 'jornada incompleta → NO guarda');
 
+console.log('== 7) Asignar herramienta: mover a obra / depósito / mantenimiento ==');
+const asset = S.add('assets', { name: 'Amoladora angular', category: 'Herramienta eléctrica', purchaseDate: S.todayISO(), cost: 45000, status: 'operativo', supplierId: null, notes: '', location: null, usages: [{ from: S.todayISO(), workId: null, notes: 'Compra' }], maintenance: [] });
+const rAsig = await AI.execFormAction({ modulo: 'asignar', campos: { herramienta: 'Amoladora angular · depósito', destino: 'Norma Molina', nota: 'La llevó Juan' } });
+okk(rAsig && rAsig.saved === true, 'asignación a obra guarda directo');
+const a1 = S.data.assets.find(x => x.id === asset.id);
+okk(a1.location === obra.id, 'quedó asignada a la obra');
+okk((a1.usages || []).some(u => u.workId === obra.id && /La llevó Juan/.test(u.notes || '')), 'movimiento registrado en el historial con nota');
+okk(a1.cost === 45000, 'costo de inversión intacto');
+const rDep = await AI.execFormAction({ modulo: 'asignar', campos: { herramienta: 'Amoladora angular · en obra', destino: '📦 En depósito' } });
+okk(rDep && rDep.saved === true, 'devolución a depósito');
+const a2 = S.data.assets.find(x => x.id === asset.id);
+okk(a2.location === null && a2.status === 'operativo', 'quedó en depósito y operativa');
+const rMant = await AI.execFormAction({ modulo: 'asignar', campos: { herramienta: 'Amoladora angular · depósito', destino: '🔧 En mantenimiento' } });
+okk(rMant && rMant.saved === true, 'envío a mantenimiento');
+const a3 = S.data.assets.find(x => x.id === asset.id);
+okk(a3.status === 'en reparación', 'estado en mantenimiento persistido');
+okk(a3.usages.length >= 4, 'trazabilidad completa (cada movimiento quedó registrado)');
+const rBad = await AI.execFormAction({ modulo: 'asignar', campos: { herramienta: 'Inexistente', destino: 'Norma Molina' } });
+okk(rBad && rBad.saved === false, 'herramienta inexistente → NO guarda');
+
 console.log('== 6) Asistencia diaria: empleados frecuentes + obra sugerida ==');
 const eA = S.add('employees', { firstName: 'Frecuente', lastName: 'Uno', phone: '+1', paymentData: '', hourlyRate: 0, active: true, notes: '', photo: null });
 const eB = S.add('employees', { firstName: 'Ocasional', lastName: 'Dos', phone: '+2', paymentData: '', hourlyRate: 0, active: true, notes: '', photo: null });

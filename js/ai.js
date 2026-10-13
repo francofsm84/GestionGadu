@@ -85,6 +85,11 @@
       { key: 'categoria', ask: '¿Qué tipo es?', buttons: ['Herramienta eléctrica', 'Herramienta manual', 'Maquinaria', 'Otro'] },
       { key: 'costo', ask: '¿Cuánto costó? (ej. 12000; si no sabés, decime "no sé")' },
     ],
+    asignar: [
+      { key: 'herramienta', ask: '¿Qué herramienta querés mover?', assetsList: true },
+      { key: 'destino', ask: '¿A dónde va?', assignList: true },
+      { key: 'nota', ask: '¿Alguna nota del movimiento? (si no, decime "no sé")' },
+    ],
     jornada: [
       { key: 'empleado', ask: '¿A qué empleado le cargamos la jornada?', empsList: true },
       { key: 'obra', ask: '¿En qué obra trabajó?', worksList: true },
@@ -93,7 +98,7 @@
   };
   /* Campos CLAVE obligatorios: sin ellos NUNCA se guarda (ni tilde verde) */
   const WIZARD_REQUIRED = {
-    empleado: ['nombre', 'telefono', 'oficio'], cliente: ['nombre', 'telefono'], socio: ['nombre', 'telefono', 'porcentaje'], obra: ['nombre'],
+    empleado: ['nombre', 'telefono', 'oficio'], cliente: ['nombre', 'telefono'], socio: ['nombre', 'telefono', 'porcentaje'], obra: ['nombre'], asignar: ['herramienta', 'destino'],
     gasto: ['monto', 'categoria', 'obra'], ingreso: ['monto', 'obra'],
     presupuesto: ['nombre', 'obra'], herramienta: ['nombre', 'categoria'],
     jornada: ['empleado', 'obra', 'horas'],
@@ -263,6 +268,7 @@
   let contactStage = null;   // flujo de contacto: 'rol' (elegir tipo) · 'pick' (importar/dictar datos)
   let contactRole = null;    // rol elegido (empleado|cliente|socio) mientras contactStage === 'pick'
   let ledgerMenu = false;    // submenú "Contabilidad" abierto ([Ingresos] [Gastos])
+  let toolsMenu = false;     // submenú "Herramientas" abierto (asignar / cargar / jornada)
   let lastSaved = null;      // último registro creado { coll, id, label } para "Deshacer"
   let voicePref = null;
   let currentUid = null;  // usuario autenticado dueño de la memoria del agente
@@ -337,6 +343,8 @@
       }
       const lb = e.target && e.target.closest ? e.target.closest('[data-ledger]') : null;
       if (lb) { ledgerMenu = false; startWizard(lb.dataset.ledger, {}); return; }
+      const tb = e.target && e.target.closest ? e.target.closest('[data-tools]') : null;
+      if (tb) { toolsMenu = false; startWizard(tb.dataset.tools === 'asignar' ? 'asignar' : tb.dataset.tools, {}); return; }
       const ub = e.target && e.target.closest ? e.target.closest('[data-undo]') : null;
       if (ub) { undoSave(); return; }
       const rb = e.target && e.target.closest ? e.target.closest('[data-role]') : null;
@@ -759,6 +767,30 @@
         const creado = S.add('attendance', { employeeId: empId, date: today, status: 'presente', hours: [{ workId, hours: horas }], notes: '' });
         return { ok: true, label: 'jornada de ' + c.empleado + ' (' + horas + 'h en ' + c.obra + ')', coll: 'attendance', id: creado.id };
       }
+      if (mod === 'asignar') {
+        /* Mover una herramienta a una obra / depósito o cambiar su estado.
+           No toca costos ni borra historial: solo agrega trazabilidad. */
+        const hname = String(c.herramienta || '').replace(/\s+·\s+(en obra|depósito)$/i, '').trim();
+        const aid = findId(d.assets, hname, x => x.name);
+        if (!aid) return null;
+        const dest = String(c.destino || '');
+        const note = c.nota || '';
+        let cambiado = false;
+        if (/depósito|deposito/.test(dest)) {
+          cambiado = S.moveAsset(aid, null, note || 'Guardada en depósito') || cambiado;
+          cambiado = S.setAssetStatus(aid, 'operativo', note || 'Guardada en depósito') || cambiado;
+        } else if (/mantenimiento|reparaci[oó]n/.test(dest)) {
+          cambiado = S.setAssetStatus(aid, 'en reparación', note || 'A mantenimiento') || cambiado;
+          cambiado = S.moveAsset(aid, null, note || 'A mantenimiento') || cambiado;
+        } else {
+          const wid = findId(d.works, dest, x => x.name);
+          if (!wid) return null;
+          cambiado = S.moveAsset(aid, wid, note || 'Asignada a la obra') || cambiado;
+          cambiado = S.setAssetStatus(aid, 'operativo', note || 'Asignada a la obra') || cambiado;
+        }
+        const a = d.assets.find(x => x.id === aid);
+        return { ok: true, label: 'herramienta ' + hname + ' → ' + dest + (cambiado ? '' : ' (ya estaba así)'), coll: 'assets', id: a ? a.id : aid };
+      }
     } catch (e) { return null; }
     return null;
   }
@@ -860,6 +892,7 @@
     adminWizard = null;
     pendingAdmin = null;
     ledgerMenu = false;
+    toolsMenu = false;
   }
 
   /* Submenú "Contabilidad" → [Ingresos] [Gastos] */
@@ -883,6 +916,27 @@
     scrollToEnd();
   }
 
+  /* Submenú "Herramientas" → [Asignar] [Cargar] [Jornada] */
+  function addToolsButtons(pend) {
+    const wrap = document.createElement('div');
+    wrap.className = 'ai-actions';
+    [['asignar', '📦 Asignar herramienta'], ['herramienta', '🛠️ Cargar herramienta'], ['jornada', '👷 Cargar jornada']].forEach(t => {
+      const b = document.createElement('button');
+      b.className = 'btn btn-soft btn-sm';
+      b.textContent = t[1];
+      b.dataset.tools = t[0];
+      wrap.appendChild(b);
+    });
+    pend.appendChild(wrap);
+  }
+  function startToolsMenu(pend) {
+    toolsMenu = true;
+    pend.innerHTML = '¿Qué querés hacer con tus herramientas?';
+    addToolsButtons(pend);
+    busy = false;
+    scrollToEnd();
+  }
+
   function firePill(k) {
     resetFlows();   // cambio de flujo → limpiar estados anteriores colgados
     if (k === 'contabilidad') {
@@ -890,6 +944,13 @@
       log.appendChild(pend);
       scrollToEnd();
       startLedgerMenu(pend);
+      return;
+    }
+    if (k === 'herramientas') {
+      const pend = bubble('', 'bot');
+      log.appendChild(pend);
+      scrollToEnd();
+      startToolsMenu(pend);
       return;
     }
     if (CONTACT_KEYS.indexOf(k) >= 0) {
@@ -1007,6 +1068,12 @@
     if (/(?:importar|cargar|agregar|traer|alta de|crear)\s+(?:un |una |el |la )?contacto\b/.test(t) ||
         /contacto\s+(?:desde\s+la\s+agenda|de\s+la\s+agenda|nuevo)/.test(t)) {
       return { modulo: 'contacto', campos: {} };
+    }
+    /* 0.55) Asignar / mover una herramienta a una obra o cambiar su estado */
+    if (/(?:asignar|mover|mandar|ubicar|destinar|devolver)\s+(?:una? |la |el )?(?:herramienta|m[aá]quina|equipo|amoladora|hormigonera|andamio|camioneta|sierra|rotomartillo)/.test(t) ||
+        /herramienta\s+(?:a|en)\s+(?:la\s+)?obra/.test(t) ||
+        /(?:asignar|mover)\s+herramientas?/.test(t)) {
+      return { modulo: 'asignar', campos: {} };
     }
     /* 0) Compra de herramienta/equipamiento → flujo de inversión (herramienta) */
     if (/(?:comprar|compré|compre|compra|compro|invertir en|inversión en)\s+(?:una |un |la |el )?/.test(t) &&
@@ -1481,6 +1548,25 @@
         .concat((G.store && G.store.CATS_OBRA) || [])
         .concat((G.store && G.store.CATS_GENERAL) || []);
       buttons = [...new Set(cats)];
+    } else if (s.assetsList) {
+      /* Herramientas REALES del store (excluye las dadas de baja) */
+      const assets = ((G.store.data && G.store.data.assets) || []).filter(a => a.status !== 'dado de baja');
+      if (!assets.length) {
+        const pend = wizardBubble('⚠️ Todavía no tenés herramientas cargadas. Decime <b>"cargar una herramienta"</b> y empezamos por ahí.');
+        const wrap = document.createElement('div');
+        wrap.className = 'ai-actions';
+        const cx = document.createElement('button');
+        cx.className = 'btn btn-soft btn-sm'; cx.textContent = 'Cancelar';
+        cx.dataset.wiz = '__cancel__'; wrap.appendChild(cx);
+        pend.appendChild(wrap);
+        return;
+      }
+      buttons = assets.map(x => x.name + (x.location ? ' · en obra' : ' · depósito'));
+      /* Los botones llevan el sufijo como texto, pero el valor capturado es el nombre */
+    } else if (s.assignList) {
+      /* Destinos: depósito, mantenimiento y obras activas */
+      const obras = ((G.store.data && G.store.data.works) || []).filter(w => w.status === 'activa');
+      buttons = ['📦 En depósito', '🔧 En mantenimiento'].concat(obras.map(w => w.name));
     }
 
     const pend = wizardBubble((hint ? hint + '<br>' : '') + '🤖 ' + s.ask);
@@ -1738,6 +1824,26 @@
       return;
     }
 
+    /* ===== 1e) Submenú Herramientas abierto ===== */
+    if (toolsMenu) {
+      const mt = msg.toLowerCase();
+      if (/^(cancelar|cancela|salir|nada|no)\b/.test(mt)) {
+        toolsMenu = false;
+        wizardBubble('✋ Operación cancelada.');
+        busy = false;
+        return;
+      }
+      if (/^(asignar|asignar herramienta|mover herramienta)$/.test(mt)) { toolsMenu = false; startWizard('asignar', {}); busy = false; return; }
+      if (/^(cargar|nueva|nuevo|alta|herramienta)$/.test(mt)) { toolsMenu = false; startWizard('herramienta', {}); busy = false; return; }
+      if (/^(jornada)$/.test(mt)) { toolsMenu = false; startWizard('jornada', {}); busy = false; return; }
+      const pend = bubble('Tocá un botón: <b>Asignar herramienta</b>, <b>Cargar herramienta</b> o <b>Cargar jornada</b>.', 'bot');
+      log.appendChild(pend);
+      addToolsButtons(pend);
+      scrollToEnd();
+      busy = false;
+      return;
+    }
+
     const pend = bubble('Pensando…', 'bot');
     log.appendChild(pend);
     scrollToEnd();
@@ -1855,5 +1961,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, PILL_WIZARD, suggestedWork, frequentEmployees, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave() };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, PILL_WIZARD, suggestedWork, frequentEmployees, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave() };
 })(typeof window !== 'undefined' ? window : globalThis);

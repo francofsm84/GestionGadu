@@ -697,6 +697,19 @@
     save();
     return true;
   }
+  /* Cambia el estado del activo y lo deja registrado en la trazabilidad.
+     No toca costos ni borra historial: solo agrega un movimiento. */
+  function setAssetStatus(id, status, notes) {
+    const a = data.assets.find(x => x.id === id);
+    if (!a) return false;
+    if ((a.status || 'operativo') === status) return false;   // sin cambio → no registra
+    a.status = status;
+    const usages = (a.usages || []).slice();
+    usages.push({ from: todayISO(), workId: a.location || null, notes: notes || ('Estado: ' + status) });
+    a.usages = usages;
+    save();
+    return true;
+  }
   function assetUsage(a) {
     const log = (a.usages || []).slice().sort((x, y) => (x.from || '').localeCompare(y.from || ''));
     const byWork = {};
@@ -743,7 +756,7 @@
     workStats, totals, totalsBetween, monthlySeries, expenseDistribution, distributionSummary, socios, splitsFor, contactById,
     employeeById, employeeName, attendanceFor, employeePayments, employeeStats, employeeMonth, employeeAdvances, employeeAdvancesThisMonth, presentToday, employeesPaidThisMonth,
     workClientAdvances, workEmployeeAdvances, workEmployees,
-    moveAsset, assetUsage,
+    moveAsset, setAssetStatus, assetUsage,
     CATS_OBRA, CATS_GENERAL, METODOS, WORK_STATUS, ASSET_STATUS, ASSET_CATS, SEGURO_TIPOS, CONTACT_TYPES, BUDGET_STATUS,
     uid, todayISO, parseISO, monthLabel, daysAgo, daysAhead, sum, KEY, attachUser, hasLocalData, applyRemote,
     seguroDaysLeft, seguroEstado,
