@@ -204,19 +204,6 @@
         }
       });
     });
-    /* Botón "+": disparador directo del Asistente Virtual (sin menú desplegable).
-       Sus acciones rápidas (Nueva obra, Contabilidad, ¿Quién trabajó hoy?, …)
-       viven dentro del propio chat. */
-    const more = $id('btnMore');
-    if (more) {
-      more.addEventListener('click', e => {
-        e.stopPropagation();
-        try {
-          if (G.ai && G.ai.open) G.ai.open();
-          else UI.toast('El asistente no está disponible', 'error');
-        } catch (err) { console.error(err); }
-      });
-    }
     bind('btnTheme', 'click', () => {
       const d = S.data;
       if (!d || !d.settings) return;

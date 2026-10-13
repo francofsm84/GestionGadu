@@ -212,8 +212,6 @@ body.sb-collapsed .main { margin-left: var(--sidebar-w-min); }
   min-width: 0;
 }
 .topbar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-/* En el panel de administración se oculta el botón "+" (acciones operativas) */
-body.on-admin .btn-more { display: none !important; }
 @supports (background: color-mix(in srgb, red 50%, blue)) {
   .topbar { background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(10px); }
 }
@@ -221,7 +219,6 @@ body.on-admin .btn-more { display: none !important; }
 .topbar-title { flex: 1; min-width: 0; }
 .topbar-title h1 { font-size: 17px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-title p { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.btn-more { display: inline-flex; }
 .sync-indicator { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; flex: none; }
 /* Topbar móvil: trunca las insignias largas (plan/usuario) para no desbordar
    y deja los botones fijos del extremo (+ y tema) siempre visibles */
@@ -669,7 +666,6 @@ canvas.chart { min-width: 0; max-width: 100%; }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 1280px) {
-  .btn-more { display: inline-flex; }
   .kpi-grid.kpi-5 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
   .kpi-grid.kpi-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
