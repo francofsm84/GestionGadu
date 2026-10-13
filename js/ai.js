@@ -728,7 +728,11 @@
       try { if (G.router && G.router.refresh) G.router.refresh(); } catch (e) {}
       /* Esperar la confirmación REAL de la base de datos (Supabase) */
       try {
-        if (G.sync && G.sync.push) await G.sync.push(G.store.data);
+        if (G.sync && G.sync.push) {
+          await G.sync.push(G.store.data);
+        } else {
+          throw new Error('sincronización no disponible');
+        }
         return { saved: true, label: saved.label, synced: true };
       } catch (e) {
         return { saved: true, label: saved.label, synced: false, error: String((e && e.message) || e) };
@@ -1557,5 +1561,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard };
 })(typeof window !== 'undefined' ? window : globalThis);
