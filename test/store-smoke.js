@@ -9,7 +9,16 @@ global.localStorage = {
 };
 require('../js/store.js');
 const S = global.GADU.store;
+
+/* Arranque limpio: entorno nuevo → TODO en $0, sin seed automático */
 S.load();
+let t0 = S.totals();
+if (t0.incomes !== 0 || t0.expenses !== 0 || t0.net !== 0 || t0.assets !== 0) throw new Error('arranque limpio debe estar en $0, got ' + JSON.stringify(t0));
+if (S.data.works.length !== 0 || S.data.contacts.length !== 0 || S.data.employees.length !== 0) throw new Error('arranque limpio debe tener 0 registros');
+console.log('arranque limpio en $0 OK (sin datos de demostración automáticos)');
+
+/* Sembrar el demo EXPLÍCITAMENTE (equivale al botón "Restaurar datos de ejemplo") */
+S.reset();
 
 const t = S.totals();
 console.log('== Totales ==');

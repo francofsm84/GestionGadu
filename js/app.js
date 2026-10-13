@@ -940,8 +940,8 @@
         S.save();
         UI.toast('Datos actualizados desde la nube', 'info');
       } else if (!remote && !S.hasLocalData()) {
-        S.startReal();
-        UI.toast('¡Bienvenido a GADU! Dejamos un ejemplo en cada módulo para que arranques.');
+        /* Arranque limpio: la app queda en $0 SIN datos de demostración.
+           Solo se persiste el documento vacío para sincronizar. */
         try {
           await G.sync.push(S.data);
           S.data.settings.lastCloudSync = new Date().toISOString();

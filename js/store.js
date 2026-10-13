@@ -318,9 +318,19 @@
         if (d && Array.isArray(d.works) && Array.isArray(d.incomes)) data = d;
       }
     } catch (e) { /* usar seed */ }
-    if (!data) data = seed();
+    /* Arranque limpio: SIN datos de demostración automáticos.
+       Entorno nuevo o registros borrados → la app inicia en $0. */
+    if (!data) data = emptySeed();
     normalize();
     return data;
+  }
+  /* Estado inicial en blanco (sin seed ficticio) */
+  function emptySeed() {
+    return {
+      settings: currentSettings(),
+      contacts: [], works: [], budgets: [], incomes: [], expenses: [],
+      employees: [], attendance: [], assets: [], distributions: [], compromisos: [], seguros: [],
+    };
   }
   function normalize() {
     if (!data.settings) data.settings = { company: 'GADU Construye', theme: 'dark', reservePercent: 30 };
@@ -381,7 +391,7 @@
       try { if (G.sync && G.sync.schedulePush) G.sync.schedulePush(); } catch (e) {}
     }
   }
-  function reset() { data = seed(); save(); }
+  function reset() { data = seed(); normalize(); save(); }
 
   /* Aplicar datos llegados por Realtime desde OTRO dispositivo:
      actualiza la memoria y el disco SIN volver a pushear (evita el bucle). */
@@ -394,7 +404,7 @@
 
   /* ---------- Empezar de cero (datos reales) ---------- */
   function currentSettings() {
-    const st = data.settings || {};
+    const st = (data && data.settings) || {};
     return {
       company: st.company || 'GADU Construye',
       theme: st.theme || 'dark',
