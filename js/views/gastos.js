@@ -5,10 +5,21 @@
 (function (root) {
   'use strict';
   const G = root.GADU, S = G.store, UI = G.ui;
-  const state = { tab: 'obra', q: '', cat: 'todas', work: 'todas' };
+  const state = { tab: 'obra', q: '', cat: 'todas', work: 'todas', sel: [] };
 
   G.router.add('gastos', 'gastos', 'Gastos', 'Control de costos por obra y gastos generales de la empresa', render);
   G.actions.expense = openExpenseModal;
+
+  /* Persistencia del borrado: empuja a la nube para que el registro eliminado
+     NO reaparezca al recargar (el pull de arranque traería la copia vieja). */
+  async function syncAfterDelete() {
+    try {
+      if (G.sync && G.sync.push) {
+        await G.sync.push(S.data);
+        try { S.data.settings.lastCloudSync = new Date().toISOString(); S.save(); } catch (e) {}
+      }
+    } catch (e) { /* sin conexión: el push automático programado reintenta */ }
+  }
 
   function filtered() {
     const q = state.q.toLowerCase();
@@ -61,7 +72,18 @@
       '<div class="grow"></div>' +
       '<button class="btn ' + (state.tab === 'obra' ? 'btn-soft-danger' : 'btn-danger') + '" id="btnNew">' + UI.icon('plus', 16) + (state.tab === 'obra' ? 'Cargar gasto de obra' : 'Cargar gasto general') + '</button>' +
       '</div>' +
+      batchBarHTML() +
       '<div id="listWrap">' + listHTML(filtered()) + '</div>';
+  }
+
+  /* Barra de acciones en lote: aparece solo cuando hay selección */
+  function batchBarHTML() {
+    return '<div id="batchBar" class="card" hidden style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px 14px;border:1px solid var(--primary);border-radius:12px;box-shadow:var(--shadow)">' +
+      '<b id="batchCount" style="white-space:nowrap">0 seleccionados</b>' +
+      '<div style="flex:1"></div>' +
+      '<button class="btn btn-ghost btn-sm" id="batchClear">Limpiar</button>' +
+      '<button class="btn btn-danger btn-sm" id="batchDel">' + UI.icon('trash', 14) + 'Eliminar seleccionados</button>' +
+      '</div>';
   }
 
   function bindContent(view) {
@@ -72,25 +94,68 @@
     if (fw) fw.addEventListener('change', e => { state.work = e.target.value; updateList(cw); });
     cw.querySelector('#btnNew').addEventListener('click', () => openExpenseModal({ type: state.tab }));
     cw.querySelector('#btnCsv').addEventListener('click', exportCSV);
+    /* Borrado en lote: elimina todos los seleccionados y persiste en la nube */
+    cw.querySelector('#batchDel').addEventListener('click', async () => {
+      const n = state.sel.length;
+      if (!n) return;
+      const ok = await UI.confirm({ title: 'Eliminar seleccionados', message: '¿Eliminar <strong>' + n + '</strong> comprobante' + (n !== 1 ? 's' : '') + '? Esta acción no se puede deshacer.', okLabel: 'Eliminar' });
+      if (!ok) return;
+      state.sel.forEach(id => S.remove('expenses', id));
+      state.sel = [];
+      await syncAfterDelete();
+      UI.toast(n + ' gasto' + (n !== 1 ? 's' : '') + ' eliminado' + (n !== 1 ? 's' : ''));
+      updateList(cw);
+      G.router.refresh();
+    });
+    cw.querySelector('#batchClear').addEventListener('click', () => { state.sel = []; updateList(cw); });
     bindList(cw.querySelector('#listWrap'));
+    bindSelection(cw);
   }
 
   function updateList(cw) {
     const wrap = cw.querySelector('#listWrap');
     wrap.innerHTML = listHTML(filtered());
     bindList(wrap);
+    bindSelection(cw);
+  }
+
+  /* Selección múltiple: checkbox maestro (visibles) + por fila + borrado en lote */
+  function bindSelection(cw) {
+    const bar = cw.querySelector('#batchBar');
+    if (!bar) return;
+    const master = cw.querySelector('#masterSel');
+    const rows = cw.querySelectorAll('.sel-row');
+    const upd = () => {
+      bar.hidden = !state.sel.length;
+      const cnt = cw.querySelector('#batchCount');
+      if (cnt) cnt.textContent = state.sel.length + ' seleccionado' + (state.sel.length !== 1 ? 's' : '');
+    };
+    if (master) master.addEventListener('click', () => {
+      const ids = filtered().map(x => x.id);
+      if (master.checked) ids.forEach(id => { if (state.sel.indexOf(id) < 0) state.sel.push(id); });
+      else state.sel = state.sel.filter(id => ids.indexOf(id) < 0);
+      updateList(cw);
+    });
+    rows.forEach(cb => cb.addEventListener('click', () => {
+      const id = cb.dataset.sel;
+      state.sel = cb.checked ? state.sel.concat(id) : state.sel.filter(x => x !== id);
+      updateList(cw);
+    }));
+    upd();
   }
 
   function listHTML(list) {
     const total = S.sum(list.map(x => x.amount));
+    const allSel = list.length > 0 && list.every(x => state.sel.indexOf(x.id) >= 0);
     return '<div class="card table-card">' +
       '<div class="table-wrap"><table class="data-table">' +
-      '<thead><tr><th>Fecha</th><th>' + (state.tab === 'obra' ? 'Obra' : 'Tipo') + '</th><th>Categoría</th><th>Proveedor</th><th>Descripción</th><th>Factura</th><th>Método</th><th class="num">Monto</th><th></th></tr></thead>' +
+      '<thead><tr><th style="width:36px"><input type="checkbox" id="masterSel" title="Seleccionar todos los visibles"' + (allSel ? ' checked' : '') + '></th><th>Fecha</th><th>' + (state.tab === 'obra' ? 'Obra' : 'Tipo') + '</th><th>Categoría</th><th>Proveedor</th><th>Descripción</th><th>Factura</th><th>Método</th><th class="num">Monto</th><th></th></tr></thead>' +
       '<tbody>' +
       (list.map(x => {
         const w = S.data.works.find(wk => wk.id === x.workId);
         const prov = S.contactById(x.providerId);
         return '<tr>' +
+          '<td><input type="checkbox" class="sel-row" data-sel="' + x.id + '"' + (state.sel.indexOf(x.id) >= 0 ? ' checked' : '') + '></td>' +
           '<td class="muted">' + UI.fmtDate(x.date) + '</td>' +
           '<td>' + (state.tab === 'obra'
             ? '<strong>' + UI.escapeHtml(w ? w.name : '—') + '</strong>'
@@ -108,7 +173,7 @@
           '<button class="icon-btn sm" data-edit="' + x.id + '" title="Editar">' + UI.icon('edit', 15) + '</button>' +
           '<button class="icon-btn sm danger" data-del="' + x.id + '" title="Eliminar">' + UI.icon('trash', 15) + '</button>' +
           '</div></td></tr>';
-      }).join('') || '<tr><td colspan="9">' + UI.emptyState('arrow-up-right', 'No hay gastos que coincidan', 'Probá con otra búsqueda o filtro.') + '</td></tr>') +
+      }).join('') || '<tr><td colspan="10">' + UI.emptyState('arrow-up-right', 'No hay gastos que coincidan', 'Probá con otra búsqueda o filtro.') + '</td></tr>') +
       '</tbody></table></div>' +
       '<div class="table-foot">' +
       '<span>' + list.length + ' comprobante' + (list.length !== 1 ? 's' : '') + '</span>' +
@@ -124,7 +189,12 @@
     UI.on(wrap, '[data-del]', 'click', async e => {
       const id = e.target.closest('[data-del]').dataset.del;
       const ok = await UI.confirm({ title: 'Eliminar gasto', message: '¿Eliminar este comprobante? Los totales y márgenes se actualizarán.', okLabel: 'Eliminar' });
-      if (ok) { S.remove('expenses', id); UI.toast('Gasto eliminado'); G.router.refresh(); }
+      if (ok) {
+        S.remove('expenses', id);
+        await syncAfterDelete();   // persistencia: el borrado llega a la nube
+        UI.toast('Gasto eliminado');
+        G.router.refresh();
+      }
     });
   }
 

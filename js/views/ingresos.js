@@ -5,12 +5,23 @@
 (function (root) {
   'use strict';
   const G = root.GADU, S = G.store, UI = G.ui;
-  const state = { q: '', work: 'todas', method: 'todas' };
+  const state = { q: '', work: 'todas', method: 'todas', sel: [] };
 
   G.router.add('ingresos', 'ingresos', 'Ingresos', 'Cobros por obra: fecha, monto, concepto y método de pago', render);
   G.actions.income = openIncomeModal;
 
   const M_TONE = { 'Efectivo': 'success', 'Transferencia': 'info', 'Cheque': 'violet', 'Mercado Pago': 'primary', 'Otro': 'neutral' };
+
+  /* Persistencia del borrado: empuja a la nube para que el registro eliminado
+     NO reaparezca al recargar (el pull de arranque traería la copia vieja). */
+  async function syncAfterDelete() {
+    try {
+      if (G.sync && G.sync.push) {
+        await G.sync.push(S.data);
+        try { S.data.settings.lastCloudSync = new Date().toISOString(); S.save(); } catch (e) {}
+      }
+    } catch (e) { /* sin conexión: el push automático programado reintenta */ }
+  }
 
   function filtered() {
     const q = state.q.toLowerCase();
@@ -40,6 +51,7 @@
       '<div class="grow"></div>' +
       '<button class="btn btn-primary" id="btnNew">' + UI.icon('plus', 16) + 'Nuevo ingreso</button>' +
       '</div>' +
+      batchBarHTML() +
       '<div id="listWrap">' + listHTML(filtered()) + '</div>';
 
     view.querySelector('#fq').addEventListener('input', e => { state.q = e.target.value; updateList(view); });
@@ -47,25 +59,78 @@
     view.querySelector('#fm').addEventListener('change', e => { state.method = e.target.value; updateList(view); });
     view.querySelector('#btnNew').addEventListener('click', () => openIncomeModal());
     view.querySelector('#btnCsv').addEventListener('click', exportCSV);
+    /* Borrado en lote: elimina todos los seleccionados y persiste en la nube */
+    view.querySelector('#batchDel').addEventListener('click', async () => {
+      const n = state.sel.length;
+      if (!n) return;
+      const ok = await UI.confirm({ title: 'Eliminar seleccionados', message: '¿Eliminar <strong>' + n + '</strong> cobro' + (n !== 1 ? 's' : '') + '? Esta acción no se puede deshacer.', okLabel: 'Eliminar' });
+      if (!ok) return;
+      state.sel.forEach(id => S.remove('incomes', id));
+      state.sel = [];
+      await syncAfterDelete();
+      UI.toast(n + ' ingreso' + (n !== 1 ? 's' : '') + ' eliminado' + (n !== 1 ? 's' : ''));
+      updateList(view);
+      G.router.refresh();
+    });
+    view.querySelector('#batchClear').addEventListener('click', () => { state.sel = []; updateList(view); });
     bindList(view.querySelector('#listWrap'));
+    bindSelection(view);
+  }
+
+  /* Barra de acciones en lote: aparece solo cuando hay selección */
+  function batchBarHTML() {
+    return '<div id="batchBar" class="card" hidden style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px 14px;border:1px solid var(--primary);border-radius:12px;box-shadow:var(--shadow)">' +
+      '<b id="batchCount" style="white-space:nowrap">0 seleccionados</b>' +
+      '<div style="flex:1"></div>' +
+      '<button class="btn btn-ghost btn-sm" id="batchClear">Limpiar</button>' +
+      '<button class="btn btn-danger btn-sm" id="batchDel">' + UI.icon('trash', 14) + 'Eliminar seleccionados</button>' +
+      '</div>';
   }
 
   function updateList(view) {
     const wrap = view.querySelector('#listWrap');
     wrap.innerHTML = listHTML(filtered());
     bindList(wrap);
+    bindSelection(view);
+  }
+
+  /* Selección múltiple: checkbox maestro (visibles) + por fila + borrado en lote */
+  function bindSelection(view) {
+    const bar = view.querySelector('#batchBar');
+    if (!bar) return;
+    const master = view.querySelector('#masterSel');
+    const rows = view.querySelectorAll('.sel-row');
+    const upd = () => {
+      bar.hidden = !state.sel.length;
+      const cnt = view.querySelector('#batchCount');
+      if (cnt) cnt.textContent = state.sel.length + ' seleccionado' + (state.sel.length !== 1 ? 's' : '');
+    };
+    if (master) master.addEventListener('click', () => {
+      const ids = filtered().map(x => x.id);
+      if (master.checked) ids.forEach(id => { if (state.sel.indexOf(id) < 0) state.sel.push(id); });
+      else state.sel = state.sel.filter(id => ids.indexOf(id) < 0);
+      updateList(view);
+    });
+    rows.forEach(cb => cb.addEventListener('click', () => {
+      const id = cb.dataset.sel;
+      state.sel = cb.checked ? state.sel.concat(id) : state.sel.filter(x => x !== id);
+      updateList(view);
+    }));
+    upd();
   }
 
   function listHTML(list) {
     const total = S.sum(list.map(x => x.amount));
+    const allSel = list.length > 0 && list.every(x => state.sel.indexOf(x.id) >= 0);
     return '<div class="card table-card">' +
       '<div class="table-wrap"><table class="data-table">' +
-      '<thead><tr><th>Fecha</th><th>Obra</th><th>Cliente</th><th>Concepto</th><th>Método</th><th>Referencia</th><th class="num">Monto</th><th></th></tr></thead>' +
+      '<thead><tr><th style="width:36px"><input type="checkbox" id="masterSel" title="Seleccionar todos los visibles"' + (allSel ? ' checked' : '') + '></th><th>Fecha</th><th>Obra</th><th>Cliente</th><th>Concepto</th><th>Método</th><th>Referencia</th><th class="num">Monto</th><th></th></tr></thead>' +
       '<tbody>' +
       (list.map(x => {
         const w = S.data.works.find(wk => wk.id === x.workId);
         const client = S.contactById(x.clientId) || (w ? S.contactById(w.clientId) : null);
         return '<tr>' +
+          '<td><input type="checkbox" class="sel-row" data-sel="' + x.id + '"' + (state.sel.indexOf(x.id) >= 0 ? ' checked' : '') + '></td>' +
           '<td class="muted">' + UI.fmtDate(x.date) + '</td>' +
           '<td><strong>' + UI.escapeHtml(w ? w.name : '—') + '</strong></td>' +
           '<td>' + UI.escapeHtml(client ? client.name : '—') + '</td>' +
@@ -77,7 +142,7 @@
           '<button class="icon-btn sm" data-edit="' + x.id + '" title="Editar">' + UI.icon('edit', 15) + '</button>' +
           '<button class="icon-btn sm danger" data-del="' + x.id + '" title="Eliminar">' + UI.icon('trash', 15) + '</button>' +
           '</div></td></tr>';
-      }).join('') || '<tr><td colspan="8">' + UI.emptyState('trending-up', 'No hay ingresos que coincidan', 'Probá con otra búsqueda o filtro.') + '</td></tr>') +
+      }).join('') || '<tr><td colspan="9">' + UI.emptyState('trending-up', 'No hay ingresos que coincidan', 'Probá con otra búsqueda o filtro.') + '</td></tr>') +
       '</tbody></table></div>' +
       '<div class="table-foot">' +
       '<span>' + list.length + ' cobro' + (list.length !== 1 ? 's' : '') + '</span>' +
@@ -93,7 +158,12 @@
     UI.on(wrap, '[data-del]', 'click', async e => {
       const id = e.target.closest('[data-del]').dataset.del;
       const ok = await UI.confirm({ title: 'Eliminar ingreso', message: '¿Eliminar este cobro? Los totales y márgenes se actualizarán.', okLabel: 'Eliminar' });
-      if (ok) { S.remove('incomes', id); UI.toast('Ingreso eliminado'); G.router.refresh(); }
+      if (ok) {
+        S.remove('incomes', id);
+        await syncAfterDelete();   // persistencia: el borrado llega a la nube
+        UI.toast('Ingreso eliminado');
+        G.router.refresh();
+      }
     });
   }
 
