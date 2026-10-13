@@ -222,7 +222,8 @@ body.on-admin .quick-actions, body.on-admin .menu-wrap { display: none !importan
 .topbar-title { flex: 1; min-width: 0; }
 .topbar-title h1 { font-size: 17px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-title p { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.btn-more { display: none; }
+.btn-more { display: inline-flex; }
+.menu-sep { height: 1px; background: var(--border); margin: 4px 6px; }
 .sync-indicator { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; flex: none; }
 /* Topbar móvil: trunca las insignias largas (plan/usuario) para no desbordar
    y deja los botones fijos del extremo (+ y tema) siempre visibles */

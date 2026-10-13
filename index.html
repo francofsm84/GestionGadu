@@ -88,24 +88,15 @@
         <p id="pageSubtitle"></p>
       </div>
       <div class="topbar-actions">
-        <div class="quick-actions">
-          <button class="btn btn-soft-success btn-sm" data-action="income"><span data-icon="arrow-down-left"></span>Nuevo ingreso</button>
-          <button class="btn btn-soft-danger btn-sm" data-action="expense"><span data-icon="arrow-up-right"></span>Cargar gasto</button>
-          <button class="btn btn-primary btn-sm" data-action="budget"><span data-icon="file-text"></span>Nuevo presupuesto</button>
-          <button class="btn btn-soft btn-sm" data-action="work"><span data-icon="plus"></span>Nueva obra</button>
-          <button class="btn btn-soft-info btn-sm" data-action="attendance"><span data-icon="calendar-plus"></span>Jornada</button>
-          <button class="btn btn-soft btn-sm" data-action="client"><span data-icon="briefcase"></span>Nuevo cliente</button>
-        </div>
         <div class="menu-wrap">
-          <button class="icon-btn btn-more" id="btnMore" aria-label="Acciones rápidas"><span data-icon="plus"></span></button>
+          <button class="icon-btn btn-more" id="btnMore" aria-label="Acciones rápidas" title="Acciones rápidas"><span data-icon="plus"></span></button>
           <div class="menu" id="quickMenu" hidden>
-            <button class="menu-item" data-action="income"><span data-icon="arrow-down-left"></span>Nuevo ingreso</button>
-            <button class="menu-item" data-action="expense"><span data-icon="arrow-up-right"></span>Cargar gasto</button>
-            <button class="menu-item" data-action="budget"><span data-icon="file-text"></span>Nuevo presupuesto</button>
-            <button class="menu-item" data-action="work"><span data-icon="plus"></span>Nueva obra</button>
-            <button class="menu-item" data-action="attendance"><span data-icon="calendar-plus"></span>Registrar jornada</button>
-            <button class="menu-item" data-action="client"><span data-icon="briefcase"></span>Nuevo cliente</button>
-            <button class="menu-item" data-action="seguro"><span data-icon="shield"></span>Nuevo seguro</button>
+            <button class="menu-item" data-menu-nav="obras"><span data-icon="hard-hat"></span>Obras y presupuestos</button>
+            <button class="menu-item" data-menu-nav="ingresos"><span data-icon="receipt"></span>Contabilidad</button>
+            <button class="menu-item" data-menu-nav="empleados"><span data-icon="users"></span>Personal</button>
+            <button class="menu-item" data-menu-nav="herramientas"><span data-icon="wrench"></span>Recursos</button>
+            <div class="menu-sep"></div>
+            <button class="menu-item" data-menu-ai><span data-icon="message-circle"></span>Hablar con el asistente</button>
           </div>
         </div>
         <span class="sync-indicator" id="syncSpinner" hidden title="Sincronizando…"></span>
