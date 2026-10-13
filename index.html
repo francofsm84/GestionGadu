@@ -25,21 +25,51 @@
       <button type="button" class="icon-btn sidebar-close" id="sidebarClose" aria-label="Cerrar menú"><span data-icon="x"></span></button>
     </div>
     <nav class="nav">
-      <div class="nav-section">Principal</div>
       <a class="nav-link" href="#/dashboard" data-route="dashboard"><span class="nav-ico" data-icon="grid"></span><span class="nav-label">Dashboard</span></a>
-      <a class="nav-link" href="#/obras" data-route="obras"><span class="nav-ico" data-icon="hard-hat"></span><span class="nav-label">Obras</span><span class="badge badge-info" id="badgeObras" hidden>0</span></a>
       <a class="nav-link" href="#/agenda" data-route="agenda"><span class="nav-ico" data-icon="book"></span><span class="nav-label">Agenda</span></a>
-      <div class="nav-section">Finanzas</div>
-      <a class="nav-link" href="#/presupuestos" data-route="presupuestos"><span class="nav-ico" data-icon="file-text"></span><span class="nav-label">Presupuestos</span></a>
-      <a class="nav-link" href="#/gastos" data-route="gastos"><span class="nav-ico" data-icon="receipt"></span><span class="nav-label">Gastos</span></a>
-      <a class="nav-link" href="#/ingresos" data-route="ingresos"><span class="nav-ico" data-icon="trending-up"></span><span class="nav-label">Ingresos</span></a>
-      <div class="nav-section">Gestión · Recursos y operaciones</div>
-      <a class="nav-link" href="#/empleados" data-route="empleados"><span class="nav-ico" data-icon="user"></span><span class="nav-label">Empleados</span></a>
-      <a class="nav-link" href="#/herramientas" data-route="herramientas"><span class="nav-ico" data-icon="wrench"></span><span class="nav-label">Herramientas</span></a>
-      <a class="nav-link" href="#/socios" data-route="socios"><span class="nav-ico" data-icon="users"></span><span class="nav-label">Socios y reparto</span><span class="badge badge-danger" id="badgeLiquidaciones" hidden>0</span></a>
-      <a class="nav-link" href="#/seguros" data-route="seguros"><span class="nav-ico" data-icon="shield"></span><span class="nav-label">Seguros y vencimientos</span><span class="badge badge-danger" id="badgeSeguros" hidden>0</span></a>
-      <a class="nav-link" href="#/clientes" data-route="clientes"><span class="nav-ico" data-icon="briefcase"></span><span class="nav-label">Clientes</span></a>
-      <div class="nav-section">Sistema</div>
+
+      <div class="nav-group" data-group="obras">
+        <button type="button" class="nav-group-head">
+          <span class="nav-ico" data-icon="hard-hat"></span><span class="nav-label">Obras</span>
+          <span class="badge badge-info" id="badgeObras" hidden>0</span><span class="nav-chev" aria-hidden="true"></span>
+        </button>
+        <div class="nav-group-body"><div class="nav-group-inner">
+          <a class="nav-link" href="#/obras" data-route="obras"><span class="nav-ico" data-icon="hard-hat"></span><span class="nav-label">Todas las obras</span></a>
+          <a class="nav-link" href="#/presupuestos" data-route="presupuestos"><span class="nav-ico" data-icon="file-text"></span><span class="nav-label">Presupuestos</span></a>
+        </div></div>
+      </div>
+
+      <div class="nav-group" data-group="contabilidad">
+        <button type="button" class="nav-group-head">
+          <span class="nav-ico" data-icon="receipt"></span><span class="nav-label">Contabilidad</span><span class="nav-chev" aria-hidden="true"></span>
+        </button>
+        <div class="nav-group-body"><div class="nav-group-inner">
+          <a class="nav-link" href="#/ingresos" data-route="ingresos"><span class="nav-ico" data-icon="trending-up"></span><span class="nav-label">Ingresos</span></a>
+          <a class="nav-link" href="#/gastos" data-route="gastos"><span class="nav-ico" data-icon="receipt"></span><span class="nav-label">Gastos</span></a>
+        </div></div>
+      </div>
+
+      <div class="nav-group" data-group="personal">
+        <button type="button" class="nav-group-head">
+          <span class="nav-ico" data-icon="users"></span><span class="nav-label">Personal</span><span class="nav-chev" aria-hidden="true"></span>
+        </button>
+        <div class="nav-group-body"><div class="nav-group-inner">
+          <a class="nav-link" href="#/empleados" data-route="empleados"><span class="nav-ico" data-icon="user"></span><span class="nav-label">Empleados</span></a>
+          <a class="nav-link" href="#/socios" data-route="socios"><span class="nav-ico" data-icon="users"></span><span class="nav-label">Socios y reparto</span><span class="badge badge-danger" id="badgeLiquidaciones" hidden>0</span></a>
+          <a class="nav-link" href="#/clientes" data-route="clientes"><span class="nav-ico" data-icon="briefcase"></span><span class="nav-label">Clientes</span></a>
+        </div></div>
+      </div>
+
+      <div class="nav-group" data-group="recursos">
+        <button type="button" class="nav-group-head">
+          <span class="nav-ico" data-icon="wrench"></span><span class="nav-label">Recursos</span><span class="nav-chev" aria-hidden="true"></span>
+        </button>
+        <div class="nav-group-body"><div class="nav-group-inner">
+          <a class="nav-link" href="#/herramientas" data-route="herramientas"><span class="nav-ico" data-icon="wrench"></span><span class="nav-label">Herramientas</span></a>
+          <a class="nav-link" href="#/seguros" data-route="seguros"><span class="nav-ico" data-icon="shield"></span><span class="nav-label">Seguros y vencimientos</span><span class="badge badge-danger" id="badgeSeguros" hidden>0</span></a>
+        </div></div>
+      </div>
+
       <a class="nav-link" href="#/admin" data-route="admin" id="navAdmin" hidden><span class="nav-ico" data-icon="settings"></span><span class="nav-label">Administración</span></a>
       <button class="nav-link nav-btn" id="btnBackup"><span class="nav-ico" data-icon="database"></span><span class="nav-label">Respaldos y datos</span></button>
     </nav>

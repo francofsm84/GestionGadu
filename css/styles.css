@@ -125,6 +125,35 @@ button { font-family: inherit; }
 }
 .badge-danger { background: var(--danger); color: #fff; }
 .badge-info { background: var(--info-soft); color: var(--info); }
+
+/* ---------- Grupos desplegables del menú (acordeón) ---------- */
+.nav-group { display: flex; flex-direction: column; }
+.nav-group-head {
+  display: flex; align-items: center; gap: 11px; padding: 9px 10px;
+  border-radius: var(--radius-sm); color: var(--text-2); font-weight: 600; font-size: 13.5px;
+  margin-bottom: 2px; position: relative; border: none; background: none;
+  width: 100%; text-align: left; cursor: pointer; font-family: inherit;
+  transition: background .15s, color .15s;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.nav-group-head:hover { background: var(--surface-2); color: var(--text); }
+.nav-chev {
+  margin-left: auto; flex: none; width: 7px; height: 7px; opacity: .65;
+  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  transform: rotate(45deg); transition: transform .22s ease;
+}
+.nav-group.open .nav-chev { transform: rotate(225deg); }
+.nav-group.open > .nav-group-head { color: var(--text); }
+/* Despliegue fluido con grid-rows 0fr → 1fr */
+.nav-group-body {
+  display: grid; grid-template-rows: 0fr;
+  transition: grid-template-rows .22s ease;
+}
+.nav-group.open .nav-group-body { grid-template-rows: 1fr; }
+.nav-group-inner { overflow: hidden; min-height: 0; }
+.nav-group-inner .nav-link { padding-left: 44px; font-size: 13px; font-weight: 500; }
+/* Sub-enlace activo: la barra indicadora se mantiene en el borde de su grupo */
+.nav-group-inner .nav-link.active::before { left: 32px; }
 .sidebar-foot { border-top: none; padding: 0; }
 /* Botón de colapsar estilo Canva: circular, centrado verticalmente en el borde derecho */
 #btnCollapse {
@@ -150,6 +179,11 @@ body.sb-collapsed .nav-link.active::before { display: none; }
 body.sb-collapsed .badge { position: absolute; top: 4px; right: 6px; min-width: 16px; height: 16px; font-size: 10px; padding: 0 4px; }
 body.sb-collapsed .nav-section { text-align: center; font-size: 0; padding: 12px 10px 6px; }
 body.sb-collapsed .nav-section::after { content: '···'; font-size: 11px; letter-spacing: .25em; color: var(--muted); }
+/* Menú colapsado: los grupos muestran solo el icono (tooltip con el nombre) */
+body.sb-collapsed .nav-group-head { justify-content: center; padding: 10px; }
+body.sb-collapsed .nav-group-head .nav-chev { display: none; }
+body.sb-collapsed .nav-group-body { display: none; }
+body.sb-collapsed .nav-group-inner .nav-link.active::before { display: none; }
 
 .main { margin-left: var(--sidebar-w); min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; min-width: 0; transition: margin-left .22s ease; }
 

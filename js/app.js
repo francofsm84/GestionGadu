@@ -63,7 +63,15 @@
     document.body.classList.toggle('on-admin', route.key === 'admin');
     document.querySelectorAll('.nav-link').forEach(a => {
       const r = a.getAttribute('data-route');
-      if (r) a.classList.toggle('active', r === route.key || (route.key === 'obra' && r === 'obras') || (route.key === 'empleado' && r === 'empleados'));
+      if (r) {
+        const active = r === route.key || (route.key === 'obra' && r === 'obras') || (route.key === 'empleado' && r === 'empleados');
+        a.classList.toggle('active', active);
+        /* La ruta activa destapa su grupo del acordeón (estructura visual) */
+        if (active) {
+          const g = a.closest('.nav-group');
+          if (g) g.classList.add('open');
+        }
+      }
     });
     const view = document.getElementById('view');
     view.innerHTML = '';
@@ -97,10 +105,15 @@
   /* ---------- Sidebar ---------- */
   function syncCollapse(collapsed) {
     document.querySelectorAll('.nav-link .nav-label').forEach(el => { el.hidden = collapsed; });
+    document.querySelectorAll('.nav-group-head .nav-label, .nav-group-head .nav-chev, .nav-group-head .badge').forEach(el => { el.hidden = collapsed; });
     document.querySelectorAll('.nav-section').forEach(el => { el.classList.toggle('collapsed', collapsed); });
     document.querySelectorAll('.nav-link').forEach(a => {
       const lbl = a.querySelector('.nav-label');
       a.title = collapsed && lbl ? lbl.textContent : '';
+    });
+    document.querySelectorAll('.nav-group-head').forEach(h => {
+      const lbl = h.querySelector('.nav-label');
+      h.title = collapsed && lbl ? lbl.textContent : '';
     });
     /* Orientación de la flecha del botón de colapsar: << (abierto) · >> (colapsado) */
     const bc = document.getElementById('btnCollapse');
@@ -150,6 +163,31 @@
     bind('backdrop', 'click', closeMobileSidebar);
     document.querySelectorAll('.nav-link[data-route]').forEach(a => a.addEventListener('click', closeMobileSidebar));
     bind('btnBackup', 'click', closeMobileSidebar);
+
+    /* ---------- Acordeón del menú: categorías desplegables ---------- */
+    document.querySelectorAll('.nav-group-head').forEach(h => {
+      h.addEventListener('click', () => {
+        const g = h.closest('.nav-group');
+        if (!g) return;
+        /* Con el menú colapsado, tocar una categoría lo vuelve a desplegar */
+        if (document.body.classList.contains('sb-collapsed')) {
+          document.body.classList.remove('sb-collapsed');
+          lsSet('gadu_sb_collapsed', '0');
+          syncCollapse(false);
+          return;
+        }
+        const estabaAbierto = g.classList.contains('open');
+        /* Acordeón clásico: una categoría abierta a la vez */
+        document.querySelectorAll('.nav-group.open').forEach(x => { if (x !== g) x.classList.remove('open'); });
+        g.classList.toggle('open', !estabaAbierto);
+      });
+    });
+    /* La categoría de la ruta actual arranca abierta */
+    const activo = document.querySelector('.nav-link[data-route].active');
+    if (activo) {
+      const g = activo.closest('.nav-group');
+      if (g) g.classList.add('open');
+    }
   }
 
   /* ---------- Topbar ---------- */
