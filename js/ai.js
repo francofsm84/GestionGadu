@@ -736,7 +736,7 @@
         return workLabel(w);
       };
       if (mod === 'gasto') {
-        const amount = Number(c.monto);
+        const amount = extractNumber(c.monto);
         if (!(amount > 0)) return null;
         const cat = c.categoria;
         if (!cat) return null;   // categoría obligatoria (validación estricta)
@@ -759,7 +759,7 @@
         if (!name) return null;
         const tipo = mod === 'socio' ? 'socio' : 'cliente';
         if (tipo === 'socio' && !c.porcentaje) return null;   // porcentaje obligatorio en socios
-        const extra = tipo === 'socio' ? { percent: Number(c.porcentaje) || 0, active: true } : {};
+        const extra = tipo === 'socio' ? { percent: extractNumber(c.porcentaje) || 0, active: true } : {};
         const creado = S.add('contacts', {
           type: tipo, name,
           nombre: name.split(/\s+/)[0] || name,
@@ -779,7 +779,7 @@
         if (!c.oficio) return null;     // oficio obligatorio (validación estricta)
         if (!c.telefono) return null;   // teléfono / WhatsApp obligatorio
         if (G.plan && G.plan.checkLimit && G.plan.checkLimit('empleados') === false) return null;
-        const creado = S.add('employees', { firstName: fn, lastName: ln, phone: c.telefono || '', paymentData: '', hourlyRate: Number(c.tarifa) || 0, active: true, notes: 'Oficio: ' + c.oficio, photo: null });
+        const creado = S.add('employees', { firstName: fn, lastName: ln, phone: c.telefono || '', paymentData: '', hourlyRate: extractNumber(c.tarifa) || 0, active: true, notes: 'Oficio: ' + c.oficio, photo: null });
         return { ok: true, label: 'empleado ' + (fn + ' ' + ln).trim() + ' (' + c.oficio + ')', coll: 'employees', id: creado.id };
       }
       if (mod === 'obra') {
@@ -787,12 +787,12 @@
         if (!name) return null;
         if (G.plan && G.plan.checkLimit && G.plan.checkLimit('obras') === false) return null;
         const clientId = c.cliente ? findId((d.contacts || []).filter(x => x.type === 'cliente'), c.cliente, x => x.name) : null;
-        const creado = S.add('works', { name, code: (S.nextCode ? S.nextCode('OB', 'works') : ''), clientId: clientId || null, location: c.ubicacion || c.direccion || '', status: 'activa', budgetTotal: Number(c.presupuesto) || 0, advanceFisico: 0, startDate: today, endDate: '', description: '' });
+        const creado = S.add('works', { name, code: (S.nextCode ? S.nextCode('OB', 'works') : ''), clientId: clientId || null, location: c.ubicacion || c.direccion || '', status: 'activa', budgetTotal: extractNumber(c.presupuesto) || 0, advanceFisico: 0, startDate: today, endDate: '', description: '' });
         setFocus(mod, { nombre: name });
         return { ok: true, label: 'obra ' + name, coll: 'works', id: creado.id };
       }
       if (mod === 'ingreso') {
-        const amount = Number(c.monto);
+        const amount = extractNumber(c.monto);
         if (!(amount > 0)) return null;
         const autoId = autoWorkId();
         const workId = c.obra ? findId(d.works, c.obra, x => workLabel(x)) : autoId;
@@ -804,14 +804,14 @@
         const name = c.nombre || c.concepto || '';
         if (!name) return null;
         const workId = c.obra ? findId(d.works, c.obra, x => workLabel(x)) : autoWorkId();
-        const total = Number(c.monto) || Number(c.presupuesto) || 0;
+        const total = extractNumber(c.monto) || extractNumber(c.presupuesto) || 0;
         const creado = S.add('budgets', { code: (S.nextCode ? S.nextCode('PR', 'budgets') : ''), clientId: null, workId: workId || null, name, date: today, validUntil: '', status: 'borrador', items: [], discount: 0, subtotal: total, total, notes: '' });
         return { ok: true, label: 'presupuesto ' + name, coll: 'budgets', id: creado.id };
       }
       if (mod === 'herramienta') {
         const name = c.nombre || '';
         if (!name) return null;
-        const creado = S.add('assets', { name, category: c.categoria || 'Herramienta', purchaseDate: today, cost: Number(c.monto) || Number(c.costo) || 0, status: 'operativo', supplierId: null, notes: c.ubicacion ? 'En: ' + c.ubicacion : '', maintenance: [] });
+        const creado = S.add('assets', { name, category: c.categoria || 'Herramienta', purchaseDate: today, cost: extractNumber(c.monto) || extractNumber(c.costo) || 0, status: 'operativo', supplierId: null, notes: c.ubicacion ? 'En: ' + c.ubicacion : '', maintenance: [] });
         return { ok: true, label: 'herramienta ' + name, coll: 'assets', id: creado.id };
       }
       if (mod === 'jornada') {
@@ -1263,8 +1263,8 @@
     if (/(?:comprar|compré|compre|compra|compro|invertir en|inversión en)\s+(?:una |un |la |el )?/.test(t) &&
         /(herramienta|equipo|equipamiento|máquina|maquina|amoladora|taladro|sierra|compresor|andamio|mezcladora|hormigonera|moladora)/.test(t)) {
       const campos = {};
-      const m = t.match(/(\d{1,3}(?:[.,]\d{3})+|\d{4,})(?:[.,]\d+)?/);
-      if (m) campos.costo = Number(m[0].replace(/\./g, '').replace(',', '.'));
+      const cst = parseMoney(t);   // "100mil", "100.000" y similares
+      if (cst > 0) campos.costo = cst;
       return { modulo: 'herramienta', campos };
     }
     /* Preguntas NUNCA disparan formularios de creación: "¿puedo crear una obra?",
@@ -1285,10 +1285,9 @@
       : /ingreso|cobr[ée]|cobro|anticipo|adelanto|certificaci/.test(t) ? 'ingreso'
       : null;
     if (!kind) return null;
-    const m = t.match(/(\d{1,3}(?:[.,]\d{3})+|\d{4,})(?:[.,]\d+)?/);
-    if (!m) return { modulo: kind, campos: {} };   // sin monto → pedir datos en el chat
-    const monto = Number(m[0].replace(/\./g, '').replace(',', '.'));
-    if (!(monto > 0)) return { modulo: kind, campos: {} };
+    /* Monto robusto: "100.000", "100mil", "100 mil", "1.500,50" */
+    const monto = parseMoney(t);
+    if (!(monto > 0)) return { modulo: kind, campos: {} };   // sin monto → pedir datos en el chat
     const campos = { monto };
     /* Entidad obra: "de la obra X" / "en la obra X" / mención directa */
     const obra = findWorkMention(t);
@@ -1834,7 +1833,32 @@
     return true;
   }
   /* Validadores de campos del wizard */
+  /* Conversor de texto monetario/númerico:
+     "100.000" → 100000 · "100mil" / "100 mil" → 100000 · "1.500,50" → 1500.5 */
+  function parseMoney(text) {
+    const s = flatText(text);
+    if (!s) return NaN;
+    /* Abreviatura: 100mil / 100 mil / 100k */
+    const ab = s.match(/(\d+(?:[.,]\d+)?)\s*(?:mil|k)\b/);
+    if (ab) {
+      let base;
+      const g = ab[1];
+      if (/^\d{1,3}(\.\d{3})+$/.test(g)) base = Number(g.replace(/\./g, ''));   // 1.500 mil → 1500
+      else base = Number(g.replace(',', '.'));                                    // 2,5 mil → 2.5
+      return base * 1000;
+    }
+    /* Miles con punto y decimales con coma: 1.500,50 */
+    const miles = s.match(/\d{1,3}(?:\.\d{3})+(?:,\d+)?/);
+    if (miles) return Number(miles[0].replace(/\./g, '').replace(',', '.'));
+    /* Número simple, con coma o punto decimal: 1500 · 4,5 · 4.5 */
+    const simple = s.match(/\d+(?:[.,]\d+)?/);
+    if (simple) return Number(simple[0].replace(',', '.'));
+    return NaN;
+  }
   function extractNumber(val) {
+    const n = parseMoney(val);
+    if (!isNaN(n)) return n;
+    /* Respaldo histórico para cantidades simples (horas, porcentajes) */
     const m = String(val || '').replace(/\./g, '').replace(',', '.').match(/(\d+(?:\.\d+)?)/);
     return m ? Number(m[1]) : NaN;
   }
@@ -2302,5 +2326,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
 })(typeof window !== 'undefined' ? window : globalThis);

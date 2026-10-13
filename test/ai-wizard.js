@@ -210,6 +210,19 @@ okk(rJ4 && rJ4.saved === true, 'horas "4 hs" (botón) se aceptan y guardan');
 const j4 = S.data.attendance.find(x => x.hours && x.hours[0] && x.hours[0].hours === 4);
 okk(!!j4, 'el valor registrado es 4 (número, no texto)');
 
+console.log('== 15) Parseo de montos: miles con punto y abreviaturas ==');
+okk(AI.parseMoney('100.000') === 100000, '"100.000" → 100000');
+okk(AI.parseMoney('100mil') === 100000, '"100mil" → 100000');
+okk(AI.parseMoney('100 mil') === 100000, '"100 mil" → 100000');
+okk(AI.parseMoney('1.500,50') === 1500.5, '"1.500,50" → 1500.5');
+okk(AI.parseMoney('2,5 mil') === 2500, '"2,5 mil" → 2500');
+const i100 = AI.localIntent('cobré 100mil de la obra Norma Molina');
+okk(i100 && i100.modulo === 'ingreso' && i100.campos.monto === 100000, 'intención "cobré 100mil" → monto 100000 (no 100)');
+const r100 = await AI.execFormAction({ modulo: 'gasto', campos: { monto: '100.000', categoria: 'Materiales', obra: 'Norma Molina', comprobante: '' } });
+const g100 = S.data.expenses.find(x => x.amount === 100000);
+okk(r100 && r100.saved === true && !!g100, 'monto "100.000" se guarda completo ($100.000, no $100)');
+okk(!S.data.expenses.some(x => x.amount === 100), 'no quedó ningún gasto truncado en $100');
+
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }
