@@ -127,18 +127,20 @@ serve(async (req) => {
       return await fetch(supabaseUrl + "/rest/v1/" + path, { ...opts, headers } as RequestInit);
     };
 
-    /* 1) Vinculación: código alfanumérico (mayúsculas, sin espacios) */
+    /* 1) Vinculación: código alfanumérico (mayúsculas, sin espacios).
+       Búsqueda CASE-INSENSITIVE por código (ilike) y SIN filtrar por prefijo
+       de celular: el número se valida aparte de forma tolerante (con/sin 9). */
     const code = (matchVerificationCode(inc.text) || "").trim().toUpperCase();
     if (code) {
       console.log("[whatsapp-webhook] código extraído:", code);
-      const q = "data->settings->profile->whatsapp->>code=eq." + encodeURIComponent(code);
+      const q = "data->settings->profile->whatsapp->>code=ilike." + encodeURIComponent(code);
       const r = await rest("app_data?select=user_id,data&" + q + "&limit=1");
       const rows = await r.json().catch(() => []);
       console.log("[whatsapp-webhook] consulta app_data (código):", code, "→ http", r.status, "·", (Array.isArray(rows) ? rows.length : 0), "coincidencia(s)", (Array.isArray(rows) && rows[0]) ? ("user_id=" + rows[0].user_id) : "");
       if (!r.ok || !Array.isArray(rows) || !rows.length) {
-        console.warn("[whatsapp-webhook] código no encontrado en app_data:", code, "(http", r.status + ")");
-        await sendWhatsApp(inc.from, "🤖 Ese código no coincide con ninguna cuenta GADU. Revisalo y volvé a enviarlo.");
-        return json({ ok: false, error: "código no encontrado" });
+        console.warn("[whatsapp-webhook] código no encontrado/vencido:", code, "(http", r.status + ")");
+        await sendWhatsApp(inc.from, "🤖 El código no es válido o ya expiró. Volvé a generarlo desde la app (Perfil → Vincular WhatsApp → Generar código) y envialo de nuevo.");
+        return json({ ok: false, error: "código no encontrado o expirado" });
       }
       const row = rows[0];
       const wp = row.data?.settings?.profile?.whatsapp || {};
