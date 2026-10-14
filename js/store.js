@@ -419,10 +419,14 @@
   function reset() { data = seed(); normalize(); save(); }
 
   /* Aplicar datos llegados por Realtime desde OTRO dispositivo:
-     actualiza la memoria y el disco SIN volver a pushear (evita el bucle). */
+     actualiza la memoria y el disco SIN volver a pushear (evita el bucle).
+     Normaliza SIEMPRE el documento entrante: documentos remotos antiguos
+     (sin seguros, compromisos, empleados, etc.) no pueden tumbar el Dashboard. */
   function applyRemote(newData) {
-    if (!newData || typeof newData !== 'object' || !Array.isArray(newData.works) || !Array.isArray(newData.incomes)) return false;
+    if (!newData || typeof newData !== 'object' ||
+      !Array.isArray(newData.works) || !Array.isArray(newData.incomes) || !Array.isArray(newData.expenses)) return false;
     data = newData;
+    normalize();
     try { localStorage.setItem(key, JSON.stringify(data)); } catch (e) {}
     return true;
   }

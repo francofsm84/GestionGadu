@@ -192,4 +192,22 @@ if (acc.adelantos !== 10000) throw new Error('adelantos acumulados incorrectos: 
 if (acc.acumulado !== 38000) throw new Error('dinero acumulado pendiente incorrecto: ' + acc.acumulado);
 console.log('employeeAccumulated OK · 24h × $2000 − $10.000 = $38.000');
 
+// applyRemote normaliza documentos remotos antiguos (no puede tumbar el Dashboard)
+const oldDoc = {
+  settings: { company: 'X', theme: 'dark' },
+  works: [{ id: 'wOld', code: 'OB-0', name: 'Obra vieja', status: 'activa' }],
+  incomes: [{ id: 'i1', date: S.todayISO(), amount: 100 }],
+  expenses: [],
+  /* sin contacts/budgets/employees/attendance/assets/distributions/seguros/compromisos */
+};
+if (!S.applyRemote(oldDoc)) throw new Error('applyRemote debe aceptar el documento');
+if (!Array.isArray(S.data.seguros) || !Array.isArray(S.data.compromisos) || !Array.isArray(S.data.employees) ||
+    !Array.isArray(S.data.contacts) || !Array.isArray(S.data.attendance)) throw new Error('normalize no completó colecciones faltantes del doc remoto');
+const t2 = S.totals();
+if (t2.net !== 100 || t2.incomes !== 100) throw new Error('totals() tras applyRemote incorrecto');
+if (S.applyRemote(null) !== false) throw new Error('applyRemote(null) debe rechazarse');
+if (S.applyRemote({ works: [] }) !== false) throw new Error('applyRemote sin incomes debe rechazarse');
+if (S.applyRemote({ works: [], incomes: [], expenses: {} }) !== false) throw new Error('applyRemote con expenses inválidas debe rechazarse');
+console.log('applyRemote normaliza documentos remotos OK');
+
 console.log('✔ SMOKE TEST PASADO');
