@@ -950,8 +950,10 @@ body.no-session .app { display: none; }
 .ai-mic-on { color: #ef4444; border-color: #ef4444; animation: ai-pulse 1s ease-in-out infinite; }
 @keyframes ai-pulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239,68,68,.4); } 50% { transform: scale(1.12); box-shadow: 0 0 0 6px rgba(239,68,68,0); } }
 @media (max-width: 768px) {
-  .ai-fab { right: 20px; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); width: 64px; height: 64px; }
-  .ai-panel { width: calc(100vw - 32px); max-height: 80dvh; bottom: calc(85px + env(safe-area-inset-bottom, 0px)); right: 16px; left: 16px; margin: auto; }
+  /* Burbuja flotante compacta y discreta en móvil: no tapa los botones de
+     acción (editar/borrar) de las tablas y tarjetas */
+  .ai-fab { right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: 46px; height: 46px; opacity: .9; }
+  .ai-panel { width: calc(100vw - 32px); max-height: 80dvh; bottom: calc(78px + env(safe-area-inset-bottom, 0px)); right: 16px; left: 16px; margin: auto; }
   .ai-mic { width: 60px; height: 60px; font-size: 24px; }
   .ai-voice-sel { max-width: 96px; }   /* selector de voz compacto en móvil */
   .ai-fab-tip { right: 92px; bottom: calc(30px + env(safe-area-inset-bottom, 0px)); max-width: 200px; }
