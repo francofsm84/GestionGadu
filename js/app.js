@@ -966,11 +966,11 @@
       const remote = await G.sync.pull();
       const lastSync = S.data.settings.lastCloudSync || '';
       if (remote && (!lastSync || String(remote.updatedAt) > String(lastSync))) {
-        /* La nube está más actualizada: se reemplaza en segundo plano, sin modal */
+        /* La nube está más actualizada: se reemplaza en segundo plano, sin modal
+           y sin avisos: la carga inicial queda limpia (sin banner de notificación). */
         S.importJSON(JSON.stringify(remote.data));
         S.data.settings.lastCloudSync = String(remote.updatedAt);
         S.save();
-        UI.toast('Datos actualizados desde la nube', 'info');
       } else if (!remote && !S.hasLocalData()) {
         /* Arranque limpio: la app queda en $0 SIN datos de demostración.
            Solo se persiste el documento vacío para sincronizar. */
