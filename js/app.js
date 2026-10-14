@@ -265,6 +265,7 @@
         '</div>' +
         '<button class="btn btn-soft" id="bProfile" style="margin-top:10px">' + UI.icon('user', 15) + 'Completar mi perfil (onboarding)</button>' +
         '<label class="form-hint" style="display:block;margin-top:10px"><input type="checkbox" id="cAuto"' + (cfg.autoPush ? ' checked' : '') + ' style="accent-color:var(--primary)"> Sincronizar automáticamente cada vez que guardo</label>' +
+        '<label class="form-hint" style="display:flex;align-items:center;gap:8px;margin-top:10px">⏰ Horario de recordatorio diario <input type="time" id="fReminder" value="' + UI.escapeHtml((S.data.settings && S.data.settings.reminderTime) || '09:00') + '" style="max-width:130px"></label>' +
         '<p class="form-hint" id="cloudStatus" style="margin-top:8px"></p>' +
         '<button class="btn btn-danger" id="bLogout" style="margin-top:10px">' + UI.icon('log-out', 15) + 'Cerrar sesión</button>' +
         '</div>',
@@ -314,6 +315,13 @@
     m.panel.querySelector('#bProfile').addEventListener('click', () => {
       m.close();
       try { if (G.onboarding && G.onboarding.open) G.onboarding.open(); } catch (e) {}
+    });
+    m.panel.querySelector('#fReminder').addEventListener('change', e => {
+      try {
+        S.data.settings.reminderTime = e.target.value || '09:00';
+        S.save();
+        UI.toast('Recordatorio diario configurado a las ' + (e.target.value || '09:00'), 'success');
+      } catch (err) { /* silencioso */ }
     });
     m.panel.querySelector('#bCloudTest').addEventListener('click', async () => {
       setStatus('Probando conexión…');

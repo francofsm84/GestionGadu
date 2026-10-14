@@ -79,6 +79,37 @@
     } catch (e) { return Promise.resolve(false); }
   }
 
+  /* Recordatorio diario personalizable (por defecto 09:00) */
+  function reminderTime() {
+    try {
+      const st = (G.store && G.store.data && G.store.data.settings) || {};
+      return st.reminderTime || '09:00';
+    } catch (e) { return '09:00'; }
+  }
+  function notifyReminder() {
+    if (!isLinked()) return Promise.resolve(false);
+    return sendWhatsAppNotification({
+      message: '⏰ ¡Hola! Es hora de actualizar GADU: recuerda registrar tus jornadas, gastos y revisar la agenda de hoy.',
+    });
+  }
+  /* Verifica si corresponde disparar el recordatorio en este instante.
+     Se ejecuta de forma periódica y una vez por día (silencioso si falla). */
+  function checkReminder() {
+    try {
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      const target = reminderTime();
+      if (hh + ':' + mm === target) {
+        const key = 'gadu_wa_reminder_' + now.toISOString().slice(0, 10);
+        if (!localStorage.getItem(key)) {
+          try { localStorage.setItem(key, '1'); } catch (e) {}
+          notifyReminder();
+        }
+      }
+    } catch (e) { /* silencioso */ }
+  }
+
   /* Hook de sincronización: notifica tras cada push exitoso, sin
      interferir con el resultado original del push. */
   function hookSyncNotifications() {
@@ -119,14 +150,18 @@
 
   function init() {
     hookSyncNotifications();
+    /* Revisión periódica del recordatorio diario (cada 30s, silenciosa).
+       Sin notificaciones en segundo plano del navegador: solo corre mientras
+       la app está abierta; si no está disponible, no lanza errores. */
+    try { setInterval(checkReminder, 30000); } catch (e) {}
     /* Deja arrancar la app para que S.load() cargue el perfil antes de
        decidir si corresponde notificar (viernes / resumen diario). */
     try {
-      window.addEventListener('load', () => setTimeout(dailyChecks, 2500));
+      window.addEventListener('load', () => { checkReminder(); setTimeout(dailyChecks, 2500); });
       document.addEventListener('DOMContentLoaded', () => setTimeout(dailyChecks, 4000));
     } catch (e) {}
   }
 
-  G.whatsapp = { init, sendWhatsAppNotification, notifySync, notifyFridayReminder, notifyDailySummary };
+  G.whatsapp = { init, sendWhatsAppNotification, notifySync, notifyFridayReminder, notifyDailySummary, notifyReminder, checkReminder, reminderTime };
   try { init(); } catch (e) {}
 })(typeof window !== 'undefined' ? window : globalThis);
