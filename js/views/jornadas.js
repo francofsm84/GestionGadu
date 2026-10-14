@@ -8,7 +8,16 @@
   const G = root.GADU, S = G.store, UI = G.ui;
   const state = { q: '', mes: 'todos', work: 'todas' };
 
-  G.router.add('jornadas', 'jornadas', 'Jornadas y Asistencia', 'Todas las jornadas cargadas del personal, con horas por obra', render);
+  G.router.add('jornadas', 'jornadas', 'Jornadas y Asistencia', 'Control de jornadas del personal (unificado con Empleados)', render);
+
+  /* Vista UNIFICADA: #/jornadas redirige a Empleados con la pestaña
+     "Control de Jornadas" activa (una sola vista para todo el personal). */
+  function render() {
+    try { if (G.empleadosOpen) G.empleadosOpen.page = 'jornadas'; } catch (e) {}
+    try { if (G.router && G.router.navigate) G.router.navigate('#/empleados'); } catch (e) {}
+  }
+
+  /* ---------- (contenido anterior conservado como respaldo) ---------- */
 
   const hoyISO = () => S.todayISO();
   const mesKey = () => S.todayISO().slice(0, 7);
@@ -35,34 +44,6 @@
       return (state.mes === 'todos' || (a.date || '').slice(0, 7) === state.mes) &&
         (!q || hay.includes(q));
     });
-  }
-
-  function render(view) {
-    const hoy = hoyISO();
-    const presentesHoy = S.data.attendance.filter(a => a.date === hoy && a.status === 'presente').length;
-    const mes = S.data.attendance.filter(a => (a.date || '').slice(0, 7) === mesKey() && a.status === 'presente').length;
-    const horasMes = S.sum(S.data.attendance.filter(a => (a.date || '').slice(0, 7) === mesKey()).flatMap(a => (a.hours || []).map(h => h.hours)));
-    view.innerHTML =
-      '<section class="kpi-grid kpi-3">' +
-      kpi('check-circle', 'violet', 'Presentes hoy', String(presentesHoy), 'Jornadas cargadas para hoy') +
-      kpi('calendar', 'info', 'Jornadas este mes', String(mes), 'Días con asistencia registrada') +
-      kpi('clock', 'success', 'Horas este mes', String(horasMes), 'Suma de horas por obra') +
-      '</section>' +
-      '<div class="toolbar">' +
-      '<div class="search">' + UI.icon('search', 16) + '<input id="fq" class="input" placeholder="Buscar por empleado, obra o fecha…" value="' + UI.escapeHtml(state.q) + '"></div>' +
-      '<select id="fmes" class="select" style="max-width:180px">' +
-      '<option value="todos"' + (state.mes === 'todos' ? ' selected' : '') + '>Todos los meses</option>' +
-      meses().map(m => '<option value="' + m + '"' + (state.mes === m ? ' selected' : '') + '>' + m + '</option>').join('') +
-      '</select>' +
-      '<div class="grow"></div>' +
-      '<button class="btn btn-soft-info" id="btnNew">' + UI.icon('calendar-plus', 16) + 'Registrar jornada</button>' +
-      '</div>' +
-      '<div id="listWrap">' + listHTML(filtered()) + '</div>';
-
-    view.querySelector('#fq').addEventListener('input', e => { state.q = e.target.value; updateList(view); });
-    view.querySelector('#fmes').addEventListener('change', e => { state.mes = e.target.value; updateList(view); });
-    view.querySelector('#btnNew').addEventListener('click', () => { try { if (G.actions.attendance) G.actions.attendance(); } catch (e) {} });
-    bindList(view.querySelector('#listWrap'));
   }
 
   function kpi(icon, tone, label, value, sub) {

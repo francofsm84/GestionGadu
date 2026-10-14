@@ -6,12 +6,14 @@
 (function (root) {
   'use strict';
   const G = root.GADU, S = G.store, UI = G.ui;
-  const state = { q: '', filter: 'activos', view: 'tabla', tab: 'pagos', upTo: '' };
+  const state = { q: '', filter: 'activos', view: 'tarjetas', tab: 'pagos', upTo: '', page: 'fichas' };
 
-  G.router.add('empleados', 'empleados', 'Empleados', 'Panel global del personal: asistencia, horas, sueldos y adelantos', render);
+  G.router.add('empleados', 'empleados', 'Empleados', 'Fichas del personal, control de jornadas y resumen financiero', render);
   G.router.add('empleado', 'empleado/:id', 'Legajo de empleado', 'Historial completo: pagos, adelantos, asistencia y horas', renderDetail);
   G.actions.employee = openEmployeeModal;
   G.actions.attendance = openAttendanceModal;
+  /* Puente con la ruta #/jornadas: abre esta vista unificada en su pestaña */
+  G.empleadosOpen = { page: 'fichas' };
 
   function kpi(icon, tone, label, value, sub) {
     return '<div class="kpi-card">' +
@@ -49,6 +51,41 @@
   }
 
   function render(view) {
+    /* Si se llegó desde la ruta #/jornadas, abrir la pestaña correspondiente */
+    try { if (G.empleadosOpen && G.empleadosOpen.page && G.empleadosOpen.page !== 'fichas') { state.page = G.empleadosOpen.page; G.empleadosOpen.page = 'fichas'; } } catch (e) {}
+
+    view.innerHTML =
+      '<div class="tabs page-tabs">' +
+      '<button class="tab ' + (state.page === 'fichas' ? 'active' : '') + '" data-page="fichas">👤 Fichas / Empleados</button>' +
+      '<button class="tab ' + (state.page === 'jornadas' ? 'active' : '') + '" data-page="jornadas">📅 Control de Jornadas</button>' +
+      '<button class="tab ' + (state.page === 'finanzas' ? 'active' : '') + '" data-page="finanzas">💰 Resumen Financiero</button>' +
+      '</div>' +
+      '<div id="pageWrap">' + pageHTML() + '</div>';
+
+    UI.on(view, '[data-page]', 'click', e => {
+      state.page = e.currentTarget.dataset.page;
+      view.querySelectorAll('[data-page]').forEach(b => b.classList.toggle('active', b.dataset.page === state.page));
+      view.querySelector('#pageWrap').innerHTML = pageHTML();
+      bindPage(view);
+    });
+    bindPage(view);
+  }
+
+  /* Contenido por pestaña de la vista unificada Empleados + Jornadas */
+  function pageHTML() {
+    if (state.page === 'jornadas') return jornadasHTML();
+    if (state.page === 'finanzas') return finanzasHTML();
+    return fichasHTML();
+  }
+
+  function bindPage(view) {
+    const wrap = view.querySelector('#pageWrap');
+    if (state.page === 'jornadas') { bindJornadas(wrap); return; }
+    if (state.page === 'finanzas') { bindFinanzas(wrap); return; }
+    bindFichas(view);
+  }
+
+  function fichasHTML() {
     const actives = S.data.employees.filter(e => e.active !== false).length;
     const salaryAll = S.sum(S.data.expenses.filter(x => x.employeeId && x.expenseKind !== 'adelanto').map(x => x.amount));
     const advancesAll = S.sum(S.data.expenses.filter(x => x.employeeId && x.expenseKind === 'adelanto').map(x => x.amount));
@@ -62,15 +99,13 @@
     const monthKey = S.todayISO().slice(0, 7);
     const monthDays = S.data.attendance.filter(a => a.date.slice(0, 7) === monthKey && a.status === 'presente').length;
 
-    view.innerHTML =
-      '<section class="kpi-grid">' +
+    return '<section class="kpi-grid">' +
       kpi('user', 'info', 'Empleados activos', String(actives), S.data.employees.length + ' legajos en total') +
       kpi('wallet', 'success', 'Sueldos acumulados', UI.fmtMoney(salaryAll), 'Histórico al personal') +
       kpi('zap', 'warning', 'Adelantos', UI.fmtMoney(advancesAll), 'Dinero adelantado · para descontar') +
       kpi('clock', pendAll > 0 ? 'danger' : 'success', 'Saldo pendiente a pagar', UI.fmtMoney(pendAll), 'Jornales devengados sin liquidar') +
       kpi('check-circle', 'violet', 'Presentes hoy', String(today.length), monthDays + ' jornadas este mes') +
       '</section>' +
-
       '<div class="toolbar">' +
       '<div class="search">' + UI.icon('search', 16) + '<input id="fq" class="input" placeholder="Buscar por nombre, alias o notas…" value="' + UI.escapeHtml(state.q) + '"></div>' +
       '<select id="ff" class="select" style="max-width:160px">' +
@@ -87,7 +122,9 @@
       '<button class="btn btn-primary" id="btnNew">' + UI.icon('plus', 16) + 'Nuevo empleado</button>' +
       '</div>' +
       '<div id="listWrap">' + (state.view === 'tabla' ? tableHTML(filtered()) : cardsHTML(filtered())) + '</div>';
+  }
 
+  function bindFichas(view) {
     view.querySelector('#fq').addEventListener('input', e => { state.q = e.target.value; updateList(view); });
     view.querySelector('#ff').addEventListener('change', e => { state.filter = e.target.value; updateList(view); });
     UI.on(view, '[data-view]', 'click', e => {
@@ -100,8 +137,107 @@
     bindList(view.querySelector('#listWrap'));
   }
 
+  /* ---------- Pestaña: Control de Jornadas (todas las jornadas) ---------- */
+  function jornadasHTML() {
+    const hoy = S.todayISO();
+    const monthKey = hoy.slice(0, 7);
+    const presentesHoy = S.data.attendance.filter(a => a.date === hoy && a.status === 'presente').length;
+    const jornadasMes = S.data.attendance.filter(a => (a.date || '').slice(0, 7) === monthKey && a.status === 'presente').length;
+    const horasMes = S.sum(S.data.attendance.filter(a => (a.date || '').slice(0, 7) === monthKey).flatMap(a => (a.hours || []).map(h => h.hours)));
+    const att = S.data.attendance.slice().sort((a, b) => b.date.localeCompare(a.date));
+    return '<section class="kpi-grid kpi-3">' +
+      kpi('check-circle', 'violet', 'Presentes hoy', String(presentesHoy), 'Jornadas cargadas para hoy') +
+      kpi('calendar', 'info', 'Jornadas este mes', String(jornadasMes), 'Días con asistencia registrada') +
+      kpi('clock', 'success', 'Horas este mes', String(horasMes), 'Suma de horas por obra') +
+      '</section>' +
+      '<div class="toolbar">' +
+      '<span class="form-hint">Todas las jornadas del personal (las del asistente y las de acá).</span>' +
+      '<div class="grow"></div>' +
+      '<button class="btn btn-soft-info" id="btnAttJ">' + UI.icon('calendar-plus', 16) + 'Registrar jornada</button>' +
+      '</div>' +
+      '<div class="card table-card"><div class="table-wrap"><table class="data-table">' +
+      '<thead><tr><th>Fecha</th><th>Empleado</th><th>Estado</th><th>Obra · Horas</th><th>Notas</th><th class="num"></th></tr></thead>' +
+      '<tbody>' +
+      (att.map(a => {
+        const emp = S.employeeById(a.employeeId);
+        const horas = (a.hours || []).map(h => {
+          const w = S.data.works.find(x => x.id === h.workId);
+          return '<div class="split-row" style="gap:8px"><span>' + UI.escapeHtml(w ? w.name : 'General') + '</span><b>' + (Number(h.hours) || 0) + ' hs' + (h.tipo === 'extra' ? ' ⚡' : '') + '</b></div>';
+        }).join('');
+        return '<tr>' +
+          '<td class="muted">' + UI.fmtDate(a.date) + '</td>' +
+          '<td><strong>' + UI.escapeHtml(emp ? S.employeeName(emp) : '—') + '</strong></td>' +
+          '<td>' + (a.status === 'presente' ? UI.chip('Presente', 'success', 'check-circle') : UI.chip('Ausente', 'neutral', 'x-circle')) + '</td>' +
+          '<td>' + (horas || '<span class="muted">—</span>') + '</td>' +
+          '<td class="muted">' + UI.escapeHtml(a.notes || '—') + '</td>' +
+          '<td class="num"><div class="row-actions" style="justify-content:flex-end">' +
+          '<button class="icon-btn sm" data-jatt="' + a.id + '" title="Editar">' + UI.icon('edit', 15) + '</button>' +
+          '<button class="icon-btn sm danger" data-jdel="' + a.id + '" title="Eliminar">' + UI.icon('trash', 15) + '</button>' +
+          '</div></td></tr>';
+      }).join('') || '<tr><td colspan="6">' + UI.emptyState('calendar', 'Sin jornadas todavía', 'Registralas desde acá o por el asistente.') + '</td></tr>') +
+      '</tbody></table></div></div>';
+  }
+
+  function bindJornadas(wrap) {
+    const btn = wrap.querySelector('#btnAttJ');
+    if (btn) btn.addEventListener('click', () => openAttendanceModal());
+    UI.on(wrap, '[data-jatt]', 'click', e => {
+      const a = S.data.attendance.find(x => x.id === e.target.closest('[data-jatt]').dataset.jatt);
+      if (a) openAttendanceModal({ attendance: a });
+    });
+    UI.on(wrap, '[data-jdel]', 'click', async e => {
+      const a = S.data.attendance.find(x => x.id === e.target.closest('[data-jdel]').dataset.jdel);
+      if (!a) return;
+      const ok = await UI.confirm({ title: 'Eliminar jornada', message: '¿Eliminar esta jornada?', okLabel: 'Eliminar' });
+      if (ok) { S.remove('attendance', a.id); UI.toast('Jornada eliminada'); G.router.refresh(); }
+    });
+  }
+
+  /* ---------- Pestaña: Resumen Financiero ---------- */
+  function finanzasHTML() {
+    const rows = S.data.employees.slice().sort((a, b) => S.employeeName(a).localeCompare(S.employeeName(b))).map(e => {
+      const m = S.employeeMonth(e.id);
+      const st = S.employeeStats(e.id);
+      const devengado = (m.hours || 0) * (Number(e.hourlyRate) || 0);
+      const saldo = devengado - m.salary - m.advances;
+      return '<tr>' +
+        '<td><strong>' + UI.escapeHtml(S.employeeName(e)) + '</strong>' + (e.active === false ? ' ' + UI.chip('De baja', 'danger') : '') + '</td>' +
+        '<td class="num">' + m.hours + '</td>' +
+        '<td class="num pos">' + UI.fmtMoney(st.salary) + '</td>' +
+        '<td class="num warning-text">' + UI.fmtMoney(st.advances) + '</td>' +
+        '<td class="num ' + (saldo > 0 ? 'neg' : 'pos') + '"><b>' + (saldo > 0 ? UI.fmtMoney(saldo) : 'Al día ✓') + '</b></td>' +
+        '<td class="num"><div class="row-actions" style="justify-content:flex-end">' +
+        '<button class="btn btn-soft-success btn-sm" data-fpay="' + e.id + '">' + UI.icon('wallet', 13) + ' Pagar</button>' +
+        '<button class="btn btn-soft-warning btn-sm" data-fadv="' + e.id + '">' + UI.icon('zap', 13) + ' Adelanto</button>' +
+        '</div></td></tr>';
+    }).join('');
+    const tSueldos = S.sum(S.data.expenses.filter(x => x.employeeId && x.expenseKind !== 'adelanto').map(x => x.amount));
+    const tAdel = S.sum(S.data.expenses.filter(x => x.employeeId && x.expenseKind === 'adelanto').map(x => x.amount));
+    return '<div class="card table-card"><div class="table-wrap"><table class="data-table">' +
+      '<thead><tr><th>Empleado</th><th class="num">Horas mes</th><th class="num">Sueldos</th><th class="num">Adelantos</th><th class="num">Saldo a liquidar</th><th class="num"></th></tr></thead>' +
+      '<tbody>' +
+      (rows || '<tr><td colspan="6">' + UI.emptyState('wallet', 'Sin empleados', 'Cargá el primero desde Fichas / Empleados.') + '</td></tr>') +
+      '</tbody></table></div>' +
+      '<div class="table-foot">' +
+      '<span>' + S.data.employees.length + ' legajo' + (S.data.employees.length !== 1 ? 's' : '') + '</span>' +
+      '<span>Sueldos <b class="pos">' + UI.fmtMoney(tSueldos) + '</b> · Adelantos <b class="warning-text">' + UI.fmtMoney(tAdel) + '</b></span>' +
+      '</div></div>';
+  }
+
+  function bindFinanzas(wrap) {
+    UI.on(wrap, '[data-fpay]', 'click', e => {
+      e.stopPropagation();
+      G.actions.expense({ type: 'general', employeeId: e.target.closest('[data-fpay]').dataset.fpay, category: 'Sueldos' });
+    });
+    UI.on(wrap, '[data-fadv]', 'click', e => {
+      e.stopPropagation();
+      G.actions.expense({ type: 'general', employeeId: e.target.closest('[data-fadv]').dataset.fadv, category: 'Sueldos', expenseKind: 'adelanto' });
+    });
+  }
+
   function updateList(view) {
     const wrap = view.querySelector('#listWrap');
+    if (!wrap) return;
     wrap.innerHTML = state.view === 'tabla' ? tableHTML(filtered()) : cardsHTML(filtered());
     bindList(wrap);
   }
