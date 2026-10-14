@@ -20,6 +20,7 @@ const noMock = [
   'ai-smoke.js',
   'gadux-scenario.js',
   'gadux-simulation.js',
+  'full-sim.js',
   'licencia-smoke.js',
   'onboarding-smoke.js',
   'css-check.js',
