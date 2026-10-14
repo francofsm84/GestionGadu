@@ -100,12 +100,12 @@ serve(async (req) => {
   }
 
   try {
-    const payload = await req.json().catch(() => ({}));
-    /* Log de diagnóstico: cuerpo exacto que envía Meta */
-    console.log("[whatsapp-webhook] POST recibido:", JSON.stringify(payload));
-    const inc = parseIncoming(payload);
+    const body = await req.json().catch(() => ({}));
+    /* Log de diagnóstico: cuerpo bruto exacto que envía Meta */
+    console.log("RAW BODY:", JSON.stringify(body));
+    const inc = parseIncoming(body);
     if (!inc) {
-      console.warn("[whatsapp-webhook] payload no reconocido:", JSON.stringify(payload));
+      console.warn("[whatsapp-webhook] payload no reconocido:", JSON.stringify(body));
       return json({ ok: false, error: "mensaje no reconocido (se espera texto o nota de voz transcrita)" });
     }
     console.log("[whatsapp-webhook] from=" + inc.from + " text=" + JSON.stringify(inc.text));
@@ -231,8 +231,13 @@ serve(async (req) => {
     const reply = ai.reply || "🤖 Recibí tu mensaje. Para cargas complejas (obras, empleados, jornadas) te conviene completarlas en la app: https://gestiongadu.vercel.app";
     await sendWhatsApp(inc.from, reply);
     return json({ ok: true, from: inc.from, reply });
-  } catch (e) {
-    console.error("[whatsapp-webhook] error inesperado:", e);
-    return json({ ok: false, error: String((e && (e as Error).message) || e) }, 500);
+  } catch (error) {
+    /* Traza clara de cualquier error interno, SIN bloquear a Meta:
+       responde HTTP 200 para que Meta no reintente en bucle. */
+    console.error("CRITICAL ERROR:", error);
+    return new Response(
+      JSON.stringify({ ok: false, error: (error && (error as Error).message) || String(error) }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 });
