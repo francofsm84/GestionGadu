@@ -64,9 +64,9 @@
           '<a class="icon-btn sm" href="' + UI.waLink(s.whatsapp || s.phone) + '" target="_blank" rel="noopener" title="WhatsApp">' + UI.icon('whatsapp', 15) + '</a>' +
           '<a class="icon-btn sm" href="' + UI.telLink(s.phone) + '" title="Llamar">' + UI.icon('phone', 15) + '</a>' +
           '</div></div>';
-      }).join('') || UI.emptyState('users', 'No hay socios cargados', 'Agregalos desde la Agenda de contactos.')) +
+      }).join('') || UI.emptyState('users', 'No hay socios cargados', 'Agregalos desde el Directorio de contactos.')) +
       '</div>' +
-      '<p class="form-hint" style="margin-top:10px">Los porcentajes se editan desde la <a href="#/agenda">Agenda de contactos</a>. La asignación es estimada sobre la utilidad neta disponible.</p>' +
+      '<p class="form-hint" style="margin-top:10px">Los porcentajes se editan desde el <a href="#/directorio">Directorio de contactos</a>. La asignación es estimada sobre la utilidad neta disponible.</p>' +
       '</div>' +
 
       '<div class="card">' +

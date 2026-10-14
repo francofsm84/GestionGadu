@@ -8,7 +8,7 @@
 (function (root) {
   'use strict';
   const G = root.GADU, S = G.store, UI = G.ui;
-  const state = { q: '', type: 'todos' };
+  const state = { q: '', type: 'todos', modo: 'cards' };
 
   G.router.add('directorio', 'directorio', 'Directorio de contactos', 'Clientes, proveedores, subcontratistas y contactos generales', render);
 
@@ -39,12 +39,22 @@
       S.CONTACT_TYPES.map(t => chipBtn(t, TYPES[t][0] + ' (' + (counts[t] || 0) + ')')).join('') +
       '</div>' +
       '<div class="grow"></div>' +
+      '<div class="seg" style="display:flex;gap:4px;background:var(--surface-2);border-radius:10px;padding:3px">' +
+      '<button class="btn btn-sm ' + (state.modo === 'cards' ? 'btn-primary' : 'btn-soft') + '" id="btnCards" title="Ver tarjetas">' + UI.icon('grid', 14) + ' Tarjetas</button>' +
+      '<button class="btn btn-sm ' + (state.modo === 'lista' ? 'btn-primary' : 'btn-soft') + '" id="btnList" title="Ver lista">' + UI.icon('menu', 14) + ' Lista</button>' +
+      '</div>' +
       '<button class="btn btn-primary" id="btnNew">' + UI.icon('plus', 16) + 'Nuevo contacto</button>' +
       '</div>' +
       '<div id="listWrap">' + listHTML(filtered()) + '</div>';
 
     view.querySelector('#fq').addEventListener('input', e => { state.q = e.target.value; updateList(view); });
     view.querySelector('#btnNew').addEventListener('click', () => openContactModal());
+    const syncToggle = () => {
+      view.querySelector('#btnCards').className = 'btn btn-sm ' + (state.modo === 'cards' ? 'btn-primary' : 'btn-soft');
+      view.querySelector('#btnList').className = 'btn btn-sm ' + (state.modo === 'lista' ? 'btn-primary' : 'btn-soft');
+    };
+    view.querySelector('#btnCards').addEventListener('click', () => { state.modo = 'cards'; syncToggle(); updateList(view); });
+    view.querySelector('#btnList').addEventListener('click', () => { state.modo = 'lista'; syncToggle(); updateList(view); });
     UI.on(view, '[data-type]', 'click', e => {
       state.type = e.currentTarget.dataset.type;
       view.querySelectorAll('[data-type]').forEach(b => b.classList.toggle('active', b.dataset.type === state.type));
@@ -67,6 +77,32 @@
     if (!list.length) {
       return '<div class="card">' + UI.emptyState('book', 'No hay contactos que coincidan', 'Probá con otra búsqueda o categoría.') + '</div>';
     }
+    /* Modo lista: tabla ordenada de TODOS los contactos filtrados */
+    if (state.modo === 'lista') {
+      return '<div class="card table-card">' +
+        '<div class="table-wrap"><table class="data-table">' +
+        '<thead><tr><th>Nombre</th><th>Tipo</th><th>Empresa / rubro</th><th>Teléfono</th><th>E-mail</th><th class="num"></th></tr></thead>' +
+        '<tbody>' +
+        list.map(c => {
+          const tl = TYPES[c.type] || ['', 'neutral'];
+          return '<tr>' +
+            '<td><strong>' + UI.escapeHtml(c.name) + '</strong></td>' +
+            '<td>' + UI.chip(tl[0], tl[1]) + '</td>' +
+            '<td>' + UI.escapeHtml(c.company || '—') + '</td>' +
+            '<td>' + (c.phone
+              ? '<a href="' + UI.telLink(c.phone) + '">' + UI.escapeHtml(c.phone) + '</a>'
+              : '<span class="muted">—</span>') + (c.whatsapp && c.whatsapp !== c.phone ? '<br><a href="' + UI.waLink(c.whatsapp) + '" target="_blank" rel="noopener" class="muted small">' + UI.escapeHtml(c.whatsapp) + ' (WA)</a>' : '') + '</td>' +
+            '<td>' + (c.email ? '<a href="mailto:' + UI.escapeHtml(c.email) + '">' + UI.escapeHtml(c.email) + '</a>' : '<span class="muted">—</span>') + '</td>' +
+            '<td class="num"><div class="row-actions" style="justify-content:flex-end">' +
+            '<a class="icon-btn sm" href="' + UI.waLink(c.whatsapp || c.phone) + '" target="_blank" rel="noopener" title="WhatsApp">' + UI.icon('whatsapp', 15) + '</a>' +
+            '<button class="icon-btn sm" data-edit="' + c.id + '" title="Editar">' + UI.icon('edit', 15) + '</button>' +
+            '<button class="icon-btn sm danger" data-del="' + c.id + '" title="Eliminar">' + UI.icon('trash', 15) + '</button>' +
+            '</div></td></tr>';
+        }).join('') +
+        '</tbody></table></div>' +
+        '<div class="table-foot"><span>' + list.length + ' contacto' + (list.length !== 1 ? 's' : '') + '</span></div></div>';
+    }
+    /* Modo tarjetas (actual) */
     return '<div class="cards-grid">' + list.map(contactCard).join('') + '</div>';
   }
 
