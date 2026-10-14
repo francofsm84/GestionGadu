@@ -387,6 +387,19 @@
     });
     /* Botones del flujo guiado (wizard): delegación de clicks */
     log.addEventListener('click', (e) => {
+      /* Formulario dinámico: abrir ("📝 Completar formulario") */
+      const fo = e.target && e.target.closest ? e.target.closest('[data-form-open]') : null;
+      if (fo) {
+        const msg = fo.closest('.ai-msg');
+        openFormWidget(fo.dataset.formOpen, msg);
+        return;
+      }
+      /* Formulario dinámico: confirmar → guardar en la base + tarjeta de éxito */
+      const fk = e.target && e.target.closest ? e.target.closest('[data-form-ok]') : null;
+      if (fk) {
+        submitFormWidget(fk.closest('.ai-form'));
+        return;
+      }
       /* Widget interactivo: confirmar guarda el valor y retoma el flujo */
       const wk = e.target && e.target.closest ? e.target.closest('[data-widget-ok]') : null;
       if (wk) {
@@ -1544,6 +1557,192 @@
     return { ok: true, nombre: S.employeeName(emp), monto: Number(value) };
   }
 
+  /* ============================================================
+     FORMULARIOS DINÁMICOS dentro del chat
+     Cualquier acción operativa (empleado, gasto, ingreso, adelanto)
+     se completa íntegramente con inputs y selectores, sin salir
+     del chat. Guardan en la MISMA capa de datos (G.store).
+     ============================================================ */
+  const FORM_DEFS = {
+    empleado: {
+      title: '👤 Nuevo empleado',
+      fields() {
+        return [
+          { key: 'nombre', label: 'Nombre y apellido', type: 'text', ph: 'Ej: Lucho García', required: true },
+          { key: 'tarifa', label: 'Tarifa por hora ($)', type: 'money', ph: 'Ej: 6000' },
+          { key: 'telefono', label: 'Teléfono', type: 'text', ph: 'Ej: 3511234567' },
+        ];
+      },
+      async exec(vals) {
+        const full = String(vals.nombre || '').trim();
+        if (!full) return { ok: false, err: 'Falta el nombre del empleado' };
+        const parts = full.split(/\s+/);
+        const firstName = parts.shift() || '';
+        const lastName = parts.join(' ');
+        const emp = G.store.add('employees', {
+          firstName, lastName, phone: String(vals.telefono || '').trim(),
+          paymentData: '', hourlyRate: extractNumber(vals.tarifa) || 0,
+          active: true, notes: '', photo: null, createdAt: G.store.todayISO(),
+        });
+        await pushCloud();
+        return { ok: true, label: 'empleado ' + full, coll: 'employees', id: emp.id };
+      },
+    },
+    ingreso: {
+      title: '💰 Nuevo ingreso',
+      fields() {
+        const obras = (G.store.data.works || []).filter(w => w.status !== 'finalizada');
+        return [
+          { key: 'obra', label: 'Obra', type: 'select', options: [{ v: '', l: '— General —' }].concat(obras.map(w => ({ v: w.id, l: workLabel(w) }))) },
+          { key: 'concepto', label: 'Concepto', type: 'select', options: ['Cobro', 'Adelanto', 'Certificación'].map(c => ({ v: c, l: c })) },
+          { key: 'monto', label: 'Monto ($)', type: 'money', ph: 'Ej: 150000', required: true },
+          { key: 'metodo', label: 'Método', type: 'select', options: (G.store.METODOS || ['Efectivo']).map(m => ({ v: m, l: m })) },
+        ];
+      },
+      async exec(vals) {
+        const monto = extractNumber(vals.monto);
+        if (!(monto > 0)) return { ok: false, err: 'Falta el monto' };
+        const concepto = vals.concepto || 'Cobro';
+        const kind = concepto === 'Adelanto' ? 'adelanto' : concepto === 'Certificación' ? 'certificacion' : 'cobro';
+        const inc = G.store.add('incomes', {
+          workId: vals.obra || null, date: G.store.todayISO(), amount: monto,
+          concept: concepto, incomeKind: kind, method: vals.metodo || 'Efectivo',
+          description: '', invoiceNumber: '',
+        });
+        await pushCloud();
+        return { ok: true, label: 'ingreso de ' + concepto + ' por ' + fmtM(monto), coll: 'incomes', id: inc.id };
+      },
+    },
+    gasto: {
+      title: '💸 Nuevo gasto',
+      fields() {
+        const obras = (G.store.data.works || []).filter(w => w.status !== 'finalizada');
+        const cats = [].concat(G.store.CATS_OBRA || []).concat(G.store.CATS_GENERAL || []);
+        return [
+          { key: 'tipo', label: 'Tipo de gasto', type: 'select', options: [{ v: 'obra', l: 'Gasto de obra' }, { v: 'general', l: 'Gasto general' }] },
+          { key: 'obra', label: 'Obra', type: 'select', options: [{ v: '', l: '— Sin obra —' }].concat(obras.map(w => ({ v: w.id, l: workLabel(w) }))), when: 'tipo=obra' },
+          { key: 'categoria', label: 'Categoría', type: 'select', options: [...new Set(cats)].map(c => ({ v: c, l: c })) },
+          { key: 'monto', label: 'Monto ($)', type: 'money', ph: 'Ej: 45000', required: true },
+          { key: 'descripcion', label: 'Descripción', type: 'text', ph: 'Ej: Materiales' },
+        ];
+      },
+      async exec(vals) {
+        const monto = extractNumber(vals.monto);
+        if (!(monto > 0)) return { ok: false, err: 'Falta el monto' };
+        const tipo = vals.tipo === 'general' ? 'general' : 'obra';
+        const g = G.store.add('expenses', {
+          type: tipo, workId: tipo === 'obra' ? (vals.obra || null) : null,
+          date: G.store.todayISO(), amount: monto,
+          category: vals.categoria || 'Otros', providerId: null, employeeId: null,
+          expenseKind: '', description: String(vals.descripcion || '').trim() || (vals.categoria || 'Gasto'),
+          invoiceNumber: '', paymentMethod: 'Efectivo',
+        });
+        await pushCloud();
+        return { ok: true, label: 'gasto de ' + (g.description || '') + ' por ' + fmtM(monto), coll: 'expenses', id: g.id };
+      },
+    },
+    adelanto: {
+      title: '⚡ Adelanto a empleado',
+      fields() {
+        const emps = (G.store.data.employees || []).slice().sort((a, b) => G.store.employeeName(a).localeCompare(G.store.employeeName(b)));
+        return [
+          { key: 'empleado', label: 'Empleado', type: 'select', options: emps.map(e => ({ v: e.id, l: G.store.employeeName(e) })), required: true },
+          { key: 'monto', label: 'Monto ($)', type: 'money', ph: 'Ej: 10000', required: true },
+        ];
+      },
+      async exec(vals) {
+        const monto = extractNumber(vals.monto);
+        const emp = vals.empleado ? G.store.employeeById(vals.empleado) : null;
+        if (!emp) return { ok: false, err: 'Elegí el empleado' };
+        if (!(monto > 0)) return { ok: false, err: 'Falta el monto' };
+        const g = G.store.add('expenses', {
+          type: 'general', workId: null, date: G.store.todayISO(), amount: monto,
+          category: 'Sueldos', providerId: null, employeeId: emp.id,
+          expenseKind: 'adelanto', description: 'Adelanto a ' + G.store.employeeName(emp),
+          invoiceNumber: '', paymentMethod: 'Efectivo',
+        });
+        await pushCloud();
+        return { ok: true, label: 'adelanto a ' + G.store.employeeName(emp) + ' por ' + fmtM(monto), coll: 'expenses', id: g.id };
+      },
+    },
+  };
+  async function pushCloud() {
+    try { if (G.sync && G.sync.push) await G.sync.push(G.store.data); } catch (e) {}
+    try { if (G.router && G.router.refresh) G.router.refresh(); } catch (e) {}
+  }
+  const fmtM = v => (G.ui && G.ui.fmtMoney) ? G.ui.fmtMoney(v) : '$' + v;
+  /* Campos del formulario (puro, testeable) */
+  function formFields(action) {
+    const def = FORM_DEFS[action];
+    return def ? def.fields() : [];
+  }
+  /* HTML del formulario dinámico (puro, testeable) */
+  function formWidgetHtml(action) {
+    const def = FORM_DEFS[action];
+    if (!def) return '';
+    const fields = def.fields();
+    return '<div class="ai-widget ai-form" data-form="' + esc(action) + '">' +
+      '<div class="ai-widget-head">' + def.title + '</div>' +
+      fields.map(f => {
+        const when = f.when ? ' data-when="' + f.when + '"' : '';
+        if (f.type === 'select') {
+          return '<label class="ai-field"' + when + '><span class="ai-field-label">' + esc(f.label) + '</span>' +
+            '<select class="select ai-widget-input" data-key="' + esc(f.key) + '">' +
+            (f.options || []).map(o => '<option value="' + esc(o.v) + '">' + esc(o.l) + '</option>').join('') +
+            '</select></label>';
+        }
+        return '<label class="ai-field"' + when + '><span class="ai-field-label">' + esc(f.label) + '</span>' +
+          '<input class="input ai-widget-input" data-key="' + esc(f.key) + '" type="' + (f.type === 'money' || f.type === 'number' ? 'number' : 'text') + '"' +
+          (f.type === 'money' || f.type === 'number' ? ' inputmode="decimal" step="any" min="0"' : '') +
+          ' placeholder="' + esc(f.ph || '') + '"></label>';
+      }).join('') +
+      '<div class="ai-widget-row"><div class="spacer"></div>' +
+      '<button class="btn btn-primary btn-sm" data-form-ok="1">Confirmar</button></div>' +
+      '</div>';
+  }
+  /* Abre el formulario en un mensaje del chat (reemplaza el contenido) */
+  function openFormWidget(action, hostEl) {
+    const html = formWidgetHtml(action);
+    if (!html || !hostEl) return;
+    hostEl.innerHTML = html;
+    const form = hostEl.querySelector('.ai-form');
+    if (!form) return;
+    /* Condicionales por selector: ej. mostrar "Obra" solo si tipo=obra */
+    form.querySelectorAll('[data-when]').forEach(row => {
+      const cond = row.dataset.when.split('=');
+      const sel = form.querySelector('[data-key="' + cond[0] + '"]');
+      const apply = () => { row.hidden = sel && sel.value !== cond[1]; };
+      if (sel) { sel.addEventListener('change', apply); }
+      apply();
+    });
+    scrollToEnd();
+  }
+  /* Ejecuta el formulario: guarda en la base y devuelve {ok, coll, id, label} */
+  async function submitFormValues(action, vals) {
+    const def = FORM_DEFS[action];
+    if (!def) return { ok: false, err: 'Acción desconocida' };
+    try {
+      const res = await def.exec(vals || {});
+      if (res && res.ok) lastSaved = { coll: res.coll, id: res.id, label: res.label };
+      return res;
+    } catch (e) { return { ok: false, err: String((e && e.message) || e) }; }
+  }
+  /* Confirmar desde el DOM: recolecta valores, guarda y muestra éxito */
+  async function submitFormWidget(formEl) {
+    const action = formEl.dataset.form;
+    const vals = {};
+    formEl.querySelectorAll('[data-key]').forEach(el => { vals[el.dataset.key] = (el.value || '').trim(); });
+    const pend = formEl.closest('.ai-msg');
+    if (pend) pend.innerHTML = '<span class="muted small">⏳ Guardando…</span>';
+    const res = await submitFormValues(action, vals);
+    if (pend) {
+      if (res && res.ok) pend.innerHTML = summaryCardHtml(res);
+      else pend.innerHTML = '⚠️ ' + esc((res && res.err) || 'No pude guardar: revisá los datos.');
+    }
+    resumePendingGoal();
+    scrollToEnd();
+  }
+
   /* Búsqueda inteligente: "buscame a X" / "¿dónde está X?" → consulta el store */
   function searchIntent(text) {
     const t = String(text || '').toLowerCase();
@@ -2041,6 +2240,15 @@
       fb.className = 'btn btn-soft btn-sm';
       fb.textContent = '✍️ Escribir horas';
       fb.dataset.focusInput = '1';
+      wrap.appendChild(fb);
+    }
+    /* Acciones con formulario dinámico: botón para completar todo en una
+       tarjeta del chat (empleado, gasto, ingreso, adelanto) */
+    if (op && op.idx === 0 && FORM_DEFS[op.modulo]) {
+      const fb = document.createElement('button');
+      fb.className = 'btn btn-soft-info btn-sm';
+      fb.textContent = '📝 Completar formulario';
+      fb.dataset.formOpen = op.modulo;
       wrap.appendChild(fb);
     }
     /* Sin botón "Saltear": todos los pasos se responden (o se cancela) */
@@ -2598,5 +2806,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, renderText, rememberTurn, searchIntent, searchStore, salaryIntent, employeeSalaryInfo, routeIntent, cashIntent, cashInfo, workBalanceIntent, workBalanceInfo, payTodayIntent, payTodayInfo, tarifaIntent, tarifaWidgetHtml, numWidgetHtml, applyTarifaValue, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, getUid, syncUser, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, gotoHref, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, findEmployeeMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, renderText, rememberTurn, searchIntent, searchStore, salaryIntent, employeeSalaryInfo, routeIntent, cashIntent, cashInfo, workBalanceIntent, workBalanceInfo, payTodayIntent, payTodayInfo, tarifaIntent, tarifaWidgetHtml, numWidgetHtml, applyTarifaValue, formFields, formWidgetHtml, submitFormValues, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, getUid, syncUser, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, gotoHref, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, findEmployeeMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
 })(typeof window !== 'undefined' ? window : globalThis);

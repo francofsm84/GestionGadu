@@ -330,6 +330,34 @@ okk(rTar.ok === true && S.employeeById(lucho.id).hourlyRate === 7000 && antesTar
 okk((await AI.applyTarifaValue('no-existe', 100)).ok === false, 'empleado inexistente → sin guardar');
 S.update('employees', lucho.id, { hourlyRate: 6000 });
 
+console.log('== 24) Formularios dinámicos en el chat (empleado/gasto/ingreso/adelanto) ==');
+['empleado', 'gasto', 'ingreso', 'adelanto'].forEach(a => {
+  okk(!!AI.formFields(a) && AI.formFields(a).length > 0, 'campos del formulario ' + a);
+  const h = AI.formWidgetHtml(a);
+  okk(h.indexOf('data-form="' + a + '"') > -1 && h.indexOf('data-form-ok') > -1 && h.indexOf('data-key=') > -1, 'HTML del formulario ' + a + ' con inputs y botón Confirmar');
+});
+const fEmpleado = AI.formFields('empleado');
+okk(fEmpleado.some(f => f.type === 'text') && fEmpleado.some(f => f.type === 'money'), 'empleado: inputs de texto + numérico');
+const fGasto = AI.formFields('gasto');
+okk(fGasto.some(f => f.type === 'select' && f.key === 'obra') && fGasto.some(f => f.when === 'tipo=obra'), 'gasto: selector de obra condicional al tipo');
+okk(AI.formFields('adelanto').some(f => f.key === 'empleado' && f.type === 'select'), 'adelanto: selector de empleado');
+/* Ejecución real: cada formulario guarda en la base */
+const rEmp = await AI.submitFormValues('empleado', { nombre: 'Luis Test', tarifa: '6500', telefono: '3515555' });
+const eNew = S.data.employees.find(e => S.employeeName(e) === 'Luis Test');
+okk(rEmp.ok === true && eNew && eNew.hourlyRate === 6500, 'alta de empleado desde el chat (tarifa $6.500 guardada)');
+const rGasto = await AI.submitFormValues('gasto', { tipo: 'obra', obra: obra.id, categoria: 'Materiales', monto: '45000', descripcion: 'Hierro' });
+const gNew = S.data.expenses.find(x => x.description === 'Hierro');
+okk(rGasto.ok === true && gNew && gNew.amount === 45000 && gNew.type === 'obra' && gNew.workId === obra.id, 'gasto de obra registrado desde el chat ($45.000)');
+const rIng = await AI.submitFormValues('ingreso', { obra: obra.id, concepto: 'Cobro', monto: '150000', metodo: 'Efectivo' });
+const iNew = S.data.incomes.find(x => x.amount === 150000 && x.workId === obra.id);
+okk(rIng.ok === true && iNew && iNew.concept === 'Cobro', 'ingreso registrado desde el chat ($150.000)');
+const rAdv = await AI.submitFormValues('adelanto', { empleado: lucho.id, monto: '5000' });
+const aNew = S.data.expenses.find(x => x.employeeId === lucho.id && x.amount === 5000 && x.expenseKind === 'adelanto');
+okk(rAdv.ok === true && aNew, 'adelanto a empleado registrado desde el chat ($5.000)');
+const rInvalid = await AI.submitFormValues('empleado', { nombre: '' });
+okk(rInvalid.ok === false, 'formulario inválido (sin nombre) → no guarda');
+okk(!!AI._lastSaved() && AI._lastSaved().coll === 'expenses', 'último guardado registrado para Deshacer');
+
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }
