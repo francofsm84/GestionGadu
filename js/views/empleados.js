@@ -52,15 +52,22 @@
     const actives = S.data.employees.filter(e => e.active !== false).length;
     const salaryAll = S.sum(S.data.expenses.filter(x => x.employeeId && x.expenseKind !== 'adelanto').map(x => x.amount));
     const advancesAll = S.sum(S.data.expenses.filter(x => x.employeeId && x.expenseKind === 'adelanto').map(x => x.amount));
+    /* Saldo pendiente de pago: jornales devengados del mes − pagos del mes */
+    const pendAll = S.sum(S.data.employees.filter(e => e.active !== false).map(e => {
+      const m = S.employeeMonth(e.id);
+      const devengado = (m.hours || 0) * (Number(e.hourlyRate) || 0);
+      return Math.max(0, devengado - m.salary - m.advances);
+    }));
     const today = S.presentToday();
     const monthKey = S.todayISO().slice(0, 7);
     const monthDays = S.data.attendance.filter(a => a.date.slice(0, 7) === monthKey && a.status === 'presente').length;
 
     view.innerHTML =
-      '<section class="kpi-grid kpi-4">' +
+      '<section class="kpi-grid">' +
       kpi('user', 'info', 'Empleados activos', String(actives), S.data.employees.length + ' legajos en total') +
-      kpi('wallet', 'success', 'Sueldos pagados', UI.fmtMoney(salaryAll), 'Histórico al personal') +
+      kpi('wallet', 'success', 'Sueldos acumulados', UI.fmtMoney(salaryAll), 'Histórico al personal') +
       kpi('zap', 'warning', 'Adelantos', UI.fmtMoney(advancesAll), 'Dinero adelantado · para descontar') +
+      kpi('clock', pendAll > 0 ? 'danger' : 'success', 'Saldo pendiente a pagar', UI.fmtMoney(pendAll), 'Jornales devengados sin liquidar') +
       kpi('check-circle', 'violet', 'Presentes hoy', String(today.length), monthDays + ' jornadas este mes') +
       '</section>' +
 
@@ -111,12 +118,14 @@
     }
     return '<div class="card table-card"><div class="table-wrap">' +
       '<table class="data-table">' +
-      '<thead><tr><th>Empleado</th><th>Teléfono</th><th class="num">Mes P/A</th><th class="num">Horas mes</th><th class="num">Sueldos</th><th class="num">Adelantos</th><th>Última jornada</th><th>Alias / CVU</th><th></th></tr></thead>' +
+      '<thead><tr><th>Empleado</th><th>Teléfono</th><th class="num">Mes P/A</th><th class="num">Horas mes</th><th class="num">Sueldos</th><th class="num">Adelantos</th><th class="num">Saldo a liquidar</th><th>Última jornada</th><th>Alias / CVU</th><th></th></tr></thead>' +
       '<tbody>' +
       list.map(e => {
         const st = S.employeeStats(e.id);
         const mst = S.employeeMonth(e.id);
         const last = st.attendance.length ? st.attendance[0] : null;
+        const devengado = (mst.hours || 0) * (Number(e.hourlyRate) || 0);
+        const saldo = devengado - mst.salary - mst.advances;
         return '<tr class="clickable" data-id="' + e.id + '">' +
           '<td><div style="display:flex;align-items:center;gap:9px">' + UI.avatar(S.employeeName(e), 30, e.photo) +
           '<span><strong>' + UI.escapeHtml(S.employeeName(e)) + '</strong>' +
@@ -126,6 +135,7 @@
           '<td class="num">' + mst.hours + '</td>' +
           '<td class="num pos">' + UI.fmtMoney(st.salary) + '</td>' +
           '<td class="num warning-text">' + UI.fmtMoney(st.advances) + '</td>' +
+          '<td class="num ' + (saldo > 0 ? 'neg' : 'pos') + '"><b>' + (saldo > 0 ? UI.fmtMoney(saldo) : 'Al día ✓') + '</b></td>' +
           '<td>' + lastCell(last) + '</td>' +
           '<td>' + (e.paymentData
             ? '<span class="alias-chip" style="padding:3px 8px"><code style="max-width:110px" title="' + UI.escapeHtml(e.paymentData) + '">' + UI.escapeHtml(e.paymentData) + '</code>' +
@@ -152,6 +162,9 @@
 
   function empCard(e) {
     const st = S.employeeStats(e.id);
+    const mst = S.employeeMonth(e.id);
+    const devengado = (mst.hours || 0) * (Number(e.hourlyRate) || 0);
+    const saldo = devengado - mst.salary - mst.advances;
     return '<article class="contact-card" data-id="' + e.id + '">' +
       '<div class="contact-head">' +
       UI.avatar(S.employeeName(e), 42, e.photo) +
@@ -164,6 +177,7 @@
       '<span>Total cobrado<b class="pos">' + UI.fmtMoney(st.paidTotal) + '</b></span>' +
       '<span>Adelantos<b class="warning-text">' + UI.fmtMoney(st.advances) + '</b></span>' +
       '<span>Días · Horas<b>' + st.daysWorked + ' · ' + st.hoursTotal + '</b></span>' +
+      '<span>Saldo a liquidar<b class="' + (saldo > 0 ? 'neg' : 'pos') + '">' + (saldo > 0 ? UI.fmtMoney(saldo) : 'Al día ✓') + '</b></span>' +
       '</div>' +
       '<div class="asset-foot">' +
       '<a class="btn btn-soft btn-sm" href="#/empleado/' + e.id + '">' + UI.icon('eye', 14) + 'Historial</a>' +

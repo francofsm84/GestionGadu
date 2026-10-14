@@ -62,6 +62,13 @@
     const activeEmps = S.data.employees.filter(e => e.active !== false);
     const monthKey = S.todayISO().slice(0, 7);
     const monthJornadas = S.data.attendance.filter(a => a.date.slice(0, 7) === monthKey && a.status === 'presente').length;
+    /* Sueldos acumulados + saldo pendiente de pago a empleados (mes en curso) */
+    const salaryAll = S.sum(S.data.expenses.filter(x => x.employeeId && x.expenseKind !== 'adelanto').map(x => x.amount));
+    const pendEmps = S.sum(activeEmps.map(e => {
+      const m = S.employeeMonth(e.id);
+      const devengado = (m.hours || 0) * (Number(e.hourlyRate) || 0);
+      return Math.max(0, devengado - m.salary - m.advances);
+    }));
 
     const moves = S.data.incomes.map(x => ({ date: x.date, kind: 'ingreso', workId: x.workId, label: x.concept, amount: Number(x.amount) }))
       .concat(S.data.expenses.map(x => ({ date: x.date, kind: 'gasto', workId: x.workId, label: x.description, amount: Number(x.amount), type: x.type })))
@@ -136,6 +143,8 @@
       '<div class="emp-dash-stats">' +
       '<div class="emp-stat"><b>' + UI.fmtMoney(paidMonth) + '</b><span>sueldos este mes</span></div>' +
       '<div class="emp-stat"><b class="warning-text">' + UI.fmtMoney(advMonth) + '</b><span>adelantos este mes</span></div>' +
+      '<div class="emp-stat"><b class="pos">' + UI.fmtMoney(salaryAll) + '</b><span>sueldos acumulados</span></div>' +
+      '<div class="emp-stat"><b class="' + (pendEmps > 0 ? 'neg' : 'pos') + '">' + UI.fmtMoney(pendEmps) + '</b><span>saldo pendiente a empleados</span></div>' +
       '<div class="emp-stat"><b>' + activeEmps.length + '</b><span>empleados activos</span></div>' +
       '<div class="emp-stat"><b>' + monthJornadas + '</b><span>jornadas este mes</span></div>' +
       '</div>' +
