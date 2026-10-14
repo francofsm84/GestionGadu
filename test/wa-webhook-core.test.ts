@@ -2,6 +2,7 @@
 import {
   parseIncoming,
   matchVerificationCode,
+  normalizePhone,
   phoneMatches,
   workLabel,
   findWork,
@@ -63,6 +64,9 @@ okk(matchVerificationCode("Hola, cómo va") === null, "sin código → null");
 okk(phoneMatches("+54 9 3547 55-1234", "5493547551234") === true, "teléfono coincide (últimos 9 dígitos)");
 okk(phoneMatches("+54 9 3547 55-1234", "5491111111111") === false, "teléfono distinto → false");
 okk(phoneMatches("", "5493547551234") === true, "sin teléfono en perfil → acepta por código");
+okk(phoneMatches("+543547469000", "5493547469000") === true, "normaliza móvil AR sin 9 (543547469000 → 5493547469000)");
+okk(normalizePhone("543547469000") === "5493547469000", "normalizePhone inserta el 9 de móvil AR");
+okk(normalizePhone("+1 555 664-3689") === "15556643689", "normalizePhone deja intactos números no argentinos");
 
 /* 4 · workLabel / findWork */
 okk(workLabel({ name: "casa angel" }) === "casa angel", "workLabel name");
