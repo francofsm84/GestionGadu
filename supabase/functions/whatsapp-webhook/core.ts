@@ -128,6 +128,24 @@ export function normCategory(raw: string): string {
   return String(raw).trim();
 }
 
+/* Intención local simple (fallback sin LLM): registra gastos e ingresos con
+   frases naturales, por si el motor de IA no está disponible o falla la auth
+   servidor→servidor. Ej.: "Gasté 15000 en bolsas de cemento" ·
+   "Ingresé 80000 por la obra de Pablo". */
+export function localIntent(text: string): { modulo: string; campos: Record<string, unknown> } | null {
+  const f = flat(String(text || ""));
+  const num = (s: string) => Number(s.replace(/\./g, "").replace(",", "."));
+  let m = f.match(/gas(?:te|to|t[eé]|t[oó])\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:en|de)\s+(.+)/i);
+  if (m && num(m[1]) > 0) {
+    return { modulo: "gasto", campos: { monto: num(m[1]), categoria: String(m[2] || "").trim() } };
+  }
+  m = f.match(/ingres(?:e|o|[eé]|[oó]|te|to)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:por|de)\s+(.+)/i);
+  if (m && num(m[1]) > 0) {
+    return { modulo: "ingreso", campos: { monto: num(m[1]), concepto: String(m[2] || "").trim() } };
+  }
+  return null;
+}
+
 export interface ExecResult {
   ok: boolean;
   label?: string;

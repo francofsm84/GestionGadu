@@ -9,6 +9,7 @@ import {
   normCategory,
   buildContext,
   executeAction,
+  localIntent,
 } from "../supabase/functions/whatsapp-webhook/core.ts";
 
 let ok = 0, ko = 0;
@@ -114,6 +115,13 @@ okk(r5.ok === false && r5.unsupported === "obra", "módulos complejos → los re
 /* 11 · buildContext */
 const ctx = buildContext({ works, contacts: [{ type: "cliente", name: "Familia Rossi" }], employees: [{ firstName: "Juan", lastName: "Pérez" }], assets: [{ name: "Amoladora", status: "operativo" }] });
 okk(ctx.includes("casa pablo") && ctx.includes("Familia Rossi") && ctx.includes("Juan Pérez") && ctx.includes("Amoladora"), "contexto compacto de la cuenta");
+
+/* 12 · localIntent (fallback sin LLM) */
+const liGasto = localIntent("Gasté 15000 en bolsas de cemento");
+okk(liGasto?.modulo === "gasto" && liGasto.campos?.monto === 15000 && liGasto.campos?.categoria === "bolsas de cemento", "gasto simple → monto + categoría");
+const liIngreso = localIntent("Ingresé 80000 por la obra de Pablo");
+okk(liIngreso?.modulo === "ingreso" && liIngreso.campos?.monto === 80000, "ingreso simple → monto");
+okk(localIntent("Hola GADU") === null, "texto sin acción → null");
 
 console.log("\n──────────────────────────");
 if (ko === 0) { console.log("✔ WHATSAPP CORE PASADO (" + ok + " checks)"); process.exit(0); }

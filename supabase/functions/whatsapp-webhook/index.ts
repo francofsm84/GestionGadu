@@ -33,6 +33,7 @@ import {
   phoneMatches,
   buildContext,
   executeAction,
+  localIntent,
 } from "./core.ts";
 
 const corsHeaders = {
@@ -184,26 +185,43 @@ serve(async (req) => {
     const row = rows2[0];
     const data = row.data || {};
 
-    /* 3) Mismo motor que el chat web: ai-assistant en modo servidor */
+    /* 3) Mismo motor que el chat web: ai-assistant en modo servidor.
+       Si el LLM no responde o falla la auth, hay fallback local (localIntent)
+       para "Gasté X en Y" / "Ingresé X por Y" y el negocio sigue operando. */
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
-    const aiRes = await fetch(supabaseUrl + "/functions/v1/ai-assistant", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: anonKey,
-        Authorization: `Bearer ${serviceKey}`,
-      },
-      body: JSON.stringify({
-        message: inc.text,
-        context: buildContext(data),
-        mode: "usuario",
-        channel: "whatsapp",
-        service: true,
-        userId: row.user_id,
-      }),
-    });
-    const ai = await aiRes.json().catch(() => ({}));
-    const action = (ai.action && ai.action.modulo) ? ai.action : null;
+    let aiReply = "";
+    let action: { modulo: string; campos?: Record<string, unknown> } | null = null;
+    try {
+      const aiRes = await fetch(supabaseUrl + "/functions/v1/ai-assistant", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: anonKey,
+          Authorization: `Bearer ${serviceKey}`,
+        },
+        body: JSON.stringify({
+          message: inc.text,
+          context: buildContext(data),
+          mode: "usuario",
+          channel: "whatsapp",
+          service: true,
+          userId: row.user_id,
+        }),
+      });
+      const ai = await aiRes.json().catch(() => ({}));
+      aiReply = ai.reply || "";
+      if (ai.action && ai.action.modulo) action = ai.action;
+    } catch (e) {
+      console.error("[whatsapp-webhook] ai-assistant falló:", e);
+    }
+    /* Fallback local: si no hubo acción de la IA, intentamos el patrón simple */
+    if (!action) {
+      const local = localIntent(inc.text);
+      if (local) {
+        action = local;
+        console.log("[whatsapp-webhook] usando intent local:", JSON.stringify(local));
+      }
+    }
 
     /* 4) Ejecutar la acción contable (gasto/ingreso) e impactar en app_data */
     if (action && (action.modulo === "gasto" || action.modulo === "ingreso")) {
@@ -218,17 +236,17 @@ serve(async (req) => {
           console.error("[whatsapp-webhook] falló impactar el movimiento:", up.status);
           return json({ ok: false, error: "no se pudo guardar el movimiento" }, 500);
         }
-        const reply = (ai.reply ? ai.reply + "\n\n" : "") + "✅ " + res.label;
+        const reply = (aiReply ? aiReply + "\n\n" : "") + "✅ " + res.label;
         await sendWhatsApp(inc.from, reply);
         return json({ ok: true, from: inc.from, reply });
       }
-      const reply = ai.reply || ("🤖 Me falta " + (res.missing || "un dato") + " para cargarlo. Decímelo por acá.");
+      const reply = aiReply || ("🤖 Me falta " + (res.missing || "un dato") + " para cargarlo. Decímelo por acá.");
       await sendWhatsApp(inc.from, reply);
       return json({ ok: true, from: inc.from, reply });
     }
 
     /* 5) Consultas y otros módulos: responde la IA (igual que el chat web) */
-    const reply = ai.reply || "🤖 Recibí tu mensaje. Para cargas complejas (obras, empleados, jornadas) te conviene completarlas en la app: https://gestiongadu.vercel.app";
+    const reply = aiReply || "🤖 Recibí tu mensaje. Para cargas complejas (obras, empleados, jornadas) te conviene completarlas en la app: https://gestiongadu.vercel.app";
     await sendWhatsApp(inc.from, reply);
     return json({ ok: true, from: inc.from, reply });
   } catch (error) {
