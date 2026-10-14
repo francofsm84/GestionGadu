@@ -63,7 +63,7 @@ console.log('== 3) Botones inline para pasos guiados ==');
 const oficios = AI.inlineOptionsFor('¿Cuál es el oficio del empleado?');
 okk(oficios.length === 7 && oficios[0].label === 'Albañil' && oficios[0].send === 'oficio Albañil', 'botones de oficio (7)');
 const obras = AI.inlineOptionsFor('¿A qué obra lo asigno?');
-okk(obras.length === 1 && obras[0].label === 'Norma Molina' && obras[0].send === 'obra Norma Molina', 'botones de obra (del store)');
+okk(obras.length === 1 && obras[0].label === 'Norma Molina - OB-1' && obras[0].send === 'obra Norma Molina', 'botones de obra (del store)');
 const cats = AI.inlineOptionsFor('¿Cuál es la categoría del gasto?');
 okk(cats.length >= 12 && cats[0].label === 'Herramientas / Equipamiento' && cats.some(c => c.label === 'Materiales'), 'botones de categoría (reales del store)');
 okk(AI.inlineOptionsFor('Hola, ¿cómo estás?').length === 0, 'sin botones para mensaje normal');

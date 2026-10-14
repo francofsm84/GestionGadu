@@ -23,11 +23,11 @@ eq(AI.localIntent('crear obra casa de maría'), { modulo: 'obra', campos: { nomb
 eq(AI.localIntent('crear presupuesto reforma cocina'), { modulo: 'presupuesto', campos: { nombre: 'reforma cocina' } }, 'presupuesto compuesto');
 
 console.log('== 2) Extracción de MONTOS (localIntent) ==');
-eq(AI.localIntent('carga un gasto de nafta de 5000'), { modulo: 'gasto', campos: { monto: 5000, categoria: 'Combustible' } }, 'gasto con categoría (nafta → Combustible)');
+eq(AI.localIntent('carga un gasto de nafta de 5000'), { modulo: 'gasto', campos: { monto: 5000, categoria: 'Combustible', comprobante: '' } }, 'gasto con categoría (nafta → Combustible)');
 eq(AI.localIntent('cargo un ingreso de 10000'), { modulo: 'ingreso', campos: { monto: 10000, concepto: 'Cobro' } }, 'ingreso 10000');
 eq(AI.localIntent('registrá un anticipo de 15000'), { modulo: 'ingreso', campos: { monto: 15000, concepto: 'Adelanto' } }, 'anticipo (concepto Adelanto)');
-eq(AI.localIntent('cárgame un gasto de 5.000'), { modulo: 'gasto', campos: { monto: 5000 } }, 'monto con separador de miles');
-eq(AI.localIntent('gasto de combustible 2.500'), { modulo: 'gasto', campos: { monto: 2500, categoria: 'Combustible' } }, 'monto 2.500 (canónica)');
+eq(AI.localIntent('cárgame un gasto de 5.000'), { modulo: 'gasto', campos: { monto: 5000, comprobante: '' } }, 'monto con separador de miles');
+eq(AI.localIntent('gasto de combustible 2.500'), { modulo: 'gasto', campos: { monto: 2500, categoria: 'Combustible', comprobante: '' } }, 'monto 2.500 (canónica)');
 
 console.log('== 3) Transcripción (buildTranscript) ==');
 eq(AI.buildTranscript([

@@ -132,7 +132,7 @@
   }
 
   function context() {
-    const d = G.store.data || {};
+    const d = (G.store && G.store.data) || {};
     const p = G.plan.profile;
     const plan = G.plan.currentPlan();
     const days = G.plan.trialDaysLeft();
@@ -298,8 +298,8 @@
       '<div class="ai-success-txt"><b>¡Listo! Carga completada</b><br>' + text + '</div></div>';
   }
 
-  let host = null, log = null, input = null, busy = false, builtMode = null, rec = null, listening = false, voiceOn = true, speaking = false;
-  let finalText = '', persistedFinal = '', lastSendAt = 0, silenceTimer = null, shouldListen = false;
+  let host = null, log = null, input = null, busy = false, builtMode = null;
+  let lastSendAt = 0;
   let chatHistory = [];   // últimas interacciones (seguimiento multi-paso en el chat)
   let pendingOp = null;   // operación guiada en curso: { modulo, campos, idx }
   let pendingAdmin = null;   // acción de admin pendiente de confirmación: { uid, patch, label }
@@ -309,7 +309,6 @@
   let ledgerMenu = false;    // submenú "Contabilidad" abierto ([Ingresos] [Gastos])
   let toolsMenu = false;     // submenú "Herramientas" abierto (asignar / cargar / jornada)
   let lastSaved = null;      // último registro creado { coll, id, label } para "Deshacer"
-  let voicePref = null;
   let currentUid = null;  // usuario autenticado dueño de la memoria del agente
   /* Memoria de sesión: última obra/cliente tratado, para que los comandos
      consecutivos se apliquen sin volver a preguntar. */
@@ -325,8 +324,8 @@
   }
   /* Clave de almacenamiento segregada por usuario */
   function prefKey(k) { return k + '_' + (currentUid || 'anon'); }
-  /* Al cambiar de usuario, el agente borra su memoria (historial, foco, wizard,
-     voz) y carga el contexto limpio del usuario entrante. */
+  /* Al cambiar de usuario, el agente borra su memoria (historial, foco, wizard)
+     y carga el contexto limpio del usuario entrante. */
   function syncUser() {
     const uid = getUid();
     if (uid === currentUid) return false;
@@ -334,11 +333,7 @@
     chatHistory = [];
     sessionFocus = null;
     pendingOp = null;
-    finalText = '';
-    persistedFinal = '';
-    try { voicePref = localStorage.getItem(prefKey('gadu_ai_voice')) || null; } catch (e) { voicePref = null; }
     try { if (log) { log.innerHTML = ''; addGreeting(); } } catch (e) {}
-    try { populateVoices(); } catch (e) {}
     return true;
   }
 
@@ -357,13 +352,10 @@
       '<div class="ai-panel" id="aiPanel" hidden>' +
       '<div class="ai-head"><span class="ai-head-logo"><img src="' + AVATAR_SRC + '" alt="" class="ai-avatar"></span>' +
       '<div class="ai-head-txt"><strong>Asistente GADU</strong><span class="muted small" id="aiSub">Te guío paso a paso</span></div>' +
-      '<select class="ai-voice-sel" id="aiVoiceSel" title="Elegir voz" hidden></select>' +
-      '<button class="icon-btn sm" id="aiVoice" title="Silenciar voz">🔊</button>' +
-      '<button class="icon-btn sm" id="aiStop" title="Detener voz">⏹️</button>' +
       '<button class="icon-btn sm" id="aiClose">' + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>' + '</button></div>' +
       '<div class="ai-log" id="aiLog"></div>' +
-      '<div class="ai-foot"><button class="ai-mic" id="aiMic" title="Dictar por voz" aria-label="Dictar por voz">🎙️</button>' +
-      '<input class="input" id="aiInput" placeholder="Preguntame… (o tocá el micrófono y dictá)">' +
+      '<div class="ai-foot">' +
+      '<input class="input" id="aiInput" placeholder="Escribí tu mensaje…">' +
       '<button class="ai-send" id="aiSend" title="Enviar">➤</button></div>' +
       '</div>';
     document.body.appendChild(host);
@@ -421,12 +413,6 @@
     document.getElementById('aiFab').addEventListener('click', toggle);
     document.getElementById('aiClose').addEventListener('click', () => setOpen(false));
     document.getElementById('aiSend').addEventListener('click', send);
-    document.getElementById('aiMic').addEventListener('click', toggleMic);
-    document.getElementById('aiVoice').addEventListener('click', toggleVoice);
-    document.getElementById('aiStop').addEventListener('click', stopVoice);
-    document.getElementById('aiVoiceSel').addEventListener('change', onVoiceChange);
-    populateVoices();
-    if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = populateVoices;
     input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
     addGreeting();
     window.addEventListener('hashchange', refreshGreeting);
@@ -442,39 +428,7 @@
       setTimeout(() => { try { tip.classList.add('show'); } catch (e) {} }, 1200);
       setTimeout(hideTip, 9000);
     }
-
-    /* Desbloqueo de audio en iOS (Safari): el TTS queda mudo hasta el primer
-       gesto del usuario. Un touch/click/keydown "destraba" el sintetizador. */
-    let audioUnlocked = false;
-    const unlockAudio = () => {
-      if (audioUnlocked || !window.speechSynthesis) return;
-      audioUnlocked = true;
-      try { window.speechSynthesis.resume(); } catch (e) {}
-      try {
-        const u = new SpeechSynthesisUtterance(' ');
-        u.volume = 0;
-        u.rate = 10;
-        window.speechSynthesis.speak(u);
-      } catch (e) {}
-    };
-    ['touchstart', 'click', 'keydown'].forEach(ev => {
-      try { window.addEventListener(ev, unlockAudio); } catch (e) {}
-    });
   }
-
-  /* Dictado por voz (Web Speech API) — estilo "pulsar para hablar":
-     el texto se rellena en el input pero NUNCA se envía solo. */
-  function stopRec() {
-    shouldListen = false;   // evita que onend reinicie la escucha
-    if (rec) { try { rec.stop(); } catch (e) {} }
-    clearTimeout(silenceTimer);
-    /* Al cancelar/dejar de escuchar, descartar el interino y dejar solo lo definitivo */
-    try { input.value = finalText || ''; } catch (e) {}
-  }
-
-  /* Escucha CONTINUA: el micrófono permanece abierto hasta que el usuario
-     presione el botón de envío (➤) o el propio micrófono. Sin auto-corte por
-     silencio: las pausas naturales no interrumpen la captura. */
 
   /* Construye la transcripción desde una lista de {isFinal, transcript}.
      Reconstruye DESDE CERO: el interino se SOBRESCRIBE, nunca se concatena. */
@@ -492,67 +446,6 @@
       interim: transcriptInterim,
       combined: (transcriptFinal + ' ' + transcriptInterim).replace(/\s+/g, ' ').trim(),
     };
-  }
-
-  function startRecognition() {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const mic = document.getElementById('aiMic');
-    if (!SR) return;
-    rec = new SR();
-    rec.lang = 'es-ES';
-    rec.interimResults = true;   // muestra en vivo
-    rec.continuous = true;       // no corta en pausas breves
-    rec.onstart = () => { listening = true; mic.classList.add('ai-mic-on'); };
-    rec.onresult = (e) => {
-      const items = [];
-      for (let i = 0; i < e.results.length; i++) items.push({ isFinal: e.results[i].isFinal, transcript: e.results[i][0].transcript });
-      const bt = buildTranscript(items);
-      /* conserva lo transcrito en sesiones previas (auto-reinicio) sin duplicar */
-      finalText = (persistedFinal + (persistedFinal && bt.final ? ' ' : '') + bt.final).trim();
-      input.value = (finalText + (bt.interim ? ' ' + bt.interim : '')).replace(/\s+/g, ' ').trim();
-    };
-    rec.onerror = (e) => {
-      if (e.error === 'no-speech' || e.error === 'aborted') { /* ignorar: es normal */ }
-      else if (G.ui && G.ui.toast) G.ui.toast('Error de dictado: ' + (e.error || 'desconocido'), 'error');
-      stopRec();
-    };
-    rec.onend = () => {
-      clearTimeout(silenceTimer);
-      if (shouldListen) {
-        /* El navegador cortó la sesión (continuous no siempre funciona en móvil):
-           reiniciar la escucha conservando lo ya transcrito. */
-        persistedFinal = finalText;
-        listening = false;
-        mic.classList.remove('ai-mic-on');
-        setTimeout(() => { if (shouldListen) startRecognition(); }, 150);
-      } else {
-        listening = false;
-        mic.classList.remove('ai-mic-on');
-        /* NO se envía automáticamente: el envío es manual con el botón ➤ */
-      }
-    };
-    try { rec.start(); } catch (e) { listening = false; mic.classList.remove('ai-mic-on'); }
-  }
-
-  function toggleMic() {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const mic = document.getElementById('aiMic');
-    if (!SR) {
-      /* Degradación elegante (Safari/iOS no soporta SpeechRecognition):
-         aviso claro en el chat + toast, sin errores de consola. */
-      if (G.ui && G.ui.toast) G.ui.toast('Tu navegador no soporta dictado por voz. Escribí tu mensaje y lo cargamos igual.', 'error');
-      try {
-        const pend = bubble('🎙️ Este navegador (Safari/iOS) no permite dictar por voz. <b>Escribí tu mensaje acá abajo</b>: el asistente responde igual de bien.', 'bot');
-        appendLog(pend);
-        scrollToEnd();
-      } catch (e) {}
-      return;
-    }
-    if (listening) { stopRec(); return; }   // 2ª pulsación = dejar de escuchar (sin enviar)
-    shouldListen = true;
-    finalText = '';
-    persistedFinal = '';
-    startRecognition();
   }
 
   /* Deduplicación de emergencia: elimina palabras consecutivas repetidas y
@@ -587,135 +480,9 @@
     return msg;
   }
 
-  /* Texto a voz (Text-to-Speech) */
+  /* Texto a voz (Text-to-Speech) — MÓDULO DE VOZ ELIMINADO:
+     la interacción del asistente es 100% texto + botones. */
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-  /* Solo voces de español LATINOAMERICANO (excluye España: es-ES) */
-  function spanishVoices() {
-    try {
-      const vs = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
-      const latam = /^es[-_](ar|419|la|mx|us|cl|co|pe|ve|ec|cr|py|uy|bo|ni|pa|do|hn|sv|gt|pr|cu)$/i;
-      return vs.filter(v => latam.test(v.lang));
-    } catch (e) { return []; }
-  }
-  /* Ranking latino: Argentina primero, luego Latam neutro/México, luego el resto */
-  function voiceRank(v) {
-    const l = (v.lang || '').toLowerCase();
-    if (/es[-_]ar/.test(l)) return 0;          // rioplatense (Argentina)
-    if (/es[-_](419|la)/.test(l)) return 1;    // latino neutro
-    if (/es[-_]mx/.test(l)) return 2;          // México
-    if (/es[-_]us/.test(l)) return 3;
-    return 4;                                  // resto de LATAM (cl, co, pe…)
-  }
-  /* Género inferido del nombre de la voz (listas ampliadas: Android/Google + iOS) */
-  function voiceGender(v) {
-    const n = (v.name || '').toLowerCase();
-    if (/(helena|laura|sabina|paulina|monica|mónica|soledad|esperanza|maria|marta|carmen|luciana|valentina|sara|camila|rosa|ana|gabriela|isabela|ximena|veronica|andrea|mariana|cecilia|paloma|penelope|frida|josefina|sofia|sofía|marisol|fernanda|milena|florencia|female|mujer|femenina)/.test(n)) return 'Femenina';
-    if (/(pablo|jorge|diego|carlos|juan|miguel|andres|raul|javier|pedro|gonzalo|alonso|enrique|rodrigo|leonardo|matias|emiliano|sergio|ramon|guillermo|bruno|facundo|felipe|martin|martín|ricardo|male|hombre|masculina)/.test(n)) return 'Masculina';
-    return '';
-  }
-  /* Etiqueta descriptiva: "Español latino · Femenina — Argentina · Sabina" */
-  function voiceLabel(v) {
-    const g = voiceGender(v);
-    const l = (v.lang || '').toLowerCase();
-    const region = /es[-_]ar/.test(l) ? 'Argentina'
-      : /es[-_]mx/.test(l) ? 'México'
-      : /es[-_]us/.test(l) ? 'EE.UU.'
-      : /es[-_]co/.test(l) ? 'Colombia'
-      : /es[-_]cl/.test(l) ? 'Chile'
-      : /es[-_]pe/.test(l) ? 'Perú'
-      : /es[-_](419|la)/.test(l) ? 'Latino neutro' : '';
-    const short = (v.name || '')
-      .replace(/Microsoft |Google |Online|Natural|Spanish|Español|español/gi, '')
-      .replace(/\s*\([^)]*\)/g, '')
-      .replace(/\s+/g, ' ').trim();
-    let s = 'Español latino' + (g ? ' · ' + g : '');
-    if (region || short) s += ' — ' + (region || '') + (region && short ? ' · ' : '') + short;
-    return s;
-  }
-  function populateVoices() {
-    const sel = document.getElementById('aiVoiceSel');
-    if (!sel) return;
-    const vs = spanishVoices();
-    if (!vs.length) { sel.hidden = true; return; }
-    sel.hidden = false;
-    const rank = (a, b) => voiceRank(a) - voiceRank(b) || (a.name || '').localeCompare(b.name || '');
-    const fem = vs.filter(v => voiceGender(v) === 'Femenina').sort(rank);
-    const masc = vs.filter(v => voiceGender(v) === 'Masculina').sort(rank);
-    const otros = vs.filter(v => !voiceGender(v)).sort(rank);
-    const opt = v => '<option value="' + esc(v.name) + '"' + (v.name === voicePref ? ' selected' : '') + '>' + esc(voiceLabel(v)) + '</option>';
-    sel.innerHTML =
-      (fem.length ? '<optgroup label="👩 Femeninas">' + fem.map(opt).join('') + '</optgroup>' : '') +
-      (masc.length ? '<optgroup label="👨 Masculinas">' + masc.map(opt).join('') + '</optgroup>' : '') +
-      (otros.length ? '<optgroup label="Otras voces latinas">' + otros.map(opt).join('') + '</optgroup>' : '');
-  }
-  function onVoiceChange(e) {
-    voicePref = e.target.value;
-    try { localStorage.setItem(prefKey('gadu_ai_voice'), voicePref); } catch (er) {}
-    try { speak('Hola, soy tu asistente GADU. Esta es mi voz.'); } catch (er) {}
-  }
-
-  function updateVoiceBtn() {
-    const b = document.getElementById('aiVoice');
-    if (b) { b.textContent = voiceOn ? '🔊' : '🔇'; b.title = voiceOn ? 'Silenciar voz' : 'Activar voz'; }
-  }
-  function updateStopBtn() {
-    const b = document.getElementById('aiStop');
-    if (b) {
-      /* Botón siempre visible: cancela de inmediato cualquier reproducción */
-      b.style.opacity = speaking ? '1' : '.45';
-      b.title = speaking ? 'Detener voz' : 'No hay audio reproduciéndose';
-    }
-  }
-
-  function speak(text) {
-    if (!voiceOn || !text) return;
-    try {
-      if (!window.speechSynthesis) return;
-      stopRec();   // IMPORTANTE: detener el micrófono para no "escucharse a sí mismo"
-      window.speechSynthesis.cancel();
-      try { window.speechSynthesis.resume(); } catch (er) {}   // evita quedar en pausa (bug de Chrome)
-      const clean = String(text)
-        .replace(/\[\[accion:[^\]]+\]\]/g, '')
-        .replace(/\*\*(.+?)\*\*/g, '$1')
-        .replace(/<[^>]+>/g, '')
-        .replace(/[#*_`]/g, '')
-        .trim();
-      if (!clean) return;
-      const u = new SpeechSynthesisUtterance(clean);
-      u.lang = 'es-419';   // español latinoamericano
-      u.rate = 1.0;
-      u.pitch = 1.0;
-      u.volume = 1;
-      const voices = spanishVoices().slice().sort((a, b) => voiceRank(a) - voiceRank(b));
-      let es = null;
-      if (voicePref) es = voices.find(v => v.name === voicePref);
-      if (!es) es = voices[0] || null;   // mejor voz latina disponible
-      if (es) u.voice = es;
-      u.onstart = () => { speaking = true; updateStopBtn(); };
-      u.onend = () => { speaking = false; updateStopBtn(); };
-      u.onerror = () => { speaking = false; updateStopBtn(); };
-      /* Delay breve: deja asentar el cancel() y evita audios mudos/salteados */
-      setTimeout(() => {
-        try { window.speechSynthesis.speak(u); } catch (er) { speaking = false; updateStopBtn(); }
-      }, 80);
-    } catch (e) { speaking = false; updateStopBtn(); }
-  }
-
-  function stopVoice() {
-    try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}
-    stopRec();
-    speaking = false;
-    updateStopBtn();
-  }
-
-  function toggleVoice() {
-    try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}
-    stopRec();   // al silenciar, también detenemos el micrófono
-    voiceOn = !voiceOn;
-    speaking = false;
-    updateVoiceBtn();
-    updateStopBtn();
-  }
 
   /* Persistencia real: inserta en la capa de datos local y sincroniza a Supabase */
   function saveViaStore(mod, c) {
@@ -949,11 +716,9 @@
     if (res.synced) {
       lastSaved = (res.coll && res.id) ? { coll: res.coll, id: res.id, label: res.label } : null;
       pend.innerHTML = summaryCardHtml(res);
-      speak('¡Listo! Guardé ' + res.label);
       if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
     } else {
       pend.innerHTML = '⚠️ Guardé ' + res.label + ' en tu dispositivo, pero la nube no respondió y todavía no se sincronizó. Se va a reintentar solo cuando vuelva la conexión.';
-      speak('Guardé ' + res.label + ' en el dispositivo, pero sin conexión con la nube.');
       if (G.ui && G.ui.toast) G.ui.toast('Guardado local (sin conexión): ' + res.label, 'warning');
     }
     return true;
@@ -964,7 +729,6 @@
     const tip = document.getElementById('aiFabTip');
     if (tip) { try { tip.classList.remove('show'); } catch (e) {} }
     if (v) { syncUser(); refreshGreeting(); input.focus(); }
-    else { stopVoice(); }   // cierre limpio: cancela TTS y libera el micrófono
   }
   function toggle() { setOpen(document.getElementById('aiPanel').hidden); }
 
@@ -1121,8 +885,8 @@
       { k: 'new-obra', e: '🏗️', l: 'Nueva obra' },
     ];
     const bot = bubble(
-      '¡Hola! 👋 Bienvenido a GADU. No te preocupes por escribir, soy tu ayudante de obra.<br>' +
-      'Tocá el micrófono 🎙️ y decime qué querés cargar, por ejemplo: <b>"Quiero cargar un empleado"</b>.<br>' +
+      '¡Hola! 👋 Bienvenido a GADU. Soy tu ayudante de obra.<br>' +
+      'Tocá un botón o escribime qué querés cargar, por ejemplo: <b>"Quiero cargar un empleado"</b>.<br>' +
       '<div class="ai-actions">' + pills.map(p => '<button class="btn btn-soft btn-sm" data-act="' + p.k + '">' + p.e + ' ' + p.l + '</button>').join('') + '</div>',
       'bot');
     appendLog(bot);
@@ -1140,9 +904,6 @@
         log.innerHTML = '';
         if (admin) { addGreeting(); } else { addFirstWelcome(); }
         setOpen(true);
-        if (!admin) {
-          speak('¡Hola! Bienvenido a GADU. No te preocupes por escribir, soy tu ayudante de obra. Tocá el micrófono y decime qué querés cargar, por ejemplo: Quiero cargar un empleado.');
-        }
       } catch (e) {}
     }, 900);
   }
@@ -1173,7 +934,7 @@
      Reúne coincidencias por nombre completo Y por palabras y elige
      siempre el nombre más largo/específico (evita "Amoladora" vs "Amoladora angular"). */
   function findAssetMention(t) {
-    const assets = ((G.store.data && G.store.data.assets) || []).filter(a => a.status !== 'dado de baja' && a.name);
+    const assets = (((G.store && G.store.data) || {}).assets || []).filter(a => a.status !== 'dado de baja' && a.name);
     if (!assets.length) return null;
     const ft = flatText(t);
     const excl = /^(obra|hoy|ayer|mañana|depósito|deposito|mantenimiento|taller|asignar|mover|dejé|deje|mandar|manda|mandá|ubicar|destinar|devolver|guardar|guardé|herramienta|máquina|maquina|equipo)$/;
@@ -1213,7 +974,7 @@
   /* Resuelve una mención textual a un empleado activo (nombre completo).
      Devuelve el nombre ORIGINAL (no el normalizado) para mostrar en chips. */
   function findEmployeeMention(t) {
-    const emps = ((G.store.data && G.store.data.employees) || []).filter(e => e.active !== false && e.firstName);
+    const emps = (((G.store && G.store.data) || {}).employees || []).filter(e => e.active !== false && e.firstName);
     if (!emps.length) return null;
     const ft = flatText(t);
     const cand = [];
@@ -1230,7 +991,7 @@
   /* Resuelve una mención textual a una obra existente (nombre o cliente).
      Blindado: ignora obras sin nombre para nunca devolver "undefined". */
   function findWorkMention(t) {
-    const d = G.store.data || {};
+    const d = (G.store && G.store.data) || {};
     const works = (d.works || []).filter(w => w && workLabel(w));
     if (!works.length) return null;
     const ft = flatText(t);
@@ -1385,7 +1146,7 @@
 
   /* Busca en empleados, herramientas, contactos y obras del store */
   function searchStore(q) {
-    const d = G.store.data || {};
+    const d = (G.store && G.store.data) || {};
     const out = [];
     const norm = s => String(s || '').toLowerCase();
     const has = s => norm(s).includes(q);
@@ -1462,7 +1223,6 @@
       wrap.appendChild(b);
     });
     pend.appendChild(wrap);
-    speak('Encontré ' + results.length + ' resultado' + (results.length > 1 ? 's' : '') + '.');
     busy = false;
     scrollToEnd();
   }
@@ -1546,7 +1306,6 @@
       await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent(a.uid), a.patch);
       try { if (G.plan && G.plan.log) G.plan.log('coo_' + a.label, a.uid); } catch (e) {}
       wizardBubble(successCard(a.label));
-      speak('¡Listo! ' + a.label);
       if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + a.label, 'success');
     } catch (e) {
       wizardBubble('⚠️ No pude aplicar el cambio: ' + esc(String((e && e.message) || e)));
@@ -1611,7 +1370,6 @@
       });
       try { if (G.plan && G.plan.log) G.plan.log('coo_invitacion', c.email + ' · ' + (plan ? plan.nombre : 'Free') + ' · prueba ' + c.periodo + 'd'); } catch (e) {}
       wizardBubble(successCard('invitación para ' + c.email + ' (' + (plan ? plan.nombre : 'Free') + ', prueba ' + (c.periodo || '—') + ' días)'));
-      speak('¡Listo! Creé la invitación.');
       if (G.ui && G.ui.toast) G.ui.toast('Invitación creada: ' + c.email, 'success');
     } catch (e) {
       wizardBubble('⚠️ No pude crear la invitación: ' + esc(String((e && e.message) || e)));
@@ -1749,7 +1507,7 @@
   }
   /* Empleados frecuentes primero (más actividad en los últimos 30 días) */
   function frequentEmployees(emps) {
-    const d = G.store.data || {};
+    const d = (G.store && G.store.data) || {};
     const att = d.attendance || [];
     const hace30 = Date.now() - 30 * 86400000;
     const counts = {};
@@ -1762,7 +1520,7 @@
   /* Obra sugerida (Smart Default): foco de sesión o la de actividad más reciente.
      Tolera todas las variantes del nombre: jamás devuelve "undefined". */
   function suggestedWork() {
-    const d = G.store.data || {};
+    const d = (G.store && G.store.data) || {};
     const activas = (d.works || []).filter(w => w.status === 'activa' && workLabel(w));
     if (!activas.length) return null;
     if (sessionFocus && sessionFocus.obra) {
@@ -1782,7 +1540,7 @@
   /* Etiquetas de los chips de obras: sugerida PRIMERA, todas con texto válido
      (nunca vacías → jamás botones transparentes ni "undefined") */
   function workChipLabels() {
-    const obras = ((G.store.data && G.store.data.works) || []).filter(w => w.status === 'activa' && workLabel(w));
+    const obras = (((G.store && G.store.data) || {}).works || []).filter(w => w.status === 'activa' && workLabel(w));
     const labels = obras.map(w => workLabel(w)).filter(l => l);
     const sug = suggestedWork();
     return sug ? [sug].concat(labels.filter(l => l !== sug)) : labels;
@@ -1815,7 +1573,7 @@
       buttons = labels;
       if (sug) hint = '💡 Obra sugerida: <b>' + esc(sug) + '</b>';
     } else if (s.empsList) {
-      const emps = ((G.store.data && G.store.data.employees) || []).filter(e => e.active !== false);
+      const emps = (((G.store && G.store.data) || {}).employees || []).filter(e => e.active !== false);
       if (!emps.length) {
         const pend = wizardBubble('⚠️ Todavía no tenés empleados cargados. Primero creá uno: decime <b>"crear un empleado"</b> y empezamos por ahí.');
         const wrap = document.createElement('div');
@@ -1836,7 +1594,7 @@
       buttons = [...new Set(cats)];
     } else if (s.assetsList) {
       /* Herramientas REALES del store (excluye las dadas de baja) */
-      const assets = ((G.store.data && G.store.data.assets) || []).filter(a => a.status !== 'dado de baja');
+      const assets = (((G.store && G.store.data) || {}).assets || []).filter(a => a.status !== 'dado de baja');
       if (!assets.length) {
         const pend = wizardBubble('⚠️ Todavía no tenés herramientas cargadas. Decime <b>"cargar una herramienta"</b> y empezamos por ahí.');
         const wrap = document.createElement('div');
@@ -1851,7 +1609,7 @@
       /* Los botones llevan el sufijo como texto, pero el valor capturado es el nombre */
     } else if (s.assignList) {
       /* Destinos: depósito, mantenimiento y TODAS las obras activas con nombre */
-      const obras = ((G.store.data && G.store.data.works) || []).filter(w => w.status === 'activa' && workLabel(w));
+      const obras = (((G.store && G.store.data) || {}).works || []).filter(w => w.status === 'activa' && workLabel(w));
       buttons = ['📦 En depósito', '🔧 En mantenimiento'].concat(obras.map(w => workLabel(w)));
     }
 
@@ -2008,11 +1766,9 @@
       if (res.synced) {
         lastSaved = (res.coll && res.id) ? { coll: res.coll, id: res.id, label: res.label } : null;
         wizardBubble(summaryCardHtml(res));
-        speak('¡Listo! Guardé ' + res.label);
         if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
       } else {
         wizardBubble('⚠️ Guardé ' + res.label + ' en tu dispositivo, pero la nube no respondió y todavía no se sincronizó. Se reintentará solo cuando vuelva la conexión.');
-        speak('Guardé ' + res.label + ' en el dispositivo, pero sin conexión con la nube.');
       }
       rememberTurn('asistente', 'guardado ' + res.label);
     } else {
@@ -2090,13 +1846,11 @@
     }
     syncUser();   // aislamiento por usuario: si cambió la cuenta, memoria limpia
     /* Descartar el interino: enviar solo el texto DEFINITIVO (o lo tipeado manual) */
-    const msg = prepareMessage(finalText || input.value);
+    const msg = prepareMessage(input.value);
     if (!msg || busy) return;
     lastSendAt = Date.now();
-    if (listening) stopRec();   // detener el micrófono al enviar
     busy = true;
     input.value = '';
-    finalText = '';
     appendLog(bubble(renderText(msg), 'user'));
     scrollToEnd();
 
@@ -2284,7 +2038,6 @@
         pend.innerHTML = '🔍 Busqué "<b>' + esc(sq) + '</b>" en herramientas, obras, empleados, contactos y movimientos, y no encontré coincidencias.<br>Probá con otro nombre o pedime "<b>ver herramientas</b>" para revisar lo cargado.';
         rememberTurn('usuario', 'buscar ' + sq);
         rememberTurn('asistente', 'no encontré ' + sq);
-        speak('No encontré nada con ese nombre.');
         busy = false;
         scrollToEnd();
       }
@@ -2342,7 +2095,6 @@
         const res = data.action ? await execFormAction(data.action) : null;
         if (!renderSaveResult(pend, res)) {
           if (!streamedText) pend.innerHTML = renderText(replyText);
-          speak(replyText);
         }
         const acts = parseActions(replyText);
         if (acts.length) {
@@ -2397,5 +2149,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, spanishVoices, voiceRank, voiceGender, voiceLabel, getUid, syncUser, voicePref: () => voicePref, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, findEmployeeMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, getUid, syncUser, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, findEmployeeMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
 })(typeof window !== 'undefined' ? window : globalThis);
