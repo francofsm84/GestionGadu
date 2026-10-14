@@ -9,16 +9,18 @@
 //
 // Variables de entorno (secrets de Supabase — NO commitear en el repo):
 //   SUPABASE_URL · SUPABASE_ANON_KEY · SUPABASE_SERVICE_ROLE_KEY
-//   WHATSAPP_TOKEN      → token de acceso de Meta Cloud API
-//   WHATSAPP_PHONE_ID   → Phone Number ID de Meta (del bot de prueba)
-//   WHATSAPP_WABA_ID    → WhatsApp Business Account ID (referencia)
+//   WHATSAPP_TOKEN        → token de acceso de Meta Cloud API
+//   WHATSAPP_PHONE_ID     → Phone Number ID de Meta (del bot de prueba)
+//   WHATSAPP_WABA_ID      → WhatsApp Business Account ID (referencia)
+//   WHATSAPP_VERIFY_TOKEN → token de verificación del webhook (GET hub.verify_token)
 //   Número de prueba del bot: 15556643689 (+1 555 664-3689)
 //
 // Cómo cargarlos (NO en archivos versionados):
 //   supabase secrets set \
 //     WHATSAPP_TOKEN="<TOKEN>" \
 //     WHATSAPP_PHONE_ID="1360123317189034" \
-//     WHATSAPP_WABA_ID="4685722798416623"
+//     WHATSAPP_WABA_ID="4685722798416623" \
+//     WHATSAPP_VERIFY_TOKEN="<CADENA_ALEATORIA_PROPIA>"
 //
 // Despliegue:
 //   supabase functions deploy whatsapp-webhook
@@ -72,6 +74,29 @@ async function sendWhatsApp(to: string, text: string) {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  /* ===== Verificación del webhook de Meta (GET) =====
+     Meta exige responder con `hub.challenge` cuando `hub.verify_token`
+     coincide con nuestro secreto (WHATSAPP_VERIFY_TOKEN). SIN este
+     handshake Meta NO habilita el webhook y NUNCA entrega mensajes:
+     esta es la causa más común de "no vincula ni responde". */
+  if (req.method === "GET") {
+    try {
+      const url = new URL(req.url);
+      const mode = url.searchParams.get("hub.mode");
+      const token = url.searchParams.get("hub.verify_token");
+      const challenge = url.searchParams.get("hub.challenge");
+      const expected = Deno.env.get("WHATSAPP_VERIFY_TOKEN") || "";
+      if (mode === "subscribe" && expected && token === expected && challenge) {
+        return new Response(challenge, { status: 200 });
+      }
+      console.warn("[whatsapp-webhook] verificación GET fallida:", { mode, token, expected });
+      return new Response("verification failed", { status: 403 });
+    } catch (e) {
+      return new Response("verification failed", { status: 403 });
+    }
+  }
+
   try {
     const payload = await req.json().catch(() => ({}));
     const inc = parseIncoming(payload);
