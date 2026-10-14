@@ -253,16 +253,8 @@
         '<button class="btn btn-soft" id="bExport">' + UI.icon('download') + 'Exportar respaldo JSON</button>' +
         '<button class="btn btn-soft" id="bImport">' + UI.icon('upload') + 'Importar respaldo</button>' +
         '<input type="file" id="fileImport" accept="application/json,.json" hidden>' +
-        '<button class="btn btn-danger" id="bReset">' + UI.icon('trash') + 'Restaurar datos de ejemplo</button>' +
         '</div>' +
-        '<p class="form-hint" style="margin-top:14px">Recomendación: exportá un respaldo antes de importar o restablecer. El respaldo incluye obras, presupuestos, ingresos, gastos, contactos, empleados, herramientas y liquidaciones.</p>' +
-        '<div class="card-inset">' +
-        '<h4>Empezar con datos reales</h4>' +
-        '<p class="form-hint">Borra los datos de demostración y deja <strong>un ejemplo por módulo</strong> (obra, cliente, proveedor, empleado, herramienta, etc.) con montos en $0, para que cargues tus datos reales encima editando o reemplazando cada ejemplo.</p>' +
-        '<div class="backup-options" style="margin-top:8px">' +
-        '<button class="btn btn-soft-success" id="bStartReal">' + UI.icon('check-circle') + 'Dejar 1 ejemplo por módulo</button>' +
-        '<button class="btn btn-danger" id="bStartEmpty">' + UI.icon('trash') + 'Vaciar por completo (sin ejemplos)</button>' +
-        '</div></div>' +
+        '<p class="form-hint" style="margin-top:14px">Recomendación: exportá un respaldo antes de importar. El respaldo incluye obras, presupuestos, ingresos, gastos, contactos, empleados, herramientas y liquidaciones.</p>' +
         '<div class="card-inset">' +
         '<h4>👤 Mi cuenta</h4>' +
         '<p class="form-hint">' + UI.escapeHtml((sess && sess.email) || '') + ' · ' + UI.chip(pi.label, pi.tone, piIcon(pi)) + '</p>' +
@@ -307,46 +299,6 @@
         }
       };
       reader.readAsText(f);
-    });
-    m.panel.querySelector('#bReset').addEventListener('click', async () => {
-      const ok = await UI.confirm({
-        title: 'Restaurar datos de ejemplo',
-        message: 'Se reemplazará toda la información actual por los datos de demostración. ¿Continuar?',
-        okLabel: 'Restaurar',
-      });
-      if (ok) {
-        S.reset();
-        UI.toast('Datos de ejemplo restaurados');
-        m.close();
-        renderNow();
-      }
-    });
-    m.panel.querySelector('#bStartReal').addEventListener('click', async () => {
-      const ok = await UI.confirm({
-        title: 'Empezar con datos reales',
-        message: 'Se eliminarán los datos actuales y quedará <strong>un ejemplo por módulo</strong> (obra, cliente, proveedor, empleado, herramienta, liquidación, etc.) con montos en $0 para que cargues tus datos reales. Exportá un respaldo antes si querés conservar lo actual.',
-        okLabel: 'Sí, empezar de cero',
-      });
-      if (ok) {
-        S.startReal();
-        UI.toast('Listo: quedó un ejemplo en cada módulo');
-        m.close();
-        renderNow();
-      }
-    });
-    m.panel.querySelector('#bStartEmpty').addEventListener('click', async () => {
-      const ok = await UI.confirm({
-        title: 'Vaciar por completo',
-        message: 'Se vaciará <strong>todo</strong>: obras, presupuestos, ingresos, gastos, contactos, empleados, herramientas y liquidaciones. La app quedará sin ningún dato. ¿Continuar?',
-        okLabel: 'Vaciar todo',
-        tone: 'danger',
-      });
-      if (ok) {
-        S.startEmpty();
-        UI.toast('Datos vaciados');
-        m.close();
-        renderNow();
-      }
     });
     /* ---------- Nube (Supabase) ---------- */
     const setStatus = (msg, ok) => {
@@ -896,9 +848,61 @@
       '<div class="dash-skel"></div>';
   }
 
+  /* ---------- Indicador de sincronización (Header) ---------- */
+  /* 3 estados: 'synced' (check verde) · 'syncing' (girando) · 'offline' (triángulo) */
+  function setSyncState(state) {
+    const el = document.getElementById('syncSpinner');
+    if (!el) return;
+    el.hidden = false;
+    el.className = 'sync-indicator';
+    if (state === 'syncing') {
+      el.classList.add('sync-syncing');
+      el.innerHTML = '';
+      el.title = 'Guardando…';
+    } else if (state === 'offline') {
+      el.classList.add('sync-offline');
+      el.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l10 18H2L12 3z"/><path d="M12 10v4"/><path d="M12 17.5h.01"/></svg>';
+      el.title = 'Sin conexión';
+    } else {
+      el.classList.add('sync-synced');
+      el.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>';
+      el.title = 'Sincronizado';
+    }
+  }
+  let _syncIndicatorReady = false;
+  function initSyncIndicator() {
+    if (_syncIndicatorReady) return;
+    _syncIndicatorReady = true;
+    try { setSyncState((typeof navigator !== 'undefined' && navigator.onLine === false) ? 'offline' : 'synced'); } catch (e) {}
+    try {
+      window.addEventListener('online', () => setSyncState('synced'));
+      window.addEventListener('offline', () => setSyncState('offline'));
+    } catch (e) {}
+    /* Observa push/pull para reflejar el estado en tiempo real */
+    try {
+      if (G.sync && typeof G.sync.push === 'function') {
+        const origPush = G.sync.push;
+        G.sync.push = async function () {
+          setSyncState('syncing');
+          try { const r = await origPush.apply(G.sync, arguments); setSyncState('synced'); return r; }
+          catch (e) { setSyncState('offline'); throw e; }
+        };
+      }
+      if (G.sync && typeof G.sync.pull === 'function') {
+        const origPull = G.sync.pull;
+        G.sync.pull = async function () {
+          setSyncState('syncing');
+          try { const r = await origPull.apply(G.sync, arguments); setSyncState('synced'); return r; }
+          catch (e) { setSyncState('offline'); throw e; }
+        };
+      }
+    } catch (e) {}
+  }
+
   async function startApp() {
     const sess = G.auth.getSession();
     if (!sess) { renderLogin('login'); return; }
+    initSyncIndicator();
     S.attachUser(sess.userId);
     S.load();
     applyTheme(S.data.settings.theme || 'dark');
@@ -963,9 +967,9 @@
       bu.addEventListener('click', openBackup);
     }
 
-    /* Datos: sincronización automática e invisible desde la nube */
-    const spin = document.getElementById('syncSpinner');
-    if (spin) spin.hidden = false;
+    /* Datos: sincronización automática e invisible desde la nube.
+       El indicador del encabezado refleja el estado en tiempo real. */
+    setSyncState('syncing');
     try {
       const remote = await G.sync.pull();
       const lastSync = S.data.settings.lastCloudSync || '';
@@ -990,8 +994,8 @@
           S.save();
         } catch (e) {}
       }
-    } catch (e) { /* sin conexión: la app sigue en modo local */ }
-    finally { if (spin) spin.hidden = true; }
+      setSyncState('synced');
+    } catch (e) { /* sin conexión: la app sigue en modo local */ setSyncState('offline'); }
 
     /* Supabase Realtime: cambios de app_data desde OTRO dispositivo (sync instantánea) */
     try {

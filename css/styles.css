@@ -227,7 +227,11 @@ body.sb-collapsed .main { margin-left: var(--sidebar-w-min); }
 .topbar-title { flex: 1; min-width: 0; }
 .topbar-title h1 { font-size: 17px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-title p { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sync-indicator { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; flex: none; }
+.sync-indicator { width: 16px; height: 16px; flex: none; display: grid; place-items: center; }
+.sync-indicator svg { display: block; }
+.sync-synced { color: var(--success); }
+.sync-syncing { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; }
+.sync-offline { color: var(--warning, #f59e0b); }
 /* Topbar móvil: trunca las insignias largas (plan/usuario) para no desbordar
    y deja los botones fijos del extremo (+ y tema) siempre visibles */
 .topbar .chip {
