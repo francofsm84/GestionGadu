@@ -168,7 +168,13 @@
     if (emps.length) {
       s += ' Empleados: ' + emps.slice(0, 12).map(e => {
         const full = ((e.firstName || '') + ' ' + (e.lastName || '')).trim();
-        return e.hourlyRate ? full + ' ($' + e.hourlyRate + '/hora)' : full;
+        let extra = e.hourlyRate ? ' ($' + e.hourlyRate + '/hora)' : '';
+        try {
+          const st = G.store.employeeStats(e.id);
+          if (st.hoursTotal) extra += ' · ' + st.hoursTotal + ' horas trabajadas';
+          if (st.advances) extra += ' · adelantos $' + st.advances;
+        } catch (e2) {}
+        return full + extra;
       }).join(', ') + '.';
     }
 
@@ -1161,6 +1167,55 @@
     return { modulo: kind, campos };
   }
 
+  /* Consulta de sueldo/saldo de un empleado → devuelve el nombre detectado */
+  function salaryIntent(text) {
+    const t = flatText(text);
+    const pide = /(cu[aá]nto|c[uó]mo|cu[aá]l|qu[eé])\b.*\b(cobrar|sueldo|saldo|liquidar|liquidaci[oó]n|adelantos?|debe)/.test(t) ||
+      /\b(saldo|sueldo|liquidaci[oó]n|por cobrar|cobrar)\b.*\b(de|del|a)\b/.test(t);
+    if (!pide) return null;
+    return findEmployeeMention(text);
+  }
+  /* Cálculo directo: horas trabajadas × tarifa − pagos (incluye adelantos) */
+  function employeeSalaryInfo(empName) {
+    try {
+      const emps = ((G.store && G.store.data) || {}).employees || [];
+      const emp = emps.find(e => flatText(((e.firstName || '') + ' ' + (e.lastName || '')).trim()) === flatText(empName));
+      if (!emp) return null;
+      const st = G.store.employeeStats(emp.id);
+      const rate = Number(emp.hourlyRate) || 0;
+      const devengado = (st.hoursTotal || 0) * rate;
+      const neto = devengado - st.paidTotal;
+      return {
+        nombre: G.store.employeeName(emp),
+        dias: st.daysWorked, horas: st.hoursTotal, tarifa: rate,
+        devengado, sueldos: st.salary, adelantos: st.advances, pagado: st.paidTotal, neto,
+      };
+    } catch (e) { return null; }
+  }
+  /* Responde en el chat con el desglose y el neto exacto */
+  function handleSalaryAnswer(empName, pend) {
+    const info = employeeSalaryInfo(empName);
+    if (!info) {
+      pend.innerHTML = 'No encontré a un empleado llamado "<b>' + esc(empName) + '</b>". Fijate en <b>Recursos Humanos → Empleados</b> cómo está cargado.';
+      busy = false;
+      scrollToEnd();
+      return;
+    }
+    const fmt = (G.ui && G.ui.fmtMoney) ? G.ui.fmtMoney : (v => '$' + v);
+    pend.innerHTML =
+      '💰 <b>' + esc(info.nombre) + '</b><br>' +
+      '• ' + info.dias + ' día' + (info.dias !== 1 ? 's' : '') + ' · <b>' + info.horas + ' horas</b> trabajadas' + (info.tarifa ? ' × ' + fmt(info.tarifa) + ' la hora' : '') + '<br>' +
+      '• Devengado: <b>' + fmt(info.devengado) + '</b><br>' +
+      '• Sueldos pagados: ' + fmt(info.sueldos) + ' · Adelantos: ' + fmt(info.adelantos) + '<br>' +
+      (info.neto >= 0
+        ? '✅ Le queda por cobrar: <b>' + fmt(info.neto) + '</b>'
+        : '⚠️ Ya cobró <b>' + fmt(-info.neto) + '</b> por encima de lo devengado (se descuenta de próximas liquidaciones)');
+    rememberTurn('usuario', 'saldo de ' + empName);
+    rememberTurn('asistente', 'saldo de ' + info.nombre + ': ' + info.neto);
+    busy = false;
+    scrollToEnd();
+  }
+
   /* Búsqueda inteligente: "buscame a X" / "¿dónde está X?" → consulta el store */
   function searchIntent(text) {
     const t = String(text || '').toLowerCase();
@@ -2070,6 +2125,14 @@
       }
       return;
     }
+    /* Consulta de sueldo/saldo de un empleado: "¿cuánto le queda por cobrar
+       a Luis?" → cálculo DIRECTO del sistema (horas × tarifa − pagos/adelantos),
+       sin derivar a pantallas secundarias. */
+    const salEmp = salaryIntent(msg);
+    if (salEmp) {
+      handleSalaryAnswer(salEmp, pend);
+      return;
+    }
     /* ===== 2) COO Virtual: comandos del Super Admin (SOLO con rol admin) ===== */
     if (esSuperAdmin()) {
       const adm = adminIntent(msg);
@@ -2176,5 +2239,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, getUid, syncUser, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, gotoHref, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, findEmployeeMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, salaryIntent, employeeSalaryInfo, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, getUid, syncUser, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, gotoHref, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, findEmployeeMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
 })(typeof window !== 'undefined' ? window : globalThis);

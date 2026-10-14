@@ -255,6 +255,21 @@ okk(AI.gotoHref('budgets', 'b1') === '#/presupuestos', 'presupuesto → Presupue
 okk(AI.gotoHref('contacts', 'c1') === '#/directorio', 'contacto → Directorio');
 okk(AI.gotoHref('desconocido', 'x') === null, 'colección desconocida → sin ruta');
 
+console.log('== 18) Sueldo/saldo de empleado: cálculo directo ==');
+const eSal = S.add('employees', { firstName: 'Luis', lastName: 'Álamo', phone: 'x', paymentData: '', hourlyRate: 2000, active: true, notes: '', photo: null, createdAt: S.todayISO() });
+S.addAttendance({ employeeId: eSal.id, date: S.daysAgo(3), status: 'presente', hours: [{ workId: obra.id, hours: 8 }], notes: '' });
+S.addAttendance({ employeeId: eSal.id, date: S.daysAgo(2), status: 'presente', hours: [{ workId: obra.id, hours: 8 }], notes: '' });
+S.addAttendance({ employeeId: eSal.id, date: S.daysAgo(1), status: 'presente', hours: [{ workId: obra.id, hours: 8 }], notes: '' });
+S.add('expenses', { type: 'general', workId: null, date: S.todayISO(), amount: 10000, category: 'Sueldos', providerId: null, employeeId: eSal.id, expenseKind: 'adelanto', description: 'Adelanto a Luis Álamo', invoiceNumber: '', paymentMethod: 'Efectivo' });
+S.add('expenses', { type: 'general', workId: null, date: S.todayISO(), amount: 20000, category: 'Sueldos', providerId: null, employeeId: eSal.id, expenseKind: 'sueldo', description: 'Pago a Luis Álamo', invoiceNumber: '', paymentMethod: 'Efectivo' });
+okk(AI.salaryIntent('¿cuánto le queda por cobrar a Luis Álamo?') === 'Luis Álamo', 'detecta la consulta y extrae el empleado (sin acentos)');
+const infoSal = AI.employeeSalaryInfo('Luis Álamo');
+okk(infoSal && infoSal.horas === 24 && infoSal.dias === 3, 'lee días y horas trabajadas del sistema');
+okk(infoSal && infoSal.devengado === 48000, 'devengado = 24 h × $2000 = $48.000');
+okk(infoSal && infoSal.adelantos === 10000 && infoSal.sueldos === 20000, 'lee adelantos y sueldos registrados');
+okk(infoSal && infoSal.neto === 18000, 'neto exacto: $48.000 − $30.000 = $18.000');
+okk(AI.employeeSalaryInfo('Nadie Inexistente') === null, 'empleado inexistente → null');
+
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }
