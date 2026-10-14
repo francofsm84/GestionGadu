@@ -68,7 +68,9 @@ async function sendWhatsApp(to: string, text: string) {
       text: { body: text },
     }),
   });
-  if (!res.ok) console.error("[whatsapp-webhook] no se pudo responder:", res.status, await res.text().catch(() => ""));
+  const respText = await res.text().catch(() => "");
+  if (!res.ok) console.error("[whatsapp-webhook] Meta Graph API falló:", res.status, respText);
+  else console.log("[whatsapp-webhook] Meta Graph API respondió:", res.status, respText);
   return res.ok;
 }
 
@@ -132,6 +134,7 @@ serve(async (req) => {
       const q = "data->settings->profile->whatsapp->>code=eq." + encodeURIComponent(code);
       const r = await rest("app_data?select=user_id,data&" + q + "&limit=1");
       const rows = await r.json().catch(() => []);
+      console.log("[whatsapp-webhook] consulta app_data (código):", code, "→ http", r.status, "·", (Array.isArray(rows) ? rows.length : 0), "coincidencia(s)", (Array.isArray(rows) && rows[0]) ? ("user_id=" + rows[0].user_id) : "");
       if (!r.ok || !Array.isArray(rows) || !rows.length) {
         console.warn("[whatsapp-webhook] código no encontrado en app_data:", code, "(http", r.status + ")");
         await sendWhatsApp(inc.from, "🤖 Ese código no coincide con ninguna cuenta GADU. Revisalo y volvé a enviarlo.");
@@ -169,6 +172,7 @@ serve(async (req) => {
     const q2 = "data->settings->profile->whatsapp->>linkedPhone=eq." + encodeURIComponent(inc.from);
     const r2 = await rest("app_data?select=user_id,data&" + q2 + "&limit=1");
     const rows2 = await r2.json().catch(() => []);
+    console.log("[whatsapp-webhook] consulta app_data (teléfono):", inc.from, "→ http", r2.status, "·", (Array.isArray(rows2) ? rows2.length : 0), "coincidencia(s)", (Array.isArray(rows2) && rows2[0]) ? ("user_id=" + rows2[0].user_id) : "");
     if (!r2.ok || !Array.isArray(rows2) || !rows2.length) {
       console.warn("[whatsapp-webhook] número no vinculado:", inc.from, "(http", r2.status + ")");
       const rpl = "🤖 No reconozco este número. Primero vinculá tu cuenta: desde la app generá tu código y envialo por WhatsApp.";
