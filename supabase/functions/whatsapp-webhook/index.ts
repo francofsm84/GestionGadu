@@ -7,9 +7,18 @@
 // web sigue funcionando independiente: este conector solo agrega
 // el canal omnicanal.
 //
-// Variables de entorno (secrets):
+// Variables de entorno (secrets de Supabase — NO commitear en el repo):
 //   SUPABASE_URL · SUPABASE_ANON_KEY · SUPABASE_SERVICE_ROLE_KEY
-//   (opcional) WHATSAPP_TOKEN · WHATSAPP_PHONE_ID  → envío de respuestas
+//   WHATSAPP_TOKEN      → token de acceso de Meta Cloud API
+//   WHATSAPP_PHONE_ID   → Phone Number ID de Meta (del bot de prueba)
+//   WHATSAPP_WABA_ID    → WhatsApp Business Account ID (referencia)
+//   Número de prueba del bot: 15556643689 (+1 555 664-3689)
+//
+// Cómo cargarlos (NO en archivos versionados):
+//   supabase secrets set \
+//     WHATSAPP_TOKEN="<TOKEN>" \
+//     WHATSAPP_PHONE_ID="1360123317189034" \
+//     WHATSAPP_WABA_ID="4685722798416623"
 //
 // Despliegue:
 //   supabase functions deploy whatsapp-webhook
