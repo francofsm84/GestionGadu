@@ -1268,6 +1268,12 @@
       (info.neto >= 0
         ? '✅ Saldo neto por cobrar: <b>' + fmt(info.neto) + '</b>'
         : '⚠️ Los adelantos superan lo ganado por <b>' + fmt(-info.neto) + '</b> (se descuentan de próximas jornadas)');
+    /* Botón de WhatsApp (pestaña nueva, sin pop-ups): comparte el saldo */
+    try {
+      const empRec = (G.store.data.employees || []).find(e => G.store.employeeName(e) === info.nombre);
+      const waHref = empRec ? waLink(empRec.phone, 'Hola ' + info.nombre + '! Te comparto tu saldo de GADU: ' + (info.neto >= 0 ? 'a cobrar ' + fmt(info.neto) : 'a favor ' + fmt(-info.neto))) : '';
+      if (waHref) pend.innerHTML += '<br><a class="btn btn-soft-success btn-sm" href="' + waHref + '" target="_blank" rel="noopener" style="margin-top:8px">💬 Enviar por WhatsApp</a>';
+    } catch (e) {}
     rememberTurn('usuario', 'saldo de ' + empName);
     rememberTurn('asistente', 'saldo de ' + info.nombre + ': ' + info.neto);
     busy = false;
@@ -1521,6 +1527,78 @@
         if (html) { appendLog(bubble(html, 'bot')); scrollToEnd(); }
       } catch (e) {}
     }
+  }
+
+  /* ---------- Enviar por WhatsApp (botón clickeable, pestaña nueva) ---------- */
+  function waLink(phone, text) {
+    const digits = String(phone || '').replace(/\D/g, '');
+    if (!digits) return '';
+    const num = digits.startsWith('54') ? digits : '54' + digits;
+    return 'https://wa.me/' + num + '?text=' + encodeURIComponent(String(text || ''));
+  }
+  function waIntent(text) {
+    const t = flatText(text);
+    if (!/whatsapp|wa\.me|mandar (por )?whatsapp|enviar (por )?whatsapp|compartir (por )?whatsapp|mandale por whatsapp|enviale por whatsapp/.test(t)) return null;
+    const emp = findEmployeeMention(text);
+    if (emp) return emp;
+    /* Contacto (cliente/socio) mencionado */
+    try {
+      const cs = ((G.store && G.store.data) || {}).contacts || [];
+      const hit = cs.find(c => c.name && t.includes(flatText(c.name)));
+      return hit ? hit.name : null;
+    } catch (e) { return null; }
+  }
+  /* Resumen en texto plano para el mensaje de WhatsApp */
+  function waSummaryForEmp(empId) {
+    const S = G.store;
+    const e = S.employeeById(empId);
+    if (!e) return null;
+    const st = S.employeeStats(empId);
+    const acc = S.employeeAccumulated(empId);
+    const fmt = v => (G.ui && G.ui.fmtMoney) ? G.ui.fmtMoney(v) : '$' + v;
+    return 'Hola ' + S.employeeName(e) + '! Te comparto tu resumen de GADU: ' +
+      st.daysWorked + ' día(s) · ' + st.hoursTotal + ' hs trabajadas. ' +
+      'Devengado ' + fmt(acc.devengado) + ' − Adelantos ' + fmt(acc.adelantos) + ' = Saldo a cobrar ' + fmt(acc.acumulado) + '.';
+  }
+  function handleWaAnswer(nombre, pend) {
+    const S = G.store;
+    let phone = '', display = '', resumen = '';
+    const emp = (S.data.employees || []).find(e => flatText(S.employeeName(e)) === flatText(nombre) ||
+      flatText(S.employeeName(e)).includes(flatText(nombre)));
+    if (emp) {
+      phone = emp.phone || '';
+      display = S.employeeName(emp);
+      resumen = waSummaryForEmp(emp.id) || '';
+    } else {
+      const c = (S.data.contacts || []).find(x => flatText(x.name || '') === flatText(nombre));
+      if (c) {
+        phone = c.phone || c.whatsapp || '';
+        display = c.name;
+        const works = (S.data.works || []).filter(w => w.clientId === c.id && w.status !== 'finalizada');
+        const fmt = v => (G.ui && G.ui.fmtMoney) ? G.ui.fmtMoney(v) : '$' + v;
+        const rows = works.map(w => {
+          const cobrado = S.sum((S.data.incomes || []).filter(i => i.workId === w.id).map(i => i.amount));
+          return workLabel(w) + ': presupuesto ' + fmt(Number(w.budgetTotal) || 0) + ' − cobrado ' + fmt(cobrado) + ' = pendiente ' + fmt(Math.max(0, (Number(w.budgetTotal) || 0) - cobrado));
+        });
+        resumen = rows.length ? ('Hola ' + c.name + '! Estado de tus obras:\n' + rows.join('\n')) : ('Hola ' + c.name + '! No hay obras activas para resumir.');
+      }
+    }
+    if (!display) {
+      pend.innerHTML = 'No encontré a "<b>' + esc(nombre) + '</b>" para armar el mensaje.';
+      busy = false; scrollToEnd(); return;
+    }
+    if (!phone) {
+      pend.innerHTML = '💬 <b>' + esc(display) + '</b> no tiene teléfono cargado. Cargalo en su ficha y te armo el enlace de WhatsApp.';
+      busy = false; scrollToEnd(); return;
+    }
+    const href = waLink(phone, resumen);
+    pend.innerHTML = '💬 Te preparé el mensaje para <b>' + esc(display) + '</b>:<br>' +
+      '<div class="ai-widget">' + esc(resumen).replace(/\n/g, '<br>') + '</div>' +
+      '<a class="btn btn-soft-success btn-sm" href="' + href + '" target="_blank" rel="noopener" style="margin-top:8px">💬 Abrir en WhatsApp</a>';
+    rememberTurn('usuario', 'whatsapp a ' + nombre);
+    rememberTurn('asistente', 'enlace de WhatsApp para ' + display);
+    busy = false;
+    scrollToEnd();
   }
 
   /* ---------- Widgets interactivos dentro del chat ---------- */
@@ -2676,6 +2754,12 @@
       handleSalaryAnswer(salEmp, pend);
       return;
     }
+    /* Enviar por WhatsApp: botón clickeable con el resumen precargado */
+    const wa = waIntent(msg);
+    if (wa) {
+      handleWaAnswer(wa, pend);
+      return;
+    }
     /* Saldo por cobrar de OBRAS: presupuesto − cobros recibidos (por obra o cliente) */
     const wb = workBalanceIntent(msg);
     if (wb) {
@@ -2810,5 +2894,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, renderText, rememberTurn, searchIntent, searchStore, salaryIntent, employeeSalaryInfo, routeIntent, cashIntent, cashInfo, workBalanceIntent, workBalanceInfo, payTodayIntent, payTodayInfo, tarifaIntent, tarifaWidgetHtml, numWidgetHtml, applyTarifaValue, formFields, formWidgetHtml, submitFormValues, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, getUid, syncUser, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, gotoHref, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, findEmployeeMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, renderText, rememberTurn, searchIntent, searchStore, salaryIntent, employeeSalaryInfo, routeIntent, cashIntent, cashInfo, workBalanceIntent, workBalanceInfo, payTodayIntent, payTodayInfo, tarifaIntent, tarifaWidgetHtml, numWidgetHtml, applyTarifaValue, formFields, formWidgetHtml, submitFormValues, waIntent, waLink, waSummaryForEmp, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, getUid, syncUser, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, gotoHref, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, findEmployeeMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
 })(typeof window !== 'undefined' ? window : globalThis);

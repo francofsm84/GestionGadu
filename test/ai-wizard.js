@@ -358,6 +358,15 @@ const rInvalid = await AI.submitFormValues('empleado', { nombre: '' });
 okk(rInvalid.ok === false, 'formulario inválido (sin nombre) → no guarda');
 okk(!!AI._lastSaved() && AI._lastSaved().coll === 'expenses', 'último guardado registrado para Deshacer');
 
+console.log('== 25) Enviar por WhatsApp (botón clickeable) ==');
+S.update('employees', lucho.id, { phone: '3516666666' });
+const waName = AI.waIntent('mandale por whatsapp el resumen a Lucho');
+okk(waName && String(waName).indexOf('Lucho') > -1, 'detecta intención de WhatsApp y extrae el empleado');
+okk(AI.waLink('3516666666', 'hola lucho') === 'https://wa.me/543516666666?text=hola%20lucho', 'genera enlace wa.me codificado URI (54 + número + texto)');
+const resumen = AI.waSummaryForEmp(lucho.id);
+okk(!!resumen && resumen.indexOf('Lucho') > -1 && resumen.indexOf('Saldo a cobrar') > -1, 'resumen con saldo del empleado en texto plano');
+okk(AI.waLink('', 'x') === '', 'sin teléfono → enlace vacío (no se rompe)');
+
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }
