@@ -122,7 +122,7 @@ serve(async (req) => {
         console.error("[whatsapp-webhook] falló marcar linked:", up.status);
         return json({ ok: false, error: "no se pudo guardar la vinculación" }, 500);
       }
-      const reply = "✅ ¡WhatsApp vinculado a tu cuenta GADU! Ya podés cargar movimientos desde acá, por ejemplo:\n\n\"Gasté 15000 en bolsas de cemento\"\n\"Ingresé 80000 por la obra de Pablo\"";
+      const reply = "¡Hola! Tu cuenta de Gestión GADU ha sido vinculada correctamente con este número de WhatsApp. Ya podés recibir tus avisos y reportes aquí.";
       await sendWhatsApp(inc.from, reply);
       return json({ ok: true, from: inc.from, reply });
     }
