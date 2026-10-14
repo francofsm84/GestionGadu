@@ -16,6 +16,11 @@
     return st.profile || { nombre: '', apellido: '', apodo: '', moneda: 'ARS', whatsapp: { phone: '', code: '', linked: false } };
   }
 
+  /* Número de destino del bot de GADU para la vinculación por WhatsApp
+     (bot de prueba de Meta Cloud API). El enlace wa.me apunta SIEMPRE
+     a este número, nunca al teléfono del usuario. */
+  const BOT_WHATSAPP_NUMBER = '15556643689';
+
   /* Genera el código de verificación de WhatsApp. Intenta el endpoint del
      backend; si no está disponible, cae a un código local alfanumérico. */
   async function generateVerificationCode() {
@@ -78,7 +83,7 @@
       const a = m.panel.querySelector('#obWaLink');
       if (!a) return;
       if (code) {
-        a.href = 'https://wa.me/5493547469000?text=' +
+        a.href = 'https://wa.me/' + BOT_WHATSAPP_NUMBER + '?text=' +
           encodeURIComponent('GADU · Vincular WhatsApp · Código: ' + code + ' · Teléfono: ' + phone);
         a.style.display = '';
       } else {
