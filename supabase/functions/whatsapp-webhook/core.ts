@@ -15,7 +15,7 @@ export function parseIncoming(payload: unknown): Incoming | null {
   try {
     const p = (payload || {}) as Record<string, unknown>;
     if (typeof p.from === "string" && typeof p.text === "string" && String(p.text).trim()) {
-      return { from: normalizePhone(String(p.from)), text: String(p.text).trim() };
+      return { from: rawDigits(p.from), text: String(p.text).trim() };
     }
     const entry = (p.entry as Array<Record<string, unknown>>)?.[0];
     const value = entry?.changes?.[0]?.value as Record<string, unknown>;
@@ -38,7 +38,10 @@ export function parseIncoming(payload: unknown): Incoming | null {
       text = String((msg.transcription as Record<string, unknown>)?.text || "");
     }
     if (!String(text).trim()) return null;
-    return { from: normalizePhone(String(from)), text: String(text).trim() };
+    /* `from` = dígitos exactos del wa_id (SIN insertar el 9): es el número que
+       Meta espera en el campo `to` de la respuesta. La normalización con 9 se
+       aplica aparte en phoneMatches para la comparación contra app_data. */
+    return { from: rawDigits(from), text: String(text).trim() };
   } catch (_e) {
     return null;
   }
@@ -70,6 +73,12 @@ export function normalizePhone(p: unknown): string {
     d = "54" + "9" + d.slice(2);
   }
   return d;
+}
+
+/* Dígitos exactos, sin la heurística del 9: se usa para el `to` del envío a
+   Meta (debe ser el wa_id EXACTO que Meta reportó como remitente). */
+export function rawDigits(p: unknown): string {
+  return String(p == null ? "" : p).replace(/\D/g, "");
 }
 
 /* El teléfono del perfil debe coincidir con el remitente (últimos 9 dígitos).

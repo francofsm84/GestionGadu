@@ -59,19 +59,33 @@ async function sendWhatsApp(to: string, text: string) {
     console.log("[whatsapp-webhook] sin WHATSAPP_TOKEN/WHATSAPP_PHONE_ID → respuesta en body");
     return false;
   }
+  const body = {
+    messaging_product: "whatsapp",
+    to,
+    type: "text",
+    text: { body: text },
+  };
+  /* Log detallado del payload exacto que se envía a Meta (incluye el `to`) */
+  console.log("[whatsapp-webhook] sendWhatsApp payload:", JSON.stringify(body));
   const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to,
-      type: "text",
-      text: { body: text },
-    }),
+    body: JSON.stringify(body),
   });
   const respText = await res.text().catch(() => "");
-  if (!res.ok) console.error("[whatsapp-webhook] Meta Graph API falló:", res.status, respText);
-  else console.log("[whatsapp-webhook] Meta Graph API respondió:", res.status, respText);
+  if (!res.ok) {
+    if (respText.includes("131030") || respText.includes("not in allowed list")) {
+      console.warn(
+        "[whatsapp-webhook] Meta 131030: el destinatario",
+        to,
+        "NO está en la lista de permitidos del bot de prueba. Agregalo en Meta for Developers → WhatsApp → Test numbers.",
+      );
+    } else {
+      console.error("[whatsapp-webhook] Meta Graph API falló:", res.status, respText);
+    }
+  } else {
+    console.log("[whatsapp-webhook] Meta Graph API respondió:", res.status, respText);
+  }
   return res.ok;
 }
 
