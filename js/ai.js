@@ -375,8 +375,36 @@
     document.body.appendChild(host);
     log = document.getElementById('aiLog');
     input = document.getElementById('aiInput');
+    /* Widgets interactivos: confirmar con Enter dentro del input */
+    log.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const inp = e.target && e.target.classList ? e.target : null;
+      if (inp && inp.classList.contains('ai-widget-input')) {
+        e.preventDefault();
+        const ok = inp.closest('.ai-widget');
+        if (ok) { const b = ok.querySelector('[data-widget-ok]'); if (b) b.click(); }
+      }
+    });
     /* Botones del flujo guiado (wizard): delegación de clicks */
     log.addEventListener('click', (e) => {
+      /* Widget interactivo: confirmar guarda el valor y retoma el flujo */
+      const wk = e.target && e.target.closest ? e.target.closest('[data-widget-ok]') : null;
+      if (wk) {
+        const widget = wk.closest('.ai-widget');
+        const inp = widget ? widget.querySelector('.ai-widget-input') : null;
+        const val = inp ? UI.readNum(inp) : 0;
+        if (!(val > 0)) { try { if (G.ui && G.ui.toast) G.ui.toast('Ingresá un valor válido', 'error'); } catch (e2) {} return; }
+        if (widget && widget.dataset.widget === 'tarifa') {
+          applyTarifaValue(widget.dataset.emp, val).then(() => {
+            try { widget.outerHTML = '<div class="ai-success-txt" style="padding:6px 0">✔ Tarifa guardada</div>'; } catch (e2) {}
+            resumePendingGoal();
+          });
+        } else {
+          /* Widget genérico: envía el valor como respuesta del usuario */
+          try { input.value = String(val); send(); } catch (e2) {}
+        }
+        return;
+      }
       const adm = e.target && e.target.closest ? e.target.closest('[data-adm]') : null;
       if (adm) {
         const k = adm.dataset.adm;
@@ -1389,8 +1417,13 @@
     if (!info) return '';
     const fmt = (G.ui && G.ui.fmtMoney) ? G.ui.fmtMoney : (v => '$' + v);
     if (info.missing.length) {
-      return 'Para calcular cuánto pagar hoy me falta la tarifa de: <b>' + esc(info.missing.join(', ')) + '</b>.<br>' +
-        'Escribime por ejemplo: <b>"Tarifa de ' + esc(info.missing[0]) + ' = $6.000"</b> y te doy el total automáticamente.';
+      const emps = S.data.employees || [];
+      const cards = info.missing.map(nombre => {
+        const e = emps.find(x => S.employeeName(x) === nombre);
+        return tarifaWidgetHtml(e);
+      }).join('');
+      return 'Para calcular cuánto pagar hoy me falta la tarifa de:<br>' + cards +
+        '<div class="muted small">Ingresá la tarifa, tocá <b>Guardar</b> y te doy el total automáticamente.</div>';
     }
     if (!info.rows.length) {
       return 'Hoy no hay jornadas registradas, así que no tenés nada pendiente por pagar.';
@@ -1471,6 +1504,44 @@
         if (html) { appendLog(bubble(html, 'bot')); scrollToEnd(); }
       } catch (e) {}
     }
+  }
+
+  /* ---------- Widgets interactivos dentro del chat ---------- */
+  /* Tarjeta de tarifa: input numérico + botón Guardar (guarda en el legajo
+     y retoma el flujo pendiente). */
+  function tarifaWidgetHtml(emp) {
+    if (!emp || !emp.id) return '';
+    return '<div class="ai-widget" data-widget="tarifa" data-emp="' + emp.id + '">' +
+      '<div class="ai-widget-head">💰 Tarifa por hora de <b>' + esc(G.store.employeeName(emp)) + '</b></div>' +
+      '<div class="ai-widget-row">' +
+      '<input class="input ai-widget-input" type="number" inputmode="decimal" step="any" min="0" placeholder="Ej: 6000">' +
+      '<button class="btn btn-primary btn-sm" data-widget-ok="1">Guardar</button>' +
+      '</div>' +
+      '<div class="muted small ai-widget-hint">Se guarda en su legajo y retomo la cuenta sola.</div>' +
+      '</div>';
+  }
+  /* Widget numérico genérico: al confirmar, envía el valor como respuesta
+     del usuario (sirve para horas, porcentajes, etc.). */
+  function numWidgetHtml(opts) {
+    opts = opts || {};
+    return '<div class="ai-widget" data-widget="send"' + (opts.empId ? ' data-emp="' + opts.empId + '"' : '') + '>' +
+      '<div class="ai-widget-head">' + (opts.title || '') + '</div>' +
+      '<div class="ai-widget-row">' +
+      '<input class="input ai-widget-input" type="number" inputmode="decimal" step="any" min="0" placeholder="' + (opts.ph || 'Valor') + '">' +
+      '<button class="btn btn-primary btn-sm" data-widget-ok="1">' + (opts.okLabel || 'Confirmar') + '</button>' +
+      '</div>' +
+      '</div>';
+  }
+  /* Guarda la tarifa en el legajo (misma capa de datos que Empleados) */
+  async function applyTarifaValue(empId, value) {
+    const S = G.store;
+    const emp = S.employeeById(empId);
+    if (!emp || !(Number(value) > 0)) return { ok: false };
+    S.update('employees', empId, { hourlyRate: Number(value) });
+    S.save();
+    try { if (G.sync && G.sync.push) await G.sync.push(S.data); } catch (e) {}
+    try { if (G.router && G.router.refresh) G.router.refresh(); } catch (e) {}
+    return { ok: true, nombre: S.employeeName(emp), monto: Number(value) };
   }
 
   /* Búsqueda inteligente: "buscame a X" / "¿dónde está X?" → consulta el store */
@@ -1960,9 +2031,12 @@
       b.className = 'btn btn-soft btn-sm'; b.textContent = lb;
       b.dataset.wiz = lb; wrap.appendChild(b);
     });
-    /* Paso de horas: opción "Escribir horas" que enfoca el input del chat
-       (ingreso manual libre de la cantidad) */
+    /* Paso de horas: widget numérico + opción "Escribir horas" que enfoca
+       el input del chat (ingreso manual libre de la cantidad) */
     if (s.key === 'horas') {
+      const wd = document.createElement('div');
+      wd.innerHTML = numWidgetHtml({ title: 'O escribí las horas acá:', ph: 'Ej: 6.5', okLabel: 'Usar' });
+      pend.appendChild(wd.firstElementChild);
       const fb = document.createElement('button');
       fb.className = 'btn btn-soft btn-sm';
       fb.textContent = '✍️ Escribir horas';
@@ -2524,5 +2598,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, renderText, rememberTurn, searchIntent, searchStore, salaryIntent, employeeSalaryInfo, routeIntent, cashIntent, cashInfo, workBalanceIntent, workBalanceInfo, payTodayIntent, payTodayInfo, tarifaIntent, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, getUid, syncUser, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, gotoHref, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, findEmployeeMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, renderText, rememberTurn, searchIntent, searchStore, salaryIntent, employeeSalaryInfo, routeIntent, cashIntent, cashInfo, workBalanceIntent, workBalanceInfo, payTodayIntent, payTodayInfo, tarifaIntent, tarifaWidgetHtml, numWidgetHtml, applyTarifaValue, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, getUid, syncUser, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, gotoHref, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, findEmployeeMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
 })(typeof window !== 'undefined' ? window : globalThis);

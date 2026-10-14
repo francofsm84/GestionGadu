@@ -318,6 +318,18 @@ okk(AI.renderText('hola.').indexOf('.') > -1, 'punto final de frase se conserva'
 okk(AI.renderText('monto\n.\nlisto').indexOf('.') === -1, 'línea con solo "." se limpia');
 okk(AI.inlineOptionsFor('¿Confirmás la carga del gasto?').length === 0, 'sin chips genéricos Sí/No tras confirmación');
 
+console.log('== 23) Widgets interactivos dentro del chat ==');
+const wTar = AI.tarifaWidgetHtml(S.employeeById(lucho.id));
+okk(wTar.indexOf('data-widget="tarifa"') > -1 && wTar.indexOf('data-emp="' + lucho.id + '"') > -1, 'widget de tarifa con el id del empleado');
+okk(wTar.indexOf('inputmode="decimal"') > -1 && wTar.indexOf('data-widget-ok') > -1, 'input optimizado para teclado numérico + botón de confirmación');
+const wNum = AI.numWidgetHtml({ title: 'O escribí las horas acá:', ph: 'Ej: 6.5', okLabel: 'Usar' });
+okk(wNum.indexOf('data-widget="send"') > -1 && wNum.indexOf('>Usar<') > -1, 'widget numérico genérico (horas) con confirmación');
+const antesTar = Number(S.employeeById(lucho.id).hourlyRate) || 0;
+const rTar = await AI.applyTarifaValue(lucho.id, 7000);
+okk(rTar.ok === true && S.employeeById(lucho.id).hourlyRate === 7000 && antesTar !== 7000, 'applyTarifaValue guarda la tarifa en el legajo');
+okk((await AI.applyTarifaValue('no-existe', 100)).ok === false, 'empleado inexistente → sin guardar');
+S.update('employees', lucho.id, { hourlyRate: 6000 });
+
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }
