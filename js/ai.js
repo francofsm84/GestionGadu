@@ -1175,7 +1175,8 @@
     if (!pide) return null;
     return findEmployeeMention(text);
   }
-  /* Cálculo directo: horas trabajadas × tarifa − pagos (incluye adelantos) */
+  /* Cálculo directo: horas trabajadas × tarifa − ADELANTOS activos.
+     Misma fórmula que la tarjeta/legajo del empleado (employeeAccumulated). */
   function employeeSalaryInfo(empName) {
     try {
       const emps = ((G.store && G.store.data) || {}).employees || [];
@@ -1184,7 +1185,7 @@
       const st = G.store.employeeStats(emp.id);
       const rate = Number(emp.hourlyRate) || 0;
       const devengado = (st.hoursTotal || 0) * rate;
-      const neto = devengado - st.paidTotal;
+      const neto = devengado - st.advances;   // se restan los adelantos activos
       return {
         nombre: G.store.employeeName(emp),
         dias: st.daysWorked, horas: st.hoursTotal, tarifa: rate,
@@ -1206,10 +1207,10 @@
       '💰 <b>' + esc(info.nombre) + '</b><br>' +
       '• ' + info.dias + ' día' + (info.dias !== 1 ? 's' : '') + ' · <b>' + info.horas + ' horas</b> trabajadas' + (info.tarifa ? ' × ' + fmt(info.tarifa) + ' la hora' : '') + '<br>' +
       '• Devengado: <b>' + fmt(info.devengado) + '</b><br>' +
-      '• Sueldos pagados: ' + fmt(info.sueldos) + ' · Adelantos: ' + fmt(info.adelantos) + '<br>' +
+      '• Adelantos a descontar: ' + fmt(info.adelantos) + (info.sueldos ? ' · (sueldos ya liquidados: ' + fmt(info.sueldos) + ')' : '') + '<br>' +
       (info.neto >= 0
-        ? '✅ Le queda por cobrar: <b>' + fmt(info.neto) + '</b>'
-        : '⚠️ Ya cobró <b>' + fmt(-info.neto) + '</b> por encima de lo devengado (se descuenta de próximas liquidaciones)');
+        ? '✅ Saldo neto por cobrar: <b>' + fmt(info.neto) + '</b>'
+        : '⚠️ Los adelantos superan lo ganado por <b>' + fmt(-info.neto) + '</b> (se descuentan de próximas jornadas)');
     rememberTurn('usuario', 'saldo de ' + empName);
     rememberTurn('asistente', 'saldo de ' + info.nombre + ': ' + info.neto);
     busy = false;

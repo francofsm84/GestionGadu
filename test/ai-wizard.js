@@ -267,7 +267,7 @@ const infoSal = AI.employeeSalaryInfo('Luis Álamo');
 okk(infoSal && infoSal.horas === 24 && infoSal.dias === 3, 'lee días y horas trabajadas del sistema');
 okk(infoSal && infoSal.devengado === 48000, 'devengado = 24 h × $2000 = $48.000');
 okk(infoSal && infoSal.adelantos === 10000 && infoSal.sueldos === 20000, 'lee adelantos y sueldos registrados');
-okk(infoSal && infoSal.neto === 18000, 'neto exacto: $48.000 − $30.000 = $18.000');
+okk(infoSal && infoSal.neto === 38000, 'neto exacto: $48.000 − $10.000 de adelantos = $38.000 (misma fórmula que la tarjeta)');
 okk(AI.employeeSalaryInfo('Nadie Inexistente') === null, 'empleado inexistente → null');
 
 console.log('\n──────────────────────────');
