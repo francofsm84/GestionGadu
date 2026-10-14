@@ -34,10 +34,10 @@ okk(c2.includes('💰 Ingreso') && c2.includes('💸 Gasto'), 'ingreso o gasto �
 const c3 = labelsOf('¿El gasto es de obra o general?');
 okk(c3.includes('🏗️ Gasto de obra') && c3.includes('📋 Gasto general'), 'gasto de obra o general → 2 chips');
 
-/* 4 · Confirmación */
+/* 4 · Confirmaciones ya NO generan chips genéricos Sí/No:
+   solo se muestran opciones directamente relacionadas al contexto */
 const c4 = AI.inlineOptionsFor('¿Confirmás la carga del gasto?');
-okk(c4.length === 2 && labelsOf('¿Confirmás la carga del gasto?').includes('Sí') && labelsOf('¿Confirmás la carga del gasto?').includes('No'), 'confirmación → chips Sí / No');
-okk(sendsOf('¿Confirmás la carga del gasto?').includes('sí') && sendsOf('¿Confirmás la carga del gasto?').includes('no'), 'confirmación → envía sí / no');
+okk(c4.length === 0, 'confirmación → sin chips genéricos Sí/No (opciones contextuales únicamente)');
 
 /* 5 · Preguntas numéricas NO llevan chips */
 okk(AI.inlineOptionsFor('¿De cuánto es el monto?').length === 0, 'pregunta numérica → sin chips');

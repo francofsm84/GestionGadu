@@ -219,19 +219,23 @@
     let txt = reply.replace(/\[\[accion:[^\]]+\]\]/g, '');
     txt = txt.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
     txt = txt.replace(/\n/g, '<br>');
+    /* Limpieza visual: elimina puntos sueltos (" . ", líneas con solo ".")
+       que pueden colarse desde el contexto o el modelo. Los puntos finales
+       de frase (pegados a una letra) se conservan. */
+    txt = txt.replace(/(^|\s|\n)\.(?=\s|<br>|$)/g, '$1');
+    txt = txt.replace(/<br>\s*\.\s*<br>/g, '<br>');
+    txt = txt.replace(/\.{3,}/g, '..');
     return txt;
   }
 
-  /* Devuelve las opciones inline para pasos guiados (puro, testeable) */
+  /* Devuelve las opciones inline para pasos guiados (puro, testeable).
+     Solo opciones DIRECTAMENTE relacionadas al contexto: se eliminaron los
+     chips genéricos Sí/No para no ensuciar las respuestas del asistente. */
   function inlineOptionsFor(replyText) {
     const t = String(replyText || '').toLowerCase();
     const opts = [];
     if (/(oficio|profesi[oó]n|qu[eé] hace|rubro)/.test(t)) {
       ['Albañil', 'Pintor', 'Plomero', 'Electricista', 'Carpintero', 'Yesero', 'Herrero'].forEach(o => opts.push({ label: o, send: 'oficio ' + o }));
-    } else if (/(confirm[aá]|est[aá]s seguro|procedo|quer[eé]s que|dale\?|seguimos\?)/.test(t) && t.indexOf('?') >= 0) {
-      /* Confirmaciones: chips táctiles Sí / No para no escribir en el celular */
-      opts.push({ label: 'Sí', send: 'sí' });
-      opts.push({ label: 'No', send: 'no' });
     } else if (/(cobro|adelanto|certificaci[oó]n)/.test(t)) {
       /* Concepto de ingreso: chips canónicos del flujo contable */
       ['Cobro', 'Adelanto', 'Certificación'].forEach(c => opts.push({ label: c, send: 'concepto ' + c }));
@@ -316,6 +320,9 @@
   let toolsMenu = false;     // submenú "Herramientas" abierto (asignar / cargar / jornada)
   let lastSaved = null;      // último registro creado { coll, id, label } para "Deshacer"
   let currentUid = null;  // usuario autenticado dueño de la memoria del agente
+  /* Intención pendiente de retomar tras un guardado (p. ej. "cuánto debo
+     pagar hoy" interrumpida por una tarifa faltante). */
+  let pendingGoal = null;   // null | 'pagar-hoy'
   /* Memoria de sesión: última obra/cliente tratado, para que los comandos
      consecutivos se apliquen sin volver a preguntar. */
   let sessionFocus = null;   // { obra: 'Nombre', cliente: 'Nombre' }
@@ -339,6 +346,7 @@
     chatHistory = [];
     sessionFocus = null;
     pendingOp = null;
+    pendingGoal = null;
     try { if (log) { log.innerHTML = ''; addGreeting(); } } catch (e) {}
     return true;
   }
@@ -690,6 +698,9 @@
     if (saved && saved.ok) {
       /* El dato ya está en el store local (S.add) → refrescar listas de la app */
       try { if (G.router && G.router.refresh) G.router.refresh(); } catch (e) {}
+      /* Si había una consulta pendiente (p. ej. "cuánto debo pagar hoy" con
+         tarifa faltante), se retoma automáticamente tras este guardado. */
+      try { resumePendingGoal(); } catch (e) {}
       /* Esperar la confirmación REAL de la base de datos (Supabase) */
       try {
         if (G.sync && G.sync.push) {
@@ -793,6 +804,7 @@
     contactRole = null;
     adminWizard = null;
     pendingAdmin = null;
+    pendingGoal = null;
     ledgerMenu = false;
     toolsMenu = false;
   }
@@ -1342,6 +1354,123 @@
     rememberTurn('asistente', 'caja: ' + info.neto);
     busy = false;
     scrollToEnd();
+  }
+
+  /* ---------- Pagos del día: "¿cuánto debo pagar hoy?" ---------- */
+  function payTodayIntent(text) {
+    const t = flatText(text);
+    if (!/(cu[aá]nto|c[uó]mo|qu[eé]|total).*\b(pagar|pago|debo|adeudo|liquidar)\b/.test(t)) return null;
+    if (!/\b(hoy|d[ií]a de hoy|este d[ií]a|jornadas?)\b/.test(t)) return null;
+    return true;
+  }
+  function payTodayInfo() {
+    try {
+      const S = G.store;
+      const hoy = S.todayISO();
+      const att = (S.data.attendance || []).filter(a => a.date === hoy && a.status === 'presente');
+      const rows = [];
+      const missing = [];
+      att.forEach(a => {
+        const e = S.employeeById(a.employeeId);
+        if (!e) return;
+        const nombre = S.employeeName(e);
+        const horas = S.sum((a.hours || []).map(h => h.hours));
+        const rate = Number(e.hourlyRate) || 0;
+        if (!rate) { missing.push(nombre); return; }
+        const acc = S.employeeAccumulated(e.id);
+        rows.push({ nombre, horas, tarifa: rate, saldo: acc.acumulado });
+      });
+      const total = S.sum(rows.map(r => Math.max(0, r.saldo)));
+      return { rows, missing, total };
+    } catch (e) { return null; }
+  }
+  function payTodayAnswerHtml() {
+    const info = payTodayInfo();
+    if (!info) return '';
+    const fmt = (G.ui && G.ui.fmtMoney) ? G.ui.fmtMoney : (v => '$' + v);
+    if (info.missing.length) {
+      return 'Para calcular cuánto pagar hoy me falta la tarifa de: <b>' + esc(info.missing.join(', ')) + '</b>.<br>' +
+        'Escribime por ejemplo: <b>"Tarifa de ' + esc(info.missing[0]) + ' = $6.000"</b> y te doy el total automáticamente.';
+    }
+    if (!info.rows.length) {
+      return 'Hoy no hay jornadas registradas, así que no tenés nada pendiente por pagar.';
+    }
+    const rows = info.rows.map(r =>
+      '• <b>' + esc(r.nombre) + '</b>: ' + r.horas + ' h hoy × ' + fmt(r.tarifa) +
+      (r.saldo >= 0
+        ? ' → saldo neto a pagar <b>' + fmt(r.saldo) + '</b>'
+        : ' → a favor <b>' + fmt(-r.saldo) + '</b>'));
+    return '💰 <b>A pagar hoy</b><br>' + rows.join('<br>') + '<br>' +
+      '📊 <b>Total neto a pagar hoy: ' + fmt(info.total) + '</b>';
+  }
+  function handlePayTodayAnswer(pend) {
+    const html = payTodayAnswerHtml();
+    if (!html) { busy = false; return; }
+    pend.innerHTML = html;
+    const info = payTodayInfo();
+    if (info && info.missing.length) {
+      /* Intención original guardada: al completarse la tarifa faltante,
+         el asistente recalcula y responde solo (sin volver a preguntar). */
+      pendingGoal = 'pagar-hoy';
+      rememberTurn('usuario', 'cuánto debo pagar hoy');
+      rememberTurn('asistente', 'falta tarifa de: ' + info.missing.join(', '));
+    } else {
+      rememberTurn('usuario', 'cuánto debo pagar hoy');
+      rememberTurn('asistente', 'a pagar hoy: ' + (info ? info.total : ''));
+    }
+    busy = false;
+    scrollToEnd();
+  }
+
+  /* ---------- Tarifa de empleado: "Tarifa de Lucho = $6000" ---------- */
+  function tarifaIntent(text) {
+    /* lowercase SIN flatText: flatText elimina dígitos y símbolos, y acá
+       necesitamos conservar el monto ($6000, 6.000, 6000,50). */
+    const t = String(text || '').toLowerCase().replace(/[¿?¡!]/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    let m = t.match(/(?:la\s+)?tarifa\s+(?:de|del)?\s*([a-z\s]{2,24}?)\s*(?:es|=|:)?\s*\$?\s*([\d][\d.,]*)/);
+    if (!m) m = t.match(/sueldo\s+(?:de|del)?\s*([a-z\s]{2,24}?)\s*(?:es|=|:)?\s*\$?\s*([\d][\d.,]*)/);
+    if (!m) return null;
+    const nombre = m[1].trim();
+    const monto = extractNumber(m[2]);
+    if (!nombre || !(monto > 0)) return null;
+    return { nombre, monto };
+  }
+  async function handleTarifaAnswer(parsed, pend) {
+    const S = G.store;
+    const emps = S.data.employees || [];
+    const nombre = flatText(parsed.nombre);
+    const emp = emps.find(e => {
+      const full = flatText(((e.firstName || '') + ' ' + (e.lastName || '')).trim());
+      return full === nombre || full.includes(nombre) || (full && nombre.includes(full.split(' ')[0]));
+    });
+    if (!emp) {
+      pend.innerHTML = 'No encontré a un empleado llamado "<b>' + esc(parsed.nombre) + '</b>". Cargalo primero desde Recursos Humanos → Empleados.';
+      busy = false;
+      scrollToEnd();
+      return;
+    }
+    S.update('employees', emp.id, { hourlyRate: parsed.monto });
+    S.save();
+    try { if (G.sync && G.sync.push) await G.sync.push(S.data); } catch (e) {}
+    try { if (G.router && G.router.refresh) G.router.refresh(); } catch (e) {}
+    const fmt = (G.ui && G.ui.fmtMoney) ? G.ui.fmtMoney : (v => '$' + v);
+    pend.innerHTML = '✔ <b>Tarifa de ' + esc(S.employeeName(emp)) + ' actualizada a ' + fmt(parsed.monto) + ' por hora</b>';
+    rememberTurn('usuario', 'tarifa de ' + parsed.nombre + ' = ' + parsed.monto);
+    rememberTurn('asistente', 'tarifa de ' + S.employeeName(emp) + ' = ' + parsed.monto);
+    busy = false;
+    scrollToEnd();
+    /* Retomar automáticamente la consulta pendiente (sin nueva pregunta) */
+    resumePendingGoal();
+  }
+  function resumePendingGoal() {
+    const g = pendingGoal;
+    pendingGoal = null;
+    if (g === 'pagar-hoy') {
+      try {
+        const html = payTodayAnswerHtml();
+        if (html) { appendLog(bubble(html, 'bot')); scrollToEnd(); }
+      } catch (e) {}
+    }
   }
 
   /* Búsqueda inteligente: "buscame a X" / "¿dónde está X?" → consulta el store */
@@ -2267,6 +2396,11 @@
       handleWorkBalanceAnswer(wb, pend);
       return;
     }
+    /* Pagos del día: "¿cuánto debo pagar hoy?" (retomable si falta una tarifa) */
+    if (payTodayIntent(msg)) {
+      handlePayTodayAnswer(pend);
+      return;
+    }
     /* Estado de caja: balance neto inmediato (ingresos − gastos) */
     if (cashIntent(msg)) {
       handleCashAnswer(pend);
@@ -2276,6 +2410,12 @@
     const ruta = routeIntent(msg);
     if (ruta) {
       handleRouteAnswer(ruta, pend);
+      return;
+    }
+    /* Tarifa de un empleado: "Tarifa de Lucho = $6000" */
+    const tar = tarifaIntent(msg);
+    if (tar) {
+      handleTarifaAnswer(tar, pend);
       return;
     }
     /* ===== 2) COO Virtual: comandos del Super Admin (SOLO con rol admin) ===== */
@@ -2384,5 +2524,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, salaryIntent, employeeSalaryInfo, routeIntent, cashIntent, cashInfo, workBalanceIntent, workBalanceInfo, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, getUid, syncUser, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, gotoHref, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, findEmployeeMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, renderText, rememberTurn, searchIntent, searchStore, salaryIntent, employeeSalaryInfo, routeIntent, cashIntent, cashInfo, workBalanceIntent, workBalanceInfo, payTodayIntent, payTodayInfo, tarifaIntent, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, getUid, syncUser, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, gotoHref, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, findEmployeeMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
 })(typeof window !== 'undefined' ? window : globalThis);

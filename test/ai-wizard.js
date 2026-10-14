@@ -297,6 +297,27 @@ okk(!!wbAll && Number.isFinite(wbAll.totalPendiente) && wbAll.totalPendiente ===
 const wbObra = AI.workBalanceInfo('Norma Molina');
 okk(wbObra && wbObra.rows.length === 1 && wbObra.rows[0].pendiente === 750000, 'desglose filtrado por obra mencionada');
 
+console.log('== 21) Memoria conversacional: "cuánto debo pagar hoy" + tarifa faltante ==');
+const lucho = S.add('employees', { firstName: 'Lucho', lastName: 'García', phone: '', paymentData: '', hourlyRate: 0, active: true, notes: '', photo: null, createdAt: S.todayISO() });
+S.addAttendance({ employeeId: lucho.id, date: S.todayISO(), status: 'presente', hours: [{ workId: obra.id, hours: 8 }], notes: '' });
+S.add('expenses', { type: 'general', workId: null, date: S.todayISO(), amount: 5000, category: 'Sueldos', providerId: null, employeeId: lucho.id, expenseKind: 'adelanto', description: 'Adelanto a Lucho', invoiceNumber: '', paymentMethod: 'Efectivo' });
+okk(AI.payTodayIntent('¿cuánto debo pagar hoy?') === true, 'detecta la consulta de pagos del día');
+let pt = AI.payTodayInfo();
+okk(pt && pt.missing.includes('Lucho García'), 'detecta la tarifa faltante (Lucho García)');
+const tar = AI.tarifaIntent('Tarifa de Lucho = $6000');
+okk(tar && tar.nombre === 'lucho' && tar.monto === 6000, 'parsea "Tarifa de Lucho = $6000"');
+S.update('employees', lucho.id, { hourlyRate: 6000 });
+pt = AI.payTodayInfo();
+const rowLucho = pt && pt.rows.find(r => r.nombre === 'Lucho García');
+okk(pt && !pt.missing.includes('Lucho García') && rowLucho && rowLucho.saldo === 43000, 'tras cargar la tarifa: saldo neto de Lucho = $48.000 − $5.000 = $43.000');
+okk(pt && pt.total === 43000, 'total neto a pagar hoy = $43.000 (recalculado sin volver a preguntar)');
+
+console.log('== 22) Limpieza visual (puntos sueltos y chips contextuales) ==');
+okk(AI.renderText('hola . chau').indexOf(' . ') === -1, 'punto suelto eliminado del texto renderizado');
+okk(AI.renderText('hola.').indexOf('.') > -1, 'punto final de frase se conserva');
+okk(AI.renderText('monto\n.\nlisto').indexOf('.') === -1, 'línea con solo "." se limpia');
+okk(AI.inlineOptionsFor('¿Confirmás la carga del gasto?').length === 0, 'sin chips genéricos Sí/No tras confirmación');
+
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }
