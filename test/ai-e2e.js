@@ -257,9 +257,10 @@ function fail(msg) { console.error('✘ FALLO:', msg); process.exit(1); }
   }
   const pendOK = log.children[log.children.length - 1];
   if (pendOK.innerHTML.indexOf('data-undo') < 0) fail('la tarjeta de éxito no incluye el botón Deshacer');
+  if (pendOK.innerHTML.indexOf('data-goto="1"') < 0 || pendOK.innerHTML.indexOf('href="#/gastos"') < 0) fail('la tarjeta de éxito no incluye el botón Ver registro');
   if (!AI._lastSaved() || AI._lastSaved().coll !== 'expenses') fail('no se registró el último guardado para Deshacer');
   const antesUndo = S.data.expenses.length;
-  console.log('  ✔ gasto guardado con tarjeta verde + botón [↩ Deshacer]');
+  console.log('  ✔ gasto guardado con tarjeta verde + [👁️ Ver registro] + [↩ Deshacer]');
   AI._undo();
   if (S.data.expenses.length !== antesUndo - 1) fail('Deshacer no eliminó el gasto');
   console.log('  ✔ Deshacer eliminó el registro y refrescó');

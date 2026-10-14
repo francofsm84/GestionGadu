@@ -242,6 +242,18 @@ const rBadPago = await AI.execFormAction({ modulo: 'pago', campos: { empleado: '
 okk(rBadPago && rBadPago.saved === false, 'pago incompleto (sin monto/obra) NO guarda');
 okk(AI.PILL_WIZARD['pago'] === 'pago', 'pill rápido Pago / Adelanto → wizard pago');
 
+console.log('== 17) Ver registro: ruta directa al ítem guardado ==');
+okk(AI.gotoHref('expenses', 'x1') === '#/gastos', 'gasto → sección Gastos');
+okk(AI.gotoHref('incomes', 'x1') === '#/ingresos', 'ingreso → sección Ingresos');
+okk(AI.gotoHref('employees', 'e1') === '#/empleado/e1', 'empleado → legajo con id dinámico');
+okk(AI.gotoHref('works', 'w1') === '#/obra/w1', 'obra → detalle con id dinámico');
+okk(AI.gotoHref('assets', 'a1') === '#/herramientas', 'herramienta → sección Herramientas');
+okk(AI.gotoHref('attendance', 'a1') === '#/jornadas', 'jornada → Jornadas y Asistencia');
+okk(AI.gotoHref('compromisos', 'c1') === '#/agenda', 'compromiso → Agenda');
+okk(AI.gotoHref('budgets', 'b1') === '#/presupuestos', 'presupuesto → Presupuestos');
+okk(AI.gotoHref('contacts', 'c1') === '#/directorio', 'contacto → Directorio');
+okk(AI.gotoHref('desconocido', 'x') === null, 'colección desconocida → sin ruta');
+
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }

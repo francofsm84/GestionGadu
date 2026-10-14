@@ -387,6 +387,13 @@
       }
       const ub = e.target && e.target.closest ? e.target.closest('[data-undo]') : null;
       if (ub) { undoSave(); return; }
+      const gb = e.target && e.target.closest ? e.target.closest('[data-goto]') : null;
+      if (gb) {
+        /* "Ver registro": el <a> navega por hash; cerramos el chat para
+           dejar la vista del registro recién creado a la vista */
+        try { setOpen(false); } catch (e2) {}
+        return;
+      }
       const rb = e.target && e.target.closest ? e.target.closest('[data-role]') : null;
       if (rb) {
         const hostEl = rb.closest('.ai-msg') || rb.parentElement || rb;
@@ -692,12 +699,32 @@
     return { saved: false, modulo: mod };   // sin modal: la conversación continúa
   }
 
-  /* Tarjeta de resumen "Tap-to-Confirm": tilde verde + opción temporal Deshacer */
+  /* Ruta directa al registro recién guardado (según su colección e id) */
+  function gotoHref(coll, id) {
+    switch (coll) {
+      case 'employees': return '#/empleado/' + id;
+      case 'works': return '#/obra/' + id;
+      case 'assets': return '#/herramientas';
+      case 'expenses': return '#/gastos';
+      case 'incomes': return '#/ingresos';
+      case 'contacts': return '#/directorio';
+      case 'budgets': return '#/presupuestos';
+      case 'attendance': return '#/jornadas';
+      case 'compromisos': return '#/agenda';
+      default: return null;
+    }
+  }
+
+  /* Tarjeta de resumen "Tap-to-Confirm": tilde verde + [Ver registro] + [Deshacer] */
   function summaryCardHtml(res) {
+    const href = res && res.coll ? gotoHref(res.coll, res.id) : null;
     return '<div class="ai-success"><span class="ai-success-ico">✔</span>' +
       '<div class="ai-success-txt"><b>¡Listo! Carga completada</b><br>' + esc(res.label) + '</div></div>' +
       (res.coll && res.id
-        ? '<div class="ai-actions"><button class="btn btn-soft btn-sm" data-undo="1">↩ Deshacer</button></div>'
+        ? '<div class="ai-actions">' +
+          (href ? '<a class="btn btn-soft btn-sm" href="' + href + '" data-goto="1" title="Ir al registro">👁️ Ver registro</a>' : '') +
+          '<button class="btn btn-soft btn-sm" data-undo="1">↩ Deshacer</button>' +
+          '</div>'
         : '');
   }
   function undoSave() {
@@ -2149,5 +2176,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, getUid, syncUser, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, findEmployeeMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, getUid, syncUser, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, gotoHref, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, findEmployeeMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
 })(typeof window !== 'undefined' ? window : globalThis);
