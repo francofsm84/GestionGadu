@@ -710,6 +710,14 @@
     const mk = todayISO().slice(0, 7);
     return sum(data.expenses.filter(x => x.employeeId && x.expenseKind === 'adelanto' && (x.date || '').slice(0, 7) === mk).map(x => x.amount));
   }
+  /* Dinero acumulado pendiente: (horas totales × tarifa) − adelantos totales.
+     Se recalcula en tiempo real cada vez que cambia una jornada o un adelanto. */
+  function employeeAccumulated(id) {
+    const e = data.employees.find(x => x.id === id);
+    const st = employeeStats(id);
+    const devengado = (st.hoursTotal || 0) * (Number(e ? e.hourlyRate : 0) || 0);
+    return { devengado, adelantos: st.advances, acumulado: devengado - st.advances };
+  }
 
   /* ---------- Consultas por obra: personal y adelantos ---------- */
   function workClientAdvances(workId) {
@@ -830,7 +838,7 @@
     load, save, reset, exportJSON, importJSON, reload, startReal, startEmpty,
     add, update, remove, removeWork, removeEmployee, nextCode,
     workStats, totals, totalsBetween, monthlySeries, expenseDistribution, distributionSummary, socios, splitsFor, contactById,
-    employeeById, employeeName, attendanceFor, employeePayments, employeeStats, employeeMonth, employeeAdvances, employeeAdvancesThisMonth, presentToday, employeesPaidThisMonth,
+    employeeById, employeeName, attendanceFor, employeePayments, employeeStats, employeeMonth, employeeAdvances, employeeAdvancesThisMonth, employeeAccumulated, presentToday, employeesPaidThisMonth,
     workClientAdvances, workEmployeeAdvances, workEmployees,
     moveAsset, setAssetStatus, assetUsage, addAttendance,
     CATS_OBRA, CATS_GENERAL, METODOS, WORK_STATUS, ASSET_STATUS, ASSET_CATS, SEGURO_TIPOS, CONTACT_TYPES, BUDGET_STATUS,

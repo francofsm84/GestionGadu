@@ -180,4 +180,16 @@ if (!dupRec.hours.some(h => h.tipo === 'extra' && h.hours === 3)) throw new Erro
 if (dupRec.notes !== 'doble turno') throw new Error('las notas de la fusión no se conservaron');
 console.log('anti-duplicados de jornadas + horas extras OK');
 
+// Dinero acumulado pendiente (horas × tarifa − adelantos)
+const accEmp = S.add('employees', { firstName: 'Luis', lastName: 'Álamo', phone: '', hourlyRate: 2000, active: true, createdAt: S.todayISO() });
+S.addAttendance({ employeeId: accEmp.id, date: S.daysAgo(3), status: 'presente', hours: [{ workId: 'w1', hours: 8 }], notes: '' });
+S.addAttendance({ employeeId: accEmp.id, date: S.daysAgo(2), status: 'presente', hours: [{ workId: 'w1', hours: 8 }], notes: '' });
+S.addAttendance({ employeeId: accEmp.id, date: S.daysAgo(1), status: 'presente', hours: [{ workId: 'w1', hours: 8 }], notes: '' });
+S.add('expenses', { type: 'general', workId: null, date: S.todayISO(), amount: 10000, category: 'Sueldos', providerId: null, employeeId: accEmp.id, expenseKind: 'adelanto', description: 'Adelanto', invoiceNumber: '', paymentMethod: 'Efectivo' });
+const acc = S.employeeAccumulated(accEmp.id);
+if (acc.devengado !== 48000) throw new Error('devengado acumulado incorrecto: ' + acc.devengado);
+if (acc.adelantos !== 10000) throw new Error('adelantos acumulados incorrectos: ' + acc.adelantos);
+if (acc.acumulado !== 38000) throw new Error('dinero acumulado pendiente incorrecto: ' + acc.acumulado);
+console.log('employeeAccumulated OK · 24h × $2000 − $10.000 = $38.000');
+
 console.log('✔ SMOKE TEST PASADO');

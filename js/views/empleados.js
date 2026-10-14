@@ -301,6 +301,7 @@
     const mst = S.employeeMonth(e.id);
     const devengado = (mst.hours || 0) * (Number(e.hourlyRate) || 0);
     const saldo = devengado - mst.salary - mst.advances;
+    const acc = S.employeeAccumulated(e.id);
     return '<article class="contact-card" data-id="' + e.id + '">' +
       '<div class="contact-head">' +
       UI.avatar(S.employeeName(e), 42, e.photo) +
@@ -309,11 +310,16 @@
       (e.active === false ? UI.chip('De baja', 'danger') : UI.chip('Activo', 'success')) +
       '</div>' +
       '<div class="contact-chips">' + aliasChip(e.paymentData) + '</div>' +
+      /* Dinero acumulado pendiente: destacado en tiempo real (horas × tarifa − adelantos) */
+      '<div style="margin-top:2px;padding:8px 11px;border-radius:10px;background:var(--primary-soft);display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+      '<b style="color:var(--primary);font-size:12.5px">💰 Dinero acumulado pendiente</b>' +
+      '<b style="margin-left:auto;color:' + (acc.acumulado >= 0 ? 'var(--success)' : 'var(--danger)') + '">' + UI.fmtMoney(Math.abs(acc.acumulado)) + (acc.acumulado < 0 ? ' a favor' : '') + '</b>' +
+      '</div>' +
       '<div class="asset-stats">' +
       '<span>Total cobrado<b class="pos">' + UI.fmtMoney(st.paidTotal) + '</b></span>' +
       '<span>Adelantos<b class="warning-text">' + UI.fmtMoney(st.advances) + '</b></span>' +
       '<span>Días · Horas<b>' + st.daysWorked + ' · ' + st.hoursTotal + '</b></span>' +
-      '<span>Saldo a liquidar<b class="' + (saldo > 0 ? 'neg' : 'pos') + '">' + (saldo > 0 ? UI.fmtMoney(saldo) : 'Al día ✓') + '</b></span>' +
+      '<span>Saldo a liquidar (mes)<b class="' + (saldo > 0 ? 'neg' : 'pos') + '">' + (saldo > 0 ? UI.fmtMoney(saldo) : 'Al día ✓') + '</b></span>' +
       '</div>' +
       '<div class="asset-foot">' +
       '<a class="btn btn-soft btn-sm" href="#/empleado/' + e.id + '">' + UI.icon('eye', 14) + 'Historial</a>' +
@@ -403,6 +409,16 @@
 
       '<div class="card" style="padding:12px 16px">' + aliasChip(e.paymentData) +
       ' <span class="form-hint">Alias / CBU / CVU donde se le paga. Tocá el ícono para copiar.</span></div>' +
+
+      /* Dinero acumulado pendiente: destacado en el legajo (horas × tarifa − adelantos) */
+      (() => {
+        const acc = S.employeeAccumulated(e.id);
+        return '<div class="card" style="padding:12px 16px;border:1px solid var(--primary);display:flex;align-items:center;gap:12px;flex-wrap:wrap">' +
+          '<b>💰 Dinero acumulado pendiente</b>' +
+          '<span class="muted small" style="flex:1;min-width:0">' + stAll.hoursTotal + ' h × ' + UI.fmtMoney(Number(e.hourlyRate) || 0) + ' − adelantos ' + UI.fmtMoney(acc.adelantos) + '</span>' +
+          '<b class="' + (acc.acumulado >= 0 ? 'pos' : 'neg') + '" style="font-size:17px">' + UI.fmtMoney(Math.abs(acc.acumulado)) + (acc.acumulado < 0 ? ' a favor' : '') + '</b>' +
+          '</div>';
+      })() +
 
       '<section class="kpi-grid kpi-4">' +
       kpi('wallet', 'success', 'Cobrado hasta la fecha', UI.fmtMoney(st.paidTotal),
