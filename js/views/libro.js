@@ -114,11 +114,19 @@
       '</div></div>';
   }
 
+  /* Nombre de obra compacto para pantallas chicas: los nombres largos se
+     recortan con "…" (el nombre completo queda en el tooltip) para no
+     saturar la vista móvil y priorizar montos y conceptos. */
+  function workShort(full) {
+    if (!full) return 'General';
+    return full.length > 26 ? full.slice(0, 25).trimEnd() + '…' : full;
+  }
+
   function listHTML(list) {
     const porObra = balancesPorObra(list);
     const cards = porObra.map(b =>
       '<div class="card">' +
-      '<div class="split-row"><span><b>' + UI.escapeHtml(b.name) + '</b></span>' +
+      '<div class="split-row"><span title="' + UI.escapeHtml(b.name) + '"><b>' + UI.escapeHtml(workShort(b.name)) + '</b></span>' +
       '<b class="' + (b.neto >= 0 ? 'pos' : 'neg') + '">' + UI.fmtMoney(b.neto) + '</b></div>' +
       '<div class="split-row muted small"><span>+ ' + UI.fmtMoney(b.inc) + ' cobrado</span><span>− ' + UI.fmtMoney(b.gas) + ' gastado</span></div>' +
       '</div>').join('');
@@ -128,6 +136,7 @@
       '<tbody>' +
       (list.map(m => {
         const w = m.obra ? S.data.works.find(wk => wk.id === m.obra) : null;
+        const obraFull = w ? (w.code || '') + ' · ' + w.name : '';
         return '<tr>' +
           '<td class="muted">' + UI.fmtDate(m.date) + '</td>' +
           '<td>' + (m.tipo === 'ingreso'
@@ -135,7 +144,7 @@
             : UI.chip('Gasto', 'danger', 'arrow-up-right')) + '</td>' +
           '<td><strong>' + UI.escapeHtml(m.concepto) + '</strong></td>' +
           '<td class="muted">' + UI.escapeHtml(m.detalle || '—') + '</td>' +
-          '<td>' + UI.escapeHtml(w ? (w.code || '') + ' · ' + w.name : 'General') + '</td>' +
+          '<td><span style="max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle"' + (obraFull ? ' title="' + UI.escapeHtml(obraFull) + '"' : '') + '>' + UI.escapeHtml(workShort(obraFull)) + '</span></td>' +
           '<td class="num ' + (m.monto >= 0 ? 'pos' : 'neg') + '"><b>' + (m.monto >= 0 ? '+' : '−') + UI.fmtMoney(Math.abs(m.monto)) + '</b></td>' +
           '</tr>';
       }).join('') || '<tr><td colspan="6">' + UI.emptyState('book', 'Sin movimientos para este filtro', 'Probá con otro período, obra o tipo de movimiento.') + '</td></tr>') +

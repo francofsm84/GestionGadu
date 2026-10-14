@@ -479,13 +479,12 @@
       ],
     };
   }
-  function startReal() { data = minimalSeed(); save(); }
+  function startReal() { data = minimalSeed(); normalize(); save(); }
   function startEmpty() {
-    data = {
-      settings: currentSettings(),
-      contacts: [], works: [], budgets: [], incomes: [], expenses: [],
-      employees: [], attendance: [], assets: [], distributions: [], compromisos: [],
-    };
+    /* Documento vacío COMPLETO (todas las colecciones, incluida seguros)
+       y normalizado: evita fallos de totals() tras limpiar los datos. */
+    data = emptySeed();
+    normalize();
     save();
   }
   function exportJSON() { return JSON.stringify(data, null, 2); }

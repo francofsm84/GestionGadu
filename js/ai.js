@@ -1217,6 +1217,63 @@
     scrollToEnd();
   }
 
+  /* Redirección de ruta automática: "mostrame el libro contable" → #/libro */
+  const ROUTE_MAP = [
+    { re: /libro contable|libro|contabilidad/, route: '#/libro' },
+    { re: /(mis\s+)?gastos|egresos/, route: '#/gastos' },
+    { re: /(mis\s+)?ingresos|cobros/, route: '#/ingresos' },
+    { re: /empleados|personal|recursos humanos/, route: '#/empleados' },
+    { re: /jornadas|asistencia/, route: '#/jornadas' },
+    { re: /agenda/, route: '#/agenda' },
+    { re: /dashboard|panel general|inicio/, route: '#/dashboard' },
+    { re: /presupuestos/, route: '#/presupuestos' },
+    { re: /herramientas|m[aá]quinas/, route: '#/herramientas' },
+    { re: /directorio|contactos/, route: '#/directorio' },
+    { re: /socios/, route: '#/socios' },
+    { re: /obras?/, route: '#/obras' },
+  ];
+  function routeIntent(text) {
+    const t = flatText(text);
+    /* Solo frases de navegación explícita, para no pisar comandos de carga */
+    if (!/(mostr[aá]me|abr[ií]me|abr[ií]|abrir|and[aá] a|ir a|llev[aá]me|llevame|quiero (ver|entrar)|ver (el|la|mis)|mostrame)/.test(t)) return null;
+    for (const r of ROUTE_MAP) if (r.re.test(t)) return r.route;
+    return null;
+  }
+  function handleRouteAnswer(route, pend) {
+    const label = route.replace('#/', '');
+    pend.innerHTML = '🚀 Te llevo a <b>' + esc(label) + '</b>…';
+    rememberTurn('usuario', 'abrir ' + label);
+    rememberTurn('asistente', 'abrí ' + label);
+    busy = false;
+    scrollToEnd();
+    try { setOpen(false); } catch (e) {}
+    setTimeout(() => { try { if (G.router && G.router.navigate) G.router.navigate(route); } catch (e2) {} }, 120);
+  }
+
+  /* Estado de caja: balance neto inmediato (ingresos − gastos) */
+  function cashIntent(text) {
+    const t = flatText(text);
+    if (!/(cu[aá]nt[oa]|cu[aá]l|c[uó]mo|qu[eé]|estado).*\b(caja|balance|saldo|plata|dinero|me queda|tengo)\b/.test(t)) return null;
+    return true;
+  }
+  function cashInfo() {
+    try { const t = G.store.totals(); return { ingresos: t.incomes, gastos: t.expenses, neto: t.net }; } catch (e) { return null; }
+  }
+  function handleCashAnswer(pend) {
+    const info = cashInfo();
+    if (!info) { busy = false; return; }
+    const fmt = (G.ui && G.ui.fmtMoney) ? G.ui.fmtMoney : (v => '$' + v);
+    pend.innerHTML =
+      '💰 <b>Estado de caja</b><br>' +
+      '• Ingresos: <b class="pos">' + fmt(info.ingresos) + '</b><br>' +
+      '• Gastos: <b class="neg">−' + fmt(info.gastos) + '</b><br>' +
+      '• Balance neto: <b class="' + (info.neto >= 0 ? 'pos' : 'neg') + '">' + fmt(info.neto) + '</b>';
+    rememberTurn('usuario', 'caja');
+    rememberTurn('asistente', 'caja: ' + info.neto);
+    busy = false;
+    scrollToEnd();
+  }
+
   /* Búsqueda inteligente: "buscame a X" / "¿dónde está X?" → consulta el store */
   function searchIntent(text) {
     const t = String(text || '').toLowerCase();
@@ -2127,11 +2184,22 @@
       return;
     }
     /* Consulta de sueldo/saldo de un empleado: "¿cuánto le queda por cobrar
-       a Luis?" → cálculo DIRECTO del sistema (horas × tarifa − pagos/adelantos),
+       a Luis?" → cálculo DIRECTO del sistema (horas × tarifa − adelantos),
        sin derivar a pantallas secundarias. */
     const salEmp = salaryIntent(msg);
     if (salEmp) {
       handleSalaryAnswer(salEmp, pend);
+      return;
+    }
+    /* Estado de caja: balance neto inmediato (ingresos − gastos) */
+    if (cashIntent(msg)) {
+      handleCashAnswer(pend);
+      return;
+    }
+    /* Redirección automática: "mostrame el libro contable" → #/libro */
+    const ruta = routeIntent(msg);
+    if (ruta) {
+      handleRouteAnswer(ruta, pend);
       return;
     }
     /* ===== 2) COO Virtual: comandos del Super Admin (SOLO con rol admin) ===== */
@@ -2240,5 +2308,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, salaryIntent, employeeSalaryInfo, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, getUid, syncUser, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, gotoHref, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, findEmployeeMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, salaryIntent, employeeSalaryInfo, routeIntent, cashIntent, cashInfo, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, getUid, syncUser, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, gotoHref, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, findEmployeeMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
 })(typeof window !== 'undefined' ? window : globalThis);

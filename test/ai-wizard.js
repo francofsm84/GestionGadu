@@ -270,6 +270,18 @@ okk(infoSal && infoSal.adelantos === 10000 && infoSal.sueldos === 20000, 'lee ad
 okk(infoSal && infoSal.neto === 38000, 'neto exacto: $48.000 − $10.000 de adelantos = $38.000 (misma fórmula que la tarjeta)');
 okk(AI.employeeSalaryInfo('Nadie Inexistente') === null, 'empleado inexistente → null');
 
+console.log('== 19) Redirecciones de ruta + estado de caja ==');
+okk(AI.routeIntent('mostrame el libro contable') === '#/libro', 'libro contable → #/libro');
+okk(AI.routeIntent('abrí mis gastos') === '#/gastos', 'gastos → #/gastos');
+okk(AI.routeIntent('quiero ver los ingresos') === '#/ingresos', 'ingresos → #/ingresos');
+okk(AI.routeIntent('andá a la agenda') === '#/agenda', 'agenda → #/agenda');
+okk(AI.routeIntent('mostrame las jornadas') === '#/jornadas', 'jornadas → #/jornadas');
+okk(AI.routeIntent('llevame a herramientas') === '#/herramientas', 'herramientas → #/herramientas');
+okk(AI.routeIntent('cargame un gasto de 5000') === null, 'sin verbo de navegación → null');
+okk(AI.cashIntent('¿cuánta plata tengo en caja?') === true, 'detecta consulta de caja');
+const caja = AI.cashInfo();
+okk(!!caja && caja.neto === caja.ingresos - caja.gastos, 'balance de caja = ingresos − gastos (neto exacto)');
+
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }
