@@ -29,7 +29,11 @@
     const m = d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
     return m.charAt(0).toUpperCase() + m.slice(1);
   };
-  const sum = arr => arr.reduce((a, b) => a + (Number(b) || 0), 0);
+  /* Redondeo monetario seguro a 2 decimales: evita los residuos de coma
+     flotante (0.1 + 0.2 === 0.30000000000000004) en totales y balances. */
+  const round2 = n => Math.round((Number(n) || 0) * 100) / 100;
+  /* Sumatoria acumulada con redondeo final a 2 decimales. */
+  const sum = arr => round2(arr.reduce((a, b) => a + (Number(b) || 0), 0));
 
   /* ------------------------------------------------------------
      Datos de demostración (fechas relativas a hoy)
@@ -595,8 +599,8 @@
     const maint = sum(data.assets.map(a => sum((a.maintenance || []).map(m => m.cost))));
     const seguros = sum(data.seguros.map(x => x.costo));
     return {
-      incomes, direct, general, expenses: direct + general,
-      net: incomes - direct - general, grossMargin: incomes - direct, assets, maint, seguros,
+      incomes, direct, general, expenses: round2(direct + general),
+      net: round2(incomes - direct - general), grossMargin: round2(incomes - direct), assets, maint, seguros,
     };
   }
 
@@ -630,14 +634,14 @@
   function distributionSummary() {
     const t = totals();
     const pct = Number(data.settings.reservePercent) || 0;
-    const available = Math.max(0, t.net) * (100 - pct) / 100;
+    const available = round2(Math.max(0, t.net) * (100 - pct) / 100);
     const paid = sum(data.distributions.filter(x => x.status === 'pagada').map(x => x.amount));
     const pending = sum(data.distributions.filter(x => x.status === 'pendiente').map(x => x.amount));
     const overdue = data.distributions.filter(x => x.status === 'pendiente' && x.date < todayISO());
     const upcoming = data.distributions.filter(x => x.status === 'pendiente' && x.date >= todayISO());
     return {
       gross: t.grossMargin, general: t.general, net: t.net, reservePercent: pct,
-      available, paid, pending, remaining: Math.max(0, available - pending), overdue, upcoming,
+      available, paid, pending, remaining: round2(Math.max(0, available - pending)), overdue, upcoming,
     };
   }
 
@@ -718,8 +722,8 @@
   function employeeAccumulated(id) {
     const e = data.employees.find(x => x.id === id);
     const st = employeeStats(id);
-    const devengado = (st.hoursTotal || 0) * (Number(e ? e.hourlyRate : 0) || 0);
-    return { devengado, adelantos: st.advances, acumulado: devengado - st.advances };
+    const devengado = round2((st.hoursTotal || 0) * (Number(e ? e.hourlyRate : 0) || 0));
+    return { devengado, adelantos: st.advances, acumulado: round2(devengado - st.advances) };
   }
 
   /* ---------- Consultas por obra: personal y adelantos ---------- */
@@ -828,8 +832,8 @@
     const assets = sum(assetsIn.map(x => x.cost));
     const maint = sum(data.assets.flatMap(a => a.maintenance || []).filter(inR).map(m => m.cost));
     return {
-      incomes, direct, general, expenses: direct + general,
-      net: incomes - direct - general, grossMargin: incomes - direct,
+      incomes, direct, general, expenses: round2(direct + general),
+      net: round2(incomes - direct - general), grossMargin: round2(incomes - direct),
       assets, maint,
       incomesCount: data.incomes.filter(inR).length,
       expensesCount: data.expenses.filter(inR).length,
