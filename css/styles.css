@@ -252,6 +252,18 @@ body.sb-collapsed .main { margin-left: var(--sidebar-w-min); }
 .plan-feats li::before { content: '✓ '; color: var(--success); }
 
 /* ---------- Layout y grillas ---------- */
+/* Esqueleto de carga del Dashboard (sutil, evita mostrar $0 falsos) */
+.dash-skel {
+  min-height: 92px; border-radius: var(--radius);
+  background: linear-gradient(100deg, var(--surface-2) 40%, var(--surface-3) 50%, var(--surface-2) 60%);
+  background-size: 200% 100%;
+  animation: dash-skel 1.2s ease-in-out infinite;
+}
+.dash-skel-lg { min-height: 220px; }
+@keyframes dash-skel {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
 /* Checkboxes de selección múltiple (tablas de ingresos/gastos) */
 .sel-row { cursor: pointer; accent-color: var(--primary); width: 16px; height: 16px; }
 #masterSel { cursor: pointer; accent-color: var(--primary); width: 16px; height: 16px; }

@@ -881,6 +881,21 @@
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
   }
 
+  /* Esqueleto de carga del Dashboard: se muestra solo cuando el dispositivo
+     no tiene datos locales y la nube aún no respondió (evita ceros falsos). */
+  function showDashSkeleton() {
+    const view = document.getElementById('view');
+    if (!view) return;
+    view.innerHTML =
+      '<section class="kpi-grid kpi-4">' +
+      '<div class="dash-skel"></div><div class="dash-skel"></div><div class="dash-skel"></div><div class="dash-skel"></div>' +
+      '</section>' +
+      '<div class="charts-grid">' +
+      '<div class="dash-skel dash-skel-lg"></div><div class="dash-skel dash-skel-lg"></div>' +
+      '</div>' +
+      '<div class="dash-skel"></div>';
+  }
+
   async function startApp() {
     const sess = G.auth.getSession();
     if (!sess) { renderLogin('login'); return; }
@@ -890,6 +905,23 @@
     document.body.classList.remove('no-session');
     const lr = document.getElementById('loginRoot');
     if (lr) lr.remove();
+
+    /* ===== Render INMEDIATO del Dashboard con los datos LOCALES =====
+       Evita el flash de $0: los montos reales aparecen al instante.
+       Si el dispositivo/cuenta no tiene datos locales todavía (puede
+       haberlos en la nube), se muestra un esqueleto sutil en lugar
+       de ceros hasta que termine la sincronización. */
+    const sinDatosLocales = !S.hasLocalData() &&
+      !(S.data.works || []).length && !(S.data.incomes || []).length && !(S.data.expenses || []).length;
+    if (sinDatosLocales) {
+      try { showDashSkeleton(); } catch (e) {}
+    } else {
+      const h0 = location.hash || '';
+      try {
+        if (!h0 || h0 === '#' || h0 === '#/' || h0.indexOf('#/login') === 0) location.hash = '#/dashboard';
+        else renderNow();
+      } catch (e) { try { renderNow(); } catch (e2) {} }
+    }
 
     /* Planes, límites, rol y período de prueba */
     try { await G.plan.load(); } catch (e) {}
