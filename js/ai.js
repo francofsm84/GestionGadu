@@ -1250,6 +1250,76 @@
     setTimeout(() => { try { if (G.router && G.router.navigate) G.router.navigate(route); } catch (e2) {} }, 120);
   }
 
+  /* Saldo por cobrar de OBRAS: presupuesto − cobros/adelantos recibidos.
+     Detecta "cuánto me queda por cobrar", "cuánto me debe X", "saldo de obras".
+     Devuelve el nombre de la obra/cliente mencionado, '__all__' para todas,
+     o null si NO es una consulta de este tipo. */
+  function workBalanceIntent(text) {
+    const t = flatText(text);
+    const pide = /(cu[aá]nto|c[uó]mo|qu[eé]|saldo|falta|pendiente|deuda)/.test(t) && /\b(cobrar|debe|deuda|pendiente|cobro)\b/.test(t);
+    if (!pide) return null;
+    /* Consultas de caja/plata/dinero o de sueldo NO son de obras */
+    if (/(caja|plata|dinero|empleado|sueldo)/.test(t)) return null;
+    const w = findWorkMention(text);
+    if (w) return w;
+    /* Menciones de CLIENTE: "cuánto me debe Ángel Cámara" */
+    try {
+      const cs = ((G.store && G.store.data) || {}).contacts || [];
+      const hit = cs.find(c => c.type === 'cliente' && c.name && t.includes(flatText(c.name)));
+      if (hit) return hit.name;
+      const words = t.replace(/[¿?¡!.,]/g, ' ').split(/\s+/).filter(x => x.length >= 4);
+      const part = cs.find(c => c.type === 'cliente' && c.name && words.some(x => flatText(c.name).includes(x)));
+      if (part) return part.name;
+    } catch (e) {}
+    return '__all__';
+  }
+  function workBalanceInfo(mention) {
+    try {
+      const S = G.store;
+      const works = (S.data.works || []).filter(w => w.status !== 'finalizada');
+      const rows = works.map(w => {
+        const cobrado = S.sum((S.data.incomes || []).filter(x => x.workId === w.id).map(x => x.amount));
+        const budget = Number(w.budgetTotal) || 0;
+        return { name: w.name || 'Obra', code: w.code || '', budget, cobrado, pendiente: budget - cobrado, clientId: w.clientId };
+      });
+      let sel = rows;
+      if (mention && mention !== '__all__') {
+        const m = flatText(mention);
+        sel = rows.filter(r => flatText(r.name).includes(m));
+        if (!sel.length) {
+          const cli = (S.data.contacts || []).find(c => c.type === 'cliente' && flatText(c.name || '').includes(m));
+          if (cli) sel = rows.filter(r => r.clientId === cli.id);
+        }
+      }
+      return { rows: sel, totalPendiente: S.sum(sel.map(r => r.pendiente)) };
+    } catch (e) { return null; }
+  }
+  function handleWorkBalanceAnswer(mention, pend) {
+    const info = workBalanceInfo(mention);
+    if (!info || !info.rows.length) {
+      pend.innerHTML = mention && mention !== '__all__'
+        ? 'No encontré obras ni clientes con "<b>' + esc(mention) + '</b>". Asegurate de cargar el <b>presupuesto</b> de la obra para calcular el saldo.'
+        : 'No hay obras activas para calcular el saldo por cobrar. Cargá una obra con su presupuesto y te lo desgloso.';
+      busy = false;
+      scrollToEnd();
+      return;
+    }
+    const fmt = (G.ui && G.ui.fmtMoney) ? G.ui.fmtMoney : (v => '$' + v);
+    const lines = info.rows.map(r =>
+      '• <b>' + esc(r.name) + '</b>: Presupuesto ' + fmt(r.budget) + ' − Cobrado ' + fmt(r.cobrado) + ' = ' +
+      (r.pendiente >= 0
+        ? 'Pendiente <b>' + fmt(r.pendiente) + '</b>'
+        : 'cobrado de más <b>' + fmt(-r.pendiente) + '</b>')
+    ).join('<br>');
+    pend.innerHTML =
+      '🏗️ <b>Saldo por cobrar de obras</b><br>' + lines + '<br>' +
+      '📊 <b>Total pendiente por cobrar: ' + fmt(info.totalPendiente) + '</b>';
+    rememberTurn('usuario', 'saldo por cobrar de obras');
+    rememberTurn('asistente', 'pendiente por cobrar: ' + info.totalPendiente);
+    busy = false;
+    scrollToEnd();
+  }
+
   /* Estado de caja: balance neto inmediato (ingresos − gastos) */
   function cashIntent(text) {
     const t = flatText(text);
@@ -2191,6 +2261,12 @@
       handleSalaryAnswer(salEmp, pend);
       return;
     }
+    /* Saldo por cobrar de OBRAS: presupuesto − cobros recibidos (por obra o cliente) */
+    const wb = workBalanceIntent(msg);
+    if (wb) {
+      handleWorkBalanceAnswer(wb, pend);
+      return;
+    }
     /* Estado de caja: balance neto inmediato (ingresos − gastos) */
     if (cashIntent(msg)) {
       handleCashAnswer(pend);
@@ -2308,5 +2384,5 @@
     try { build(); syncUser(); maybeWelcome(); } catch (e) {}
   }
 
-  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, salaryIntent, employeeSalaryInfo, routeIntent, cashIntent, cashInfo, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, getUid, syncUser, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, gotoHref, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, findEmployeeMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
+  G.ai = { init, open: () => setOpen(true), cleanInput, removeRepeatedPhrases, prepareMessage, buildTranscript, localIntent, context, execFormAction, inlineOptionsFor, rememberTurn, searchIntent, searchStore, salaryIntent, employeeSalaryInfo, routeIntent, cashIntent, cashInfo, workBalanceIntent, workBalanceInfo, isCompleteWizard, WIZARD_STEPS, WIZARD_REQUIRED, getUid, syncUser, adminIntent, normPlan, esSuperAdmin, ADMIN_WIZARD_STEPS, isValidName, isValidNumber, isValidPhone, isValidEmail, parseMoney, gotoHref, PILL_WIZARD, suggestedWork, workChipLabels, frequentEmployees, findAssetMention, findWorkMention, findEmployeeMention, detectDestino, normFecha, flatText, workLabel, _build: () => { try { build(); } catch (e) {} }, _send: (text) => { lastSendAt = 0; input.value = text; send(); }, _log: () => log, _pending: () => pendingOp, _adminWizard: () => adminWizard, _contactStage: () => contactStage, _contactRole: () => contactRole, _ledger: () => ledgerMenu, _tools: () => toolsMenu, _lastSaved: () => lastSaved, _pill: (k) => { try { firePill(k); } catch (e) {} }, _undo: () => undoSave(), _wiz: (label) => { appendLog(bubble(renderText(String(label)), 'user')); scrollToEnd(); wizardAdvance(String(label)); } };
 })(typeof window !== 'undefined' ? window : globalThis);

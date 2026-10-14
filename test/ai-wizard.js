@@ -282,6 +282,21 @@ okk(AI.cashIntent('¿cuánta plata tengo en caja?') === true, 'detecta consulta 
 const caja = AI.cashInfo();
 okk(!!caja && caja.neto === caja.ingresos - caja.gastos, 'balance de caja = ingresos − gastos (neto exacto)');
 
+console.log('== 20) Saldo por cobrar de OBRAS (presupuesto − cobrado) ==');
+S.update('works', obra.id, { budgetTotal: 1000000 });
+S.add('incomes', { workId: obra.id, date: S.todayISO(), amount: 250000, concept: 'Adelanto', incomeKind: 'adelanto', method: 'Efectivo', description: '', invoiceNumber: '' });
+okk(AI.workBalanceIntent('¿cuánto me queda por cobrar?') === '__all__', 'consulta general → todas las obras');
+okk(AI.workBalanceIntent('¿cuánto me debe por la obra Norma Molina?') === 'Norma Molina', 'consulta por obra → nombre de la obra');
+okk(AI.workBalanceIntent('¿cuánta plata tengo en caja?') === null, 'consulta de caja NO se confunde con obras');
+const wbAll = AI.workBalanceInfo('__all__');
+const wbRow = wbAll && wbAll.rows.find(r => r.name === 'Norma Molina');
+okk(wbRow && wbRow.budget === 1000000 && wbRow.cobrado === 250000, 'lee presupuesto y cobros de la obra');
+okk(wbRow && wbRow.pendiente === 750000, 'pendiente = $1.000.000 − $250.000 = $750.000');
+const expTotal = S.sum((wbAll && wbAll.rows || []).map(r => r.pendiente));
+okk(!!wbAll && Number.isFinite(wbAll.totalPendiente) && wbAll.totalPendiente === expTotal, 'total acumulado = suma de pendientes obra por obra');
+const wbObra = AI.workBalanceInfo('Norma Molina');
+okk(wbObra && wbObra.rows.length === 1 && wbObra.rows[0].pendiente === 750000, 'desglose filtrado por obra mencionada');
+
 console.log('\n──────────────────────────');
 if (ko === 0) { console.log('✔ AI WIZARD AUDIT PASADO (' + ok + ' checks)'); process.exit(0); }
 else { console.log('✘ AUDIT: ' + ko + ' fallos de ' + (ok + ko)); process.exit(1); }
