@@ -21,6 +21,25 @@
      a este número, nunca al teléfono del usuario. */
   const BOT_WHATSAPP_NUMBER = '15556643689';
 
+  /* Prefijos de país más comunes (Argentina +54 por defecto) */
+  const COUNTRY_CODES = [
+    { v: '54', l: 'Argentina' }, { v: '598', l: 'Uruguay' }, { v: '56', l: 'Chile' },
+    { v: '52', l: 'México' }, { v: '593', l: 'Ecuador' }, { v: '57', l: 'Colombia' },
+    { v: '51', l: 'Perú' }, { v: '595', l: 'Paraguay' }, { v: '591', l: 'Bolivia' },
+    { v: '55', l: 'Brasil' }, { v: '34', l: 'España' }, { v: '1', l: 'EE.UU. / Canadá' },
+  ];
+
+  /* Separa un teléfono completo guardado en prefijo + número local */
+  function splitPhone(full) {
+    const digits = String(full || '').replace(/\D/g, '');
+    for (const c of COUNTRY_CODES) {
+      if (digits.startsWith(c.v)) {
+        return { prefix: c.v, local: digits.slice(c.v.length).replace(/^0+/, '') };
+      }
+    }
+    return { prefix: '54', local: digits.replace(/^0+/, '') };
+  }
+
   /* Genera el código de verificación de WhatsApp. Intenta el endpoint del
      backend; si no está disponible, cae a un código local alfanumérico. */
   async function generateVerificationCode() {
@@ -43,9 +62,12 @@
     const p = currentProfile();
     const sess = G.auth && G.auth.getSession ? G.auth.getSession() : null;
     const prefNombre = p.nombre || (sess && sess.email ? sess.email.split('@')[0] : '');
-    let phone = (p.whatsapp && p.whatsapp.phone) || '';
+    const split = splitPhone((p.whatsapp && p.whatsapp.phone) || '');
+    let prefix = split.prefix;
+    let local = split.local;
     let code = (p.whatsapp && p.whatsapp.code) || '';
     const linked = !!(p.whatsapp && p.whatsapp.linked);
+    const phoneDigits = () => '+' + prefix + local.replace(/[^\d]/g, '').replace(/^0+/, '');
 
     const m = UI.openModal({
       title: (S.data.settings && S.data.settings.onboardingDone) ? '👤 Mi perfil' : '👋 Antes de arrancar',
@@ -63,10 +85,17 @@
         '<div class="card-inset" style="margin-top:14px">' +
         '<h4>📱 Vinculación con WhatsApp</h4>' +
         (linked
-          ? '<div class="split-row" style="gap:8px;align-items:center;margin-bottom:6px">' + UI.chip('Vinculado', 'success', 'whatsapp') + '<span class="muted small">' + UI.escapeHtml(phone) + '</span></div>'
+          ? '<div class="split-row" style="gap:8px;align-items:center;margin-bottom:6px">' + UI.chip('Vinculado', 'success', 'whatsapp') + '<span class="muted small">' + UI.escapeHtml(phoneDigits()) + '</span></div>'
           : '<p class="form-hint">Generá tu código y envialo por WhatsApp para activar los avisos.</p>') +
         '<div class="grid-form" style="margin-top:8px">' +
-        '<div class="field"><label>Tu teléfono (con código de país)</label><input class="input" id="obPhone" value="' + UI.escapeHtml(phone) + '" placeholder="+54 9 3547 55-1234" inputmode="tel"></div>' +
+        '<div class="field"><label>Tu teléfono</label>' +
+        '<div class="split-row" style="gap:8px;align-items:center">' +
+        '<select class="select" id="obPrefix" style="max-width:120px">' +
+        COUNTRY_CODES.map(c => '<option value="' + c.v + '"' + (prefix === c.v ? ' selected' : '') + '>+' + c.v + ' ' + c.l + '</option>').join('') +
+        '</select>' +
+        '<input class="input" id="obPhone" value="' + UI.escapeHtml(local) + '" placeholder="Ej: 9 3547 55-1234" inputmode="tel" style="flex:1;min-width:0">' +
+        '</div>' +
+        '<span class="form-hint" id="obPhoneFull" style="margin-top:4px">Número completo: ' + UI.escapeHtml(phoneDigits()) + '</span></div>' +
         '<div class="field"><label>Código de verificación</label><div class="split-row" style="gap:8px;align-items:center">' +
         '<input class="input" id="obCode" readonly value="' + UI.escapeHtml(code) + '" placeholder="Ej: 99DKFR" style="text-transform:uppercase;letter-spacing:2px;font-weight:700">' +
         '<button type="button" class="btn btn-soft btn-sm" id="obGen" style="flex:none">' + UI.icon('zap', 14) + 'Generar código</button>' +
@@ -84,11 +113,16 @@
       if (!a) return;
       if (code) {
         a.href = 'https://wa.me/' + BOT_WHATSAPP_NUMBER + '?text=' +
-          encodeURIComponent('GADU · Vincular WhatsApp · Código: ' + code + ' · Teléfono: ' + phone);
+          encodeURIComponent('GADU · Vincular WhatsApp · Código: ' + code + ' · Teléfono: ' + phoneDigits());
         a.style.display = '';
       } else {
         a.style.display = 'none';
       }
+    };
+    const syncPhone = () => {
+      const fullEl = m.panel.querySelector('#obPhoneFull');
+      if (fullEl) fullEl.textContent = 'Número completo: ' + phoneDigits();
+      updateLink();
     };
     m.panel.querySelector('#obGen').addEventListener('click', async () => {
       const btn = m.panel.querySelector('#obGen');
@@ -104,7 +138,8 @@
       btn.disabled = false;
       btn.innerHTML = UI.icon('zap', 14) + 'Generar código';
     });
-    m.panel.querySelector('#obPhone').addEventListener('input', e => { phone = e.target.value; updateLink(); });
+    m.panel.querySelector('#obPrefix').addEventListener('change', e => { prefix = e.target.value; syncPhone(); });
+    m.panel.querySelector('#obPhone').addEventListener('input', e => { local = e.target.value; syncPhone(); });
     updateLink();
 
     m.panel.querySelector('[data-cancel]').addEventListener('click', () => {
@@ -122,7 +157,7 @@
           apellido: m.panel.querySelector('#obApellido').value.trim(),
           apodo: m.panel.querySelector('#obApodo').value.trim(),
           moneda: m.panel.querySelector('#obMoneda').value,
-          whatsapp: { phone, code, linked: !!((p.whatsapp && p.whatsapp.linked)) },
+          whatsapp: { phone: phoneDigits(), code, linked: !!((p.whatsapp && p.whatsapp.linked)) },
         };
         S.data.settings.onboardingDone = true;
         S.save();
