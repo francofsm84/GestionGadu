@@ -49,7 +49,14 @@ export function parseIncoming(payload: unknown): Incoming | null {
    alfanumérico) y el formato histórico ("código de verificación: 123456").
    Devuelve el código SIEMPRE en mayúsculas para comparar de forma estable. */
 export function matchVerificationCode(text: string): string | null {
-  const m = String(text || "").match(/c[oó]digo(?:\s+de\s+verificaci[oó]n)?:?\s*([A-Z0-9]{4,10})/i);
+  /* Código de EXACTAMENTE 6 caracteres alfanuméricos. Se aplanan los
+     acentos ANTES de matchear (código → codigo) para que la comparación
+     sea robusta ante la codificación del texto que llega de Meta. */
+  const flatText = String(text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const m = flatText.match(/codigo(?:\s+de\s+verificacion)?:?\s*([a-z0-9]{6})/i);
   return m ? m[1].toUpperCase() : null;
 }
 
