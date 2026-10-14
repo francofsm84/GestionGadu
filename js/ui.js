@@ -37,8 +37,15 @@
   UI.telLink = p => 'tel:' + String(p || '').replace(/[^\d+]/g, '');
   UI.readNum = el => {
     let v = String(el.value || '').trim();
-    if (/^\d{1,3}(\.\d{3})+$/.test(v)) v = v.replace(/\./g, '');
-    const n = Number(v.replace(',', '.'));
+    if (!v) return 0;
+    /* Puntos = separador de miles · coma = separador decimal (es-AR/es-MX).
+       Ej.: "1.000,50" → 1000.5 · "100.000" → 100000 · "2.5" → 2.5 */
+    if (v.indexOf(',') > -1) {
+      v = v.replace(/\./g, '').replace(',', '.');
+    } else if (/^\d{1,3}(\.\d{3})+$/.test(v)) {
+      v = v.replace(/\./g, '');
+    }
+    const n = Number(v);
     return isNaN(n) ? 0 : n;
   };
   UI.signClass = v => (Number(v) >= 0 ? 'pos' : 'neg');
