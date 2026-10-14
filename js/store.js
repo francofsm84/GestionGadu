@@ -348,6 +348,31 @@
       if (c.enlace === undefined) c.enlace = '';
       if (c.asignadoA === undefined) c.asignadoA = null;
     });
+    /* Migración: antigüedad del empleado (fecha de alta del legajo) */
+    data.employees.forEach(e => { if (e.createdAt === undefined) e.createdAt = null; });
+    /* Anti-duplicados: fusionar jornadas idénticas del mismo empleado y fecha
+       (limpia los dobles históricos, p. ej. dos jornadas de 8h el mismo día) */
+    const seenAtt = {};
+    const mergedAtt = [];
+    data.attendance.forEach(a => {
+      const k = (a.employeeId || '') + '|' + (a.date || '');
+      if (seenAtt[k] != null) {
+        const prev = mergedAtt[seenAtt[k]];
+        const horas = (prev.hours || []).slice();
+        (a.hours || []).forEach(h => {
+          const t = h.tipo || 'normal';
+          const dup = horas.some(x => x.workId === h.workId && (x.tipo || 'normal') === t && Number(x.hours || 0) === Number(h.hours || 0));
+          if (!dup) horas.push({ workId: h.workId || null, hours: Number(h.hours) || 0, tipo: t });
+        });
+        prev.hours = horas;
+        if (!prev.status || prev.status === 'ausente') prev.status = a.status || prev.status;
+        if (a.notes) prev.notes = (prev.notes ? prev.notes + ' · ' : '') + a.notes;
+      } else {
+        seenAtt[k] = mergedAtt.length;
+        mergedAtt.push(a);
+      }
+    });
+    data.attendance = mergedAtt;
     /* Migración: ubicación e historial de uso de herramientas */
     data.assets.forEach(a => {
       if (!Array.isArray(a.usages)) a.usages = [];
@@ -493,7 +518,34 @@
   /* ------------------------------------------------------------
      CRUD
      ------------------------------------------------------------ */
-  function add(coll, obj) { obj.id = obj.id || uid(); data[coll].unshift(obj); save(); return obj; }
+  function add(coll, obj) {
+    obj.id = obj.id || uid();
+    if (coll === 'attendance') return addAttendance(obj);   // anti-duplicados por empleado+fecha
+    data[coll].unshift(obj); save(); return obj;
+  }
+  /* Alta de jornada ANTI-DUPLICADOS: una sola jornada por empleado y fecha.
+     Si ya existe, fusiona las horas (descarta entradas idénticas) y deja las
+     horas extras como desglose separado con tipo 'extra'. */
+  function addAttendance(obj) {
+    obj.id = obj.id || uid();
+    const prev = data.attendance.find(a => a.employeeId === obj.employeeId && a.date === obj.date);
+    if (!prev) {
+      data.attendance.unshift(obj);
+      save();
+      return obj;
+    }
+    const horas = (prev.hours || []).slice();
+    (obj.hours || []).forEach(h => {
+      const t = h.tipo || 'normal';
+      const dup = horas.some(x => x.workId === h.workId && (x.tipo || 'normal') === t && Number(x.hours || 0) === Number(h.hours || 0));
+      if (!dup) horas.push({ workId: h.workId || null, hours: Number(h.hours) || 0, tipo: t });
+    });
+    prev.hours = horas;
+    if (obj.status && obj.status !== prev.status) prev.status = obj.status;
+    if (obj.notes) prev.notes = (prev.notes ? prev.notes + ' · ' : '') + obj.notes;
+    save();
+    return prev;
+  }
   function update(coll, id, patch) { const it = data[coll].find(x => x.id === id); if (it) Object.assign(it, patch); save(); return it; }
   function remove(coll, id) { data[coll] = data[coll].filter(x => x.id !== id); save(); }
   function removeWork(id) {
@@ -780,7 +832,7 @@
     workStats, totals, totalsBetween, monthlySeries, expenseDistribution, distributionSummary, socios, splitsFor, contactById,
     employeeById, employeeName, attendanceFor, employeePayments, employeeStats, employeeMonth, employeeAdvances, employeeAdvancesThisMonth, presentToday, employeesPaidThisMonth,
     workClientAdvances, workEmployeeAdvances, workEmployees,
-    moveAsset, setAssetStatus, assetUsage,
+    moveAsset, setAssetStatus, assetUsage, addAttendance,
     CATS_OBRA, CATS_GENERAL, METODOS, WORK_STATUS, ASSET_STATUS, ASSET_CATS, SEGURO_TIPOS, CONTACT_TYPES, BUDGET_STATUS,
     uid, todayISO, parseISO, monthLabel, daysAgo, daysAhead, sum, KEY, attachUser, hasLocalData, applyRemote,
     seguroDaysLeft, seguroEstado,

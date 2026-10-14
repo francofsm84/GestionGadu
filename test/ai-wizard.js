@@ -207,8 +207,9 @@ const stHoras = AI.WIZARD_STEPS.jornada.find(s => s.key === 'horas');
 okk(!!stHoras && JSON.stringify(stHoras.buttons) === JSON.stringify(['4 hs', '8 hs']), 'paso horas con botones rápidos [4 hs] [8 hs]');
 const rJ4 = await AI.execFormAction({ modulo: 'jornada', campos: { empleado: 'Jorge el Flaco', obra: 'Norma Molina', horas: '4 hs' } });
 okk(rJ4 && rJ4.saved === true, 'horas "4 hs" (botón) se aceptan y guardan');
-const j4 = S.data.attendance.find(x => x.hours && x.hours[0] && x.hours[0].hours === 4);
-okk(!!j4, 'el valor registrado es 4 (número, no texto)');
+/* Anti-duplicados: la jornada del mismo empleado+fecha se fusiona (sin duplicar) */
+const j4 = S.data.attendance.find(x => x.hours && x.hours.some(h => Number(h.hours) === 4));
+okk(!!j4, 'el valor registrado es 4 (número, fusionado en la jornada del día)');
 
 console.log('== 15) Parseo de montos: miles con punto y abreviaturas ==');
 okk(AI.parseMoney('100.000') === 100000, '"100.000" → 100000');

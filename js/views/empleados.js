@@ -281,6 +281,7 @@
       '<button class="tab ' + (state.tab === 'pagos' ? 'active' : '') + '" data-tab="pagos">Pagos (' + stAll.pays.length + ')</button>' +
       '<button class="tab ' + (state.tab === 'asistencia' ? 'active' : '') + '" data-tab="asistencia">Asistencia (' + stAll.attendance.length + ')</button>' +
       '<button class="tab ' + (state.tab === 'obra' ? 'active' : '') + '" data-tab="obra">Horas por obra (' + stAll.byWorkList.length + ')</button>' +
+      '<button class="tab ' + (state.tab === 'hist' ? 'active' : '') + '" data-tab="hist">Historial completo</button>' +
       '</div>' +
       '<div id="tabWrap">' + tabHTML(state.tab, ctx) + '</div>' +
       '</section>';
@@ -322,7 +323,8 @@
 
   function hoursCell(hours) {
     if (!hours || !hours.length) return '<span class="muted">—</span>';
-    return hours.map(h => UI.escapeHtml(workShort(h.workId)) + ' · <b>' + UI.fmtNum(h.hours) + ' h</b>').join('<br>');
+    return hours.map(h => UI.escapeHtml(workShort(h.workId)) + ' · <b>' + UI.fmtNum(h.hours) + ' h</b>' +
+      (h.tipo === 'extra' ? ' ' + UI.chip('Extra', 'warning', 'zap') : '')).join('<br>');
   }
 
   function tabHTML(tab, ctx) {
@@ -375,6 +377,40 @@
           '<tr><td colspan="5">' + UI.emptyState('calendar', 'Sin registros de asistencia', 'Cargá la primera jornada.') + '</td></tr>') +
         '</tbody></table></div>';
     }
+    /* Historial completo: línea de tiempo cronológica (jornadas + pagos + adelantos) */
+    if (tab === 'hist') {
+      const events = [];
+      (stAll.attendance || []).forEach(a => {
+        events.push({
+          date: a.date,
+          html: (a.status === 'presente' ? UI.chip('Presente', 'success') : UI.chip('Ausente', 'danger')) +
+            ' ' + hoursCell(a.hours) +
+            (a.notes ? ' <span class="muted small">· ' + UI.escapeHtml(a.notes) + '</span>' : ''),
+        });
+      });
+      (stAll.pays || []).forEach(p => {
+        events.push({
+          date: p.date,
+          html: (p.expenseKind === 'adelanto' ? UI.chip('Adelanto', 'warning', 'zap') : UI.chip('Sueldo pagado', 'success', 'wallet')) +
+            ' <b class="neg">−' + UI.fmtMoney(p.amount) + '</b>' +
+            ' <span class="muted small">' + UI.escapeHtml(p.description || '') + '</span>',
+        });
+      });
+      events.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+      /* Antigüedad: fecha de alta del legajo o primera actividad registrada */
+      const startDate = e.createdAt || (events.length ? events[events.length - 1].date : S.todayISO());
+      let meses = Math.max(0, Math.round((new Date(S.todayISO()) - new Date(startDate)) / (86400000 * 30.44)));
+      const antig = meses >= 24 ? Math.floor(meses / 12) + ' años' + (meses % 12 ? ' y ' + (meses % 12) + ' meses' : '') : (meses || 'menos de 1 mes');
+      return '<div class="split-row" style="margin-bottom:12px">' +
+        '<span class="muted">📅 En el legajo desde el <b>' + UI.fmtDate(startDate) + '</b> · ' + antig + '</span>' +
+        '<span class="muted">' + events.length + ' evento' + (events.length !== 1 ? 's' : '') + '</span></div>' +
+        '<div class="stack">' +
+        (events.map(ev => '<div class="split-row" style="align-items:flex-start;gap:10px">' +
+          '<span class="muted small" style="min-width:88px;padding-top:4px">' + UI.fmtDate(ev.date) + '</span>' +
+          '<span style="flex:1;min-width:0">' + ev.html + '</span></div>').join('') ||
+          UI.emptyState('clock', 'Sin historial todavía', 'Registrá jornadas, pagos o adelantos para armar la línea de tiempo.')) +
+        '</div>';
+    }
     const rows = stAll.byWorkList;
     return '<div class="table-wrap"><table class="data-table">' +
       '<thead><tr><th>Obra</th><th class="num">Días</th><th class="num">Horas</th><th class="num">% del total</th>' +
@@ -403,7 +439,7 @@
     if (addAtt) addAtt.addEventListener('click', () => openAttendanceModal({ employeeId: ctx.e.id }));
     const absent = wrap.querySelector('#btnAbsent');
     if (absent) absent.addEventListener('click', () => {
-      S.add('attendance', { employeeId: ctx.e.id, date: S.todayISO(), status: 'ausente', hours: [], notes: '' });
+      S.addAttendance({ employeeId: ctx.e.id, date: S.todayISO(), status: 'ausente', hours: [], notes: '' });
       UI.toast('Ausencia de hoy registrada');
       G.router.refresh();
     });
@@ -497,6 +533,7 @@
         if (onSaved) onSaved(S.employeeById(e.id));
       } else {
         if (G.plan && !G.plan.checkLimit('empleados')) return;
+        payload.createdAt = S.todayISO();   // fecha de alta del legajo (antigüedad)
         const emp = S.add('employees', payload);
         UI.toast('Empleado "' + S.employeeName(emp) + '" agregado');
         if (onSaved) onSaved(emp);
@@ -530,9 +567,14 @@
         '<option value="ausente"' + (att && att.status === 'ausente' ? ' selected' : '') + '>Ausente</option>' +
         '</select></div>' +
         '<div class="field span-2"><label>Notas</label><input class="input" id="fNotes" value="' + UI.escapeHtml(att ? att.notes : '') + '" placeholder="Ej.: Media jornada, lluvia, etc."></div>' +
-        '<div class="field span-2" id="hoursBlock"><label>Horas por obra</label>' +
+        '<div class="field span-2" id="hoursBlock"><label>Horas normales por obra</label>' +
         '<div id="hoursWrap"></div>' +
         '<button class="btn btn-soft btn-sm" id="btnAddHora">' + UI.icon('plus', 14) + 'Agregar obra</button>' +
+        '</div>' +
+        '<div class="field span-2" id="hoursExtraBlock"><label>⚡ Horas extras (doble turno)</label>' +
+        '<div id="hoursWrapExtra"></div>' +
+        '<button class="btn btn-soft-warning btn-sm" id="btnAddExtra">' + UI.icon('plus', 14) + 'Agregar horas extras</button>' +
+        '<span class="form-hint">Quedan registradas por separado de la jornada regular: no duplican la asistencia del día.</span>' +
         '</div>' +
         '</div>',
       footer: '<button class="btn btn-ghost" data-cancel>Cancelar</button><button class="btn btn-primary" data-save>' + (isEdit ? 'Guardar cambios' : 'Registrar') + '</button>',
@@ -551,13 +593,22 @@
     }
 
     const hoursWrap = m.panel.querySelector('#hoursWrap');
-    const rows = att && att.hours && att.hours.length ? att.hours : [{ workId: opts.workId || '', hours: 8 }];
-    rows.forEach(h => {
+    const hoursWrapExtra = m.panel.querySelector('#hoursExtraBlock').querySelector('#hoursWrapExtra');
+    const normales = (att && att.hours && att.hours.length ? att.hours : [{ workId: opts.workId || '', hours: 8 }]).filter(h => h.tipo !== 'extra');
+    const extras = (att && att.hours ? att.hours : []).filter(h => h.tipo === 'extra');
+    normales.forEach(h => {
       const div = document.createElement('div');
       div.innerHTML = hourRow(h);
       const row = div.firstElementChild;
       row.querySelector('[data-delrow]').addEventListener('click', () => { row.remove(); });
       hoursWrap.appendChild(row);
+    });
+    extras.forEach(h => {
+      const div = document.createElement('div');
+      div.innerHTML = hourRow(h);
+      const row = div.firstElementChild;
+      row.querySelector('[data-delrow]').addEventListener('click', () => { row.remove(); });
+      hoursWrapExtra.appendChild(row);
     });
     m.panel.querySelector('#btnAddHora').addEventListener('click', () => {
       const div = document.createElement('div');
@@ -565,6 +616,13 @@
       const row = div.firstElementChild;
       row.querySelector('[data-delrow]').addEventListener('click', () => { row.remove(); });
       hoursWrap.appendChild(row);
+    });
+    m.panel.querySelector('#btnAddExtra').addEventListener('click', () => {
+      const div = document.createElement('div');
+      div.innerHTML = hourRow({ hours: 2 });
+      const row = div.firstElementChild;
+      row.querySelector('[data-delrow]').addEventListener('click', () => { row.remove(); });
+      hoursWrapExtra.appendChild(row);
     });
 
     /* Alta rápida de empleado desde la jornada: al guardar, se refresca el selector */
@@ -577,6 +635,7 @@
 
     const syncStatus = () => {
       m.panel.querySelector('#hoursBlock').hidden = m.panel.querySelector('#fStatus').value !== 'presente';
+      m.panel.querySelector('#hoursExtraBlock').hidden = m.panel.querySelector('#fStatus').value !== 'presente';
     };
     m.panel.querySelector('#fStatus').addEventListener('change', syncStatus);
     syncStatus();
@@ -592,7 +651,12 @@
       hoursWrap.querySelectorAll('.att-row').forEach(row => {
         const workId = row.querySelector('[data-k="work"]').value;
         const h = UI.readNum(row.querySelector('[data-k="hours"]'));
-        if (workId && h > 0) hours.push({ workId, hours: h });
+        if (workId && h > 0) hours.push({ workId, hours: h, tipo: 'normal' });
+      });
+      hoursWrapExtra.querySelectorAll('.att-row').forEach(row => {
+        const workId = row.querySelector('[data-k="work"]').value;
+        const h = UI.readNum(row.querySelector('[data-k="hours"]'));
+        if (h > 0) hours.push({ workId: workId || null, hours: h, tipo: 'extra' });
       });
       const payload = { employeeId, date, status, hours: status === 'presente' ? hours : [], notes: m.panel.querySelector('#fNotes').value.trim() };
       const existing = isEdit ? att : S.attendanceFor(employeeId, date);
@@ -600,7 +664,7 @@
         S.update('attendance', existing.id, payload);
         UI.toast('Jornada actualizada');
       } else {
-        S.add('attendance', payload);
+        S.addAttendance(payload);   // anti-duplicados: fusiona si ya existía la fecha
         UI.toast('Jornada registrada');
       }
       m.close();

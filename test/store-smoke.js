@@ -110,7 +110,7 @@ console.log('herramientas OK · a1: días en obra', u2.totalDays, '· movimiento
 S.add('contacts', { type: 'cliente', name: 'Cliente Foto', phone: '', email: '', photo: 'data:image/jpeg;base64,AAAA' });
 const cf = S.data.contacts.find(c => c.name === 'Cliente Foto');
 if (!cf || cf.photo !== 'data:image/jpeg;base64,AAAA') throw new Error('foto de contacto no persiste');
-S.add('employees', { firstName: 'Foto', lastName: 'Empleado', phone: '', photo: 'data:image/jpeg;base64,BBBB' });
+S.add('employees', { firstName: 'Foto', lastName: 'Empleado', phone: '', createdAt: S.todayISO(), photo: 'data:image/jpeg;base64,BBBB' });
 const ef = S.data.employees.find(e => e.firstName === 'Foto');
 if (!ef || ef.photo !== 'data:image/jpeg;base64,BBBB') throw new Error('foto de empleado no persiste');
 const antes = JSON.stringify(S.data);
@@ -164,5 +164,20 @@ if (S.presentToday().length !== 1) throw new Error('startReal debe dejar 1 jorna
 S.startEmpty();
 if (S.data.works.length !== 0 || S.data.contacts.length !== 0 || S.data.employees.length !== 0) throw new Error('startEmpty debe vaciar todo');
 console.log('startReal (1 ejemplo por módulo, montos $0) y startEmpty OK');
+
+// Anti-duplicados de jornadas + horas extras (doble turno)
+const empDup = S.add('employees', { firstName: 'Dup', lastName: 'Test', phone: '', createdAt: S.todayISO() });
+S.add('attendance', { employeeId: empDup.id, date: S.todayISO(), status: 'presente', hours: [{ workId: 'w1', hours: 8, tipo: 'normal' }], notes: '' });
+S.add('attendance', { employeeId: empDup.id, date: S.todayISO(), status: 'presente', hours: [{ workId: 'w1', hours: 8, tipo: 'normal' }], notes: '' });   // idéntica → NO debe duplicar
+const dupCount = S.data.attendance.filter(a => a.employeeId === empDup.id && a.date === S.todayISO()).length;
+if (dupCount !== 1) throw new Error('se duplicó una jornada idéntica (mismo empleado y fecha), count=' + dupCount);
+let dupRec = S.data.attendance.find(a => a.employeeId === empDup.id && a.date === S.todayISO());
+if (dupRec.hours.length !== 1) throw new Error('la jornada duplicada debería fusionarse (1 entrada de horas), got ' + dupRec.hours.length);
+S.add('attendance', { employeeId: empDup.id, date: S.todayISO(), status: 'presente', hours: [{ workId: 'w2', hours: 3, tipo: 'extra' }], notes: 'doble turno' });   // extras → desglose aparte
+dupRec = S.data.attendance.find(a => a.employeeId === empDup.id && a.date === S.todayISO());
+if (dupRec.hours.length !== 2) throw new Error('las horas extras deberían sumarse como desglose separado, got ' + dupRec.hours.length);
+if (!dupRec.hours.some(h => h.tipo === 'extra' && h.hours === 3)) throw new Error('falta la entrada de horas extras');
+if (dupRec.notes !== 'doble turno') throw new Error('las notas de la fusión no se conservaron');
+console.log('anti-duplicados de jornadas + horas extras OK');
 
 console.log('✔ SMOKE TEST PASADO');
