@@ -954,8 +954,12 @@
     const bu = document.getElementById('btnUser');
     if (bu) {
       bu.hidden = false;
-      bu.textContent = '👤 ' + (sess.email || 'Cuenta').split('@')[0];
-      bu.title = (sess.email || '') + ' · ' + pi.label;
+      /* Nick legible: apodo del perfil, o la parte del correo antes del @ */
+      const prof = (S.data.settings && S.data.settings.profile) || {};
+      const nick = (prof.apodo && String(prof.apodo).trim()) ||
+        ((sess && sess.email) || 'Cuenta').split('@')[0];
+      bu.textContent = '👤 ' + nick;
+      bu.title = ((sess && sess.email) || '') + ' · ' + pi.label;
       bu.addEventListener('click', openBackup);
     }
 

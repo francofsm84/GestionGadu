@@ -49,7 +49,7 @@
         '<div class="grid-form">' +
         '<div class="field"><label>Nombre</label><input class="input" id="obNombre" value="' + UI.escapeHtml(prefNombre) + '" placeholder="Tu nombre"></div>' +
         '<div class="field"><label>Apellido</label><input class="input" id="obApellido" value="' + UI.escapeHtml(p.apellido) + '" placeholder="Tu apellido"></div>' +
-        '<div class="field"><label>Apodo (cómo te dicen en la obra)</label><input class="input" id="obApodo" value="' + UI.escapeHtml(p.apodo) + '" placeholder="Ej.: Fran, Colo, Tano…"></div>' +
+        '<div class="field"><label>Apodo / Nombre de usuario (se muestra en el encabezado)</label><input class="input" id="obApodo" value="' + UI.escapeHtml(p.apodo) + '" placeholder="Ej.: Fran, Colo, Tano…"></div>' +
         '<div class="field"><label>Moneda principal</label><select class="select" id="obMoneda">' +
         '<option value="ARS"' + (p.moneda !== 'USD' ? ' selected' : '') + '>Pesos ARS ($)</option>' +
         '<option value="USD"' + (p.moneda === 'USD' ? ' selected' : '') + '>Dólares USD (US$)</option>' +

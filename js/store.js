@@ -338,6 +338,11 @@
   }
   function normalize() {
     if (!data.settings) data.settings = { company: 'GADU Construye', theme: 'dark', reservePercent: 30 };
+    /* Sincronización automática ACTIVA por defecto: cada guardado se sube en
+       segundo plano sin botón manual. La copia local en localStorage se
+       mantiene SIEMPRE como respaldo ante cortes de conexión. */
+    if (!data.settings.cloud) data.settings.cloud = {};
+    if (data.settings.cloud.autoPush === undefined) data.settings.cloud.autoPush = true;
     ['contacts', 'works', 'budgets', 'incomes', 'expenses', 'assets', 'distributions', 'employees', 'attendance', 'seguros', 'compromisos'].forEach(k => {
       if (!Array.isArray(data[k])) data[k] = [];
     });
