@@ -99,12 +99,21 @@ serve(async (req) => {
 
   try {
     const payload = await req.json().catch(() => ({}));
+    /* Log de diagnóstico: cuerpo exacto que envía Meta */
+    console.log("[whatsapp-webhook] POST recibido:", JSON.stringify(payload));
     const inc = parseIncoming(payload);
-    if (!inc) return json({ ok: false, error: "mensaje no reconocido (se espera texto o nota de voz transcrita)" });
+    if (!inc) {
+      console.warn("[whatsapp-webhook] payload no reconocido:", JSON.stringify(payload));
+      return json({ ok: false, error: "mensaje no reconocido (se espera texto o nota de voz transcrita)" });
+    }
+    console.log("[whatsapp-webhook] from=" + inc.from + " text=" + JSON.stringify(inc.text));
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    if (!supabaseUrl || !serviceKey) return json({ ok: false, error: "configuración incompleta" }, 500);
+    if (!supabaseUrl || !serviceKey) {
+      console.error("[whatsapp-webhook] falta SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
+      return json({ ok: false, error: "configuración incompleta" }, 500);
+    }
 
     const rest = async (path: string, opts: Record<string, unknown> = {}) => {
       const headers = {
@@ -116,19 +125,22 @@ serve(async (req) => {
       return await fetch(supabaseUrl + "/rest/v1/" + path, { ...opts, headers } as RequestInit);
     };
 
-    /* 1) Vinculación: "GADU · Mi código de verificación: 123456" */
-    const code = matchVerificationCode(inc.text);
+    /* 1) Vinculación: código alfanumérico (mayúsculas, sin espacios) */
+    const code = (matchVerificationCode(inc.text) || "").trim().toUpperCase();
     if (code) {
+      console.log("[whatsapp-webhook] código extraído:", code);
       const q = "data->settings->profile->whatsapp->>code=eq." + encodeURIComponent(code);
       const r = await rest("app_data?select=user_id,data&" + q + "&limit=1");
       const rows = await r.json().catch(() => []);
       if (!r.ok || !Array.isArray(rows) || !rows.length) {
+        console.warn("[whatsapp-webhook] código no encontrado en app_data:", code, "(http", r.status + ")");
         await sendWhatsApp(inc.from, "🤖 Ese código no coincide con ninguna cuenta GADU. Revisalo y volvé a enviarlo.");
         return json({ ok: false, error: "código no encontrado" });
       }
       const row = rows[0];
       const wp = row.data?.settings?.profile?.whatsapp || {};
       if (!phoneMatches(wp.phone, inc.from)) {
+        console.warn("[whatsapp-webhook] teléfono no coincide: from=" + inc.from + " perfil=" + String(wp.phone));
         await sendWhatsApp(inc.from, "🤖 El código es válido pero este número no coincide con el teléfono registrado en tu perfil.");
         return json({ ok: false, error: "teléfono no coincide" });
       }
@@ -147,6 +159,7 @@ serve(async (req) => {
         console.error("[whatsapp-webhook] falló marcar linked:", up.status);
         return json({ ok: false, error: "no se pudo guardar la vinculación" }, 500);
       }
+      console.log("[whatsapp-webhook] cuenta vinculada:", row.user_id, "teléfono:", inc.from);
       const reply = "¡Hola! Tu cuenta de Gestión GADU ha sido vinculada correctamente con este número de WhatsApp. Ya podés recibir tus avisos y reportes aquí.";
       await sendWhatsApp(inc.from, reply);
       return json({ ok: true, from: inc.from, reply });
@@ -157,6 +170,7 @@ serve(async (req) => {
     const r2 = await rest("app_data?select=user_id,data&" + q2 + "&limit=1");
     const rows2 = await r2.json().catch(() => []);
     if (!r2.ok || !Array.isArray(rows2) || !rows2.length) {
+      console.warn("[whatsapp-webhook] número no vinculado:", inc.from, "(http", r2.status + ")");
       const rpl = "🤖 No reconozco este número. Primero vinculá tu cuenta: desde la app generá tu código y envialo por WhatsApp.";
       await sendWhatsApp(inc.from, rpl);
       return json({ ok: false, error: "número no vinculado", reply: rpl });
