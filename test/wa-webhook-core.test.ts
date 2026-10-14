@@ -34,9 +34,11 @@ const voz = parseIncoming({
 okk(voz !== null && voz.text.includes("bolsas de cemento"), "payload Meta Cloud API (nota de voz transcrita)");
 okk(parseIncoming({ from: "", text: "" }) === null, "payload vacío → null");
 
-/* 2 · Código de verificación */
-okk(matchVerificationCode("GADU · Mi código de verificación: 123456") === "123456", "código detectado");
-okk(matchVerificationCode("GADU · Mi código de verificación 654321") === "654321", "código sin dos puntos");
+/* 2 · Código de verificación (alfanumérico actual + histórico numérico) */
+okk(matchVerificationCode("GADU · Mi código de verificación: 123456") === "123456", "código histórico detectado");
+okk(matchVerificationCode("GADU · Mi código de verificación 654321") === "654321", "código histórico sin dos puntos");
+okk(matchVerificationCode("GADU · Vincular WhatsApp · Código: 99DKFR · Teléfono: +5493547469000") === "99DKFR", "código alfanumérico del botón Vincular WhatsApp");
+okk(matchVerificationCode("Código: 99dkfr") === "99DKFR", "código alfanumérico en minúscula → se normaliza a mayúsculas");
 okk(matchVerificationCode("Hola, cómo va") === null, "sin código → null");
 
 /* 3 · phoneMatches */

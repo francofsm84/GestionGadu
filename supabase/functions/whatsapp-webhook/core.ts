@@ -38,10 +38,13 @@ export function parseIncoming(payload: unknown): Incoming | null {
   }
 }
 
-/* "GADU · Mi código de verificación: 123456" → "123456" */
+/* Extrae el código de verificación del mensaje.
+   Soporta el formato actual del botón "Vincular WhatsApp" ("Código: 99DKFR",
+   alfanumérico) y el formato histórico ("código de verificación: 123456").
+   Devuelve el código SIEMPRE en mayúsculas para comparar de forma estable. */
 export function matchVerificationCode(text: string): string | null {
-  const m = String(text || "").match(/c[oó]digo de verificaci[oó]n:?\s*(\d{6})/i);
-  return m ? m[1] : null;
+  const m = String(text || "").match(/c[oó]digo(?:\s+de\s+verificaci[oó]n)?:?\s*([A-Z0-9]{4,10})/i);
+  return m ? m[1].toUpperCase() : null;
 }
 
 export function normalizePhone(p: unknown): string {
