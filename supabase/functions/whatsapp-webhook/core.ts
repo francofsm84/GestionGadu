@@ -21,9 +21,15 @@ export function parseIncoming(payload: unknown): Incoming | null {
     const value = entry?.changes?.[0]?.value as Record<string, unknown>;
     const msg = (value?.messages as Array<Record<string, unknown>>)?.[0];
     if (!msg) return null;
-    const from = (value?.contacts as Array<Record<string, unknown>>)?.[0]?.wa_id
-      || value?.metadata?.display_phone_number
-      || "";
+    /* Emisor: contacts[0].wa_id → messages[0].from → metadata.display_phone_number.
+       El payload de prueba de Meta trae el número en messages[0].from (y a veces
+       contacts vacío); metadata.display_phone_number es el número del BOT (último recurso). */
+    const from = String(
+      (value?.contacts as Array<Record<string, unknown>>)?.[0]?.wa_id
+      || (msg.from as string | undefined)
+      || (value?.metadata as Record<string, unknown>)?.display_phone_number
+      || ""
+    );
     let text = "";
     if (msg.type === "text") {
       text = String((msg.text as Record<string, unknown>)?.body || "");

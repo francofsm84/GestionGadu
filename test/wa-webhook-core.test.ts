@@ -25,6 +25,24 @@ const meta = parseIncoming({
   } }] }],
 });
 okk(meta !== null && meta.from === "5493547469000" && meta.text === "Hola GADU", "payload Meta Cloud API (texto)");
+/* Payload de prueba de Meta: messages[0].from como emisor (contacts puede estar vacío) */
+const metaTest = parseIncoming({
+  object: "whatsapp_business_account",
+  entry: [{ id: "4685722798416623", changes: [{ value: {
+    messaging_product: "whatsapp",
+    metadata: { display_phone_number: "15556643689", phone_number_id: "1360123317189034" },
+    contacts: [{ profile: { name: "Franco" }, wa_id: "15556643689" }],
+    messages: [{ from: "15556643689", id: "wamid.xyz", type: "text", text: { body: "Código: 99DKFR" } }],
+  } }] }],
+});
+okk(metaTest !== null && metaTest.from === "15556643689" && metaTest.text === "Código: 99DKFR", "payload de prueba de Meta (messages[0].from + wa_id)");
+const metaTestSinContactos = parseIncoming({
+  entry: [{ changes: [{ value: {
+    metadata: { display_phone_number: "15556643689" },
+    messages: [{ from: "15556643689", type: "text", text: { body: "Hola" } }],
+  } }] }],
+});
+okk(metaTestSinContactos !== null && metaTestSinContactos.from === "15556643689", "payload sin contacts → usa messages[0].from (no el del bot)");
 const voz = parseIncoming({
   entry: [{ changes: [{ value: {
     contacts: [{ wa_id: "5493547469000" }],
