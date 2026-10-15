@@ -57,6 +57,7 @@ function json(obj: unknown, status = 200) {
 async function sendWhatsApp(to: string, text: string) {
   const token = Deno.env.get("WHATSAPP_TOKEN") || "";
   const phoneId = Deno.env.get("WHATSAPP_PHONE_ID") || "";
+  const apiVersion = Deno.env.get("WHATSAPP_API_VERSION") || "v21.0";
   if (!token || !phoneId) {
     console.log("[whatsapp-webhook] sin WHATSAPP_TOKEN/WHATSAPP_PHONE_ID → respuesta en body");
     return false;
@@ -69,9 +70,9 @@ async function sendWhatsApp(to: string, text: string) {
     type: "text",
     text: { body: text },
   };
-  /* Log detallado del payload exacto que se envía a Meta (incluye el `to`) */
-  console.log("[whatsapp-webhook] sendWhatsApp payload:", JSON.stringify(body));
-  const res = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+  /* Log detallado del payload exacto que se envía a Meta (incluye el `to` y la versión) */
+  console.log("[whatsapp-webhook] sendWhatsApp payload (", apiVersion, "):", JSON.stringify(body));
+  const res = await fetch(`https://graph.facebook.com/${apiVersion}/${phoneId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(body),
@@ -123,7 +124,8 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    /* Log de diagnóstico: cuerpo bruto exacto que envía Meta */
+    /* Registro INCONDICIONAL de cualquier evento enviado por Meta */
+    console.log("=== WEBHOOK EVENT RECEIVED ===", JSON.stringify(body));
     console.log("RAW BODY:", JSON.stringify(body));
     const inc = parseIncoming(body);
     if (!inc) {
