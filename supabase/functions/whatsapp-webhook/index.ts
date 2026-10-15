@@ -125,6 +125,7 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     /* Registro INCONDICIONAL de cualquier evento enviado por Meta */
+    console.log("=== PAYLOAD ENTRANTE ===", JSON.stringify(body));
     console.log("=== WEBHOOK EVENT RECEIVED ===", JSON.stringify(body));
     console.log("RAW BODY:", JSON.stringify(body));
     const inc = parseIncoming(body);
