@@ -34,6 +34,7 @@ import {
   buildContext,
   executeAction,
   localIntent,
+  toMetaPhone,
 } from "./core.ts";
 
 const corsHeaders = {
@@ -59,9 +60,11 @@ async function sendWhatsApp(to: string, text: string) {
     console.log("[whatsapp-webhook] sin WHATSAPP_TOKEN/WHATSAPP_PHONE_ID → respuesta en body");
     return false;
   }
+  /* Destinatario normalizado para cuentas de prueba AR (549… → 54… sin el 9) */
+  const toNormalized = toMetaPhone(to);
   const body = {
     messaging_product: "whatsapp",
-    to,
+    to: toNormalized,
     type: "text",
     text: { body: text },
   };

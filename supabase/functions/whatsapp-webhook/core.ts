@@ -81,6 +81,17 @@ export function rawDigits(p: unknown): string {
   return String(p == null ? "" : p).replace(/\D/g, "");
 }
 
+/* `to` para Meta en cuentas de PRUEBA de Argentina: descarta el "9" saliente
+   de móvil. "5493547469000" (13 dígitos) → "543547469000" (12 dígitos).
+   En sandbox de Meta a veces el destinatario permitido se registra SIN el 9. */
+export function toMetaPhone(p: unknown): string {
+  let d = rawDigits(p);
+  if (d.startsWith("549") && d.length === 13) {
+    d = "54" + d.slice(3);
+  }
+  return d;
+}
+
 /* El teléfono del perfil debe coincidir con el remitente (últimos 9 dígitos).
    Sin teléfono guardado en el perfil, el código por sí solo vincula. */
 export function phoneMatches(profilePhone: unknown, sender: unknown): boolean {
