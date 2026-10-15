@@ -95,9 +95,15 @@ async function sendWhatsApp(to: string, text: string) {
 }
 
 serve(async (req) => {
-  /* Rastreo verbose: imprime SIEMPRE método y URL de cualquier petición,
-     para descartar filtros internos y confirmar que Meta está llegando. */
+  /* Rastreo verbose: imprime SIEMPRE método, URL y headers de cualquier
+     petición, para descartar filtros internos y validar el formato de los
+     headers que envía Meta. */
   console.log("[whatsapp-webhook] request:", req.method, req.url);
+  try {
+    const headers: Record<string, string> = {};
+    req.headers.forEach((v, k) => { headers[k] = v; });
+    console.log("[whatsapp-webhook] headers:", JSON.stringify(headers));
+  } catch (e) { console.warn("[whatsapp-webhook] no se pudieron leer headers:", e); }
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   /* ===== Verificación del webhook de Meta (GET) =====
