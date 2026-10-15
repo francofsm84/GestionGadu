@@ -64,13 +64,13 @@ export function matchVerificationCode(text: string): string | null {
 }
 
 export function normalizePhone(p: unknown): string {
-  let d = String(p == null ? "" : p).replace(/\D/g, "");
-  /* Argentina (54): estandariza móviles sin el "9" antepuesto.
-     Un celular AR con WhatsApp es 54 + 9 + <área> + <número> (13 dígitos).
-     Si llega "543547469000" (12 dígitos, sin el 9), se convierte en
-     "5493547469000" para que coincida con el formato guardado en app_data. */
-  if (d.startsWith("54") && d.length === 12 && d[2] !== "9") {
-    d = "54" + "9" + d.slice(2);
+  let d = rawDigits(p);
+  /* Argentina (54): canonicaliza al formato SIN el "9" de móvil.
+     "5493547469000" (13 dígitos) → "543547469000" (12 dígitos).
+     Así "549…", "54…" y "+54…" (con o sin el 9) siempre comparan igual
+     contra el teléfono guardado en app_data. */
+  if (d.startsWith("549") && d.length === 13) {
+    d = "54" + d.slice(3);
   }
   return d;
 }
