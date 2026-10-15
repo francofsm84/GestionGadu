@@ -94,6 +94,9 @@ async function sendWhatsApp(to: string, text: string) {
 }
 
 serve(async (req) => {
+  /* Rastreo verbose: imprime SIEMPRE método y URL de cualquier petición,
+     para descartar filtros internos y confirmar que Meta está llegando. */
+  console.log("[whatsapp-webhook] request:", req.method, req.url);
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   /* ===== Verificación del webhook de Meta (GET) =====
@@ -133,7 +136,7 @@ serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     if (!supabaseUrl || !serviceKey) {
       console.error("[whatsapp-webhook] falta SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
-      return json({ ok: false, error: "configuración incompleta" }, 500);
+      return json({ ok: false, error: "configuración incompleta" });
     }
 
     const rest = async (path: string, opts: Record<string, unknown> = {}) => {
@@ -181,7 +184,7 @@ serve(async (req) => {
       });
       if (!up.ok) {
         console.error("[whatsapp-webhook] falló marcar linked:", up.status);
-        return json({ ok: false, error: "no se pudo guardar la vinculación" }, 500);
+        return json({ ok: false, error: "no se pudo guardar la vinculación" });
       }
       console.log("[whatsapp-webhook] cuenta vinculada:", row.user_id, "teléfono:", inc.from);
       const reply = "¡Hola! Tu cuenta de Gestión GADU ha sido vinculada correctamente con este número de WhatsApp. Ya podés recibir tus avisos y reportes aquí.";
@@ -268,7 +271,7 @@ serve(async (req) => {
         });
         if (!up.ok) {
           console.error("[whatsapp-webhook] falló impactar el movimiento:", up.status);
-          return json({ ok: false, error: "no se pudo guardar el movimiento" }, 500);
+          return json({ ok: false, error: "no se pudo guardar el movimiento" });
         }
         const reply = (aiReply ? aiReply + "\n\n" : "") + "✅ " + res.label;
         await sendWhatsApp(inc.from, reply);
