@@ -139,7 +139,7 @@ export function normCategory(raw: string): string {
   if (/cemento|material|arena|ladrillo|hierro|pintura|yeso|cal|cer[aá]mic/.test(f)) return "Materiales";
   if (/nafta|gasoil|combustible|gas|diesel/.test(f)) return "Combustible";
   if (/flete|cami[oó]n|transporte|acarreo/.test(f)) return "Fletes";
-  if (/comida|almuerzo|vianda|asado|bebida/.test(f)) return "Comidas";
+  if (/comida|almuerzo|vianda|asado|bebida|cafe|desayuno|merienda|pan|empanada|picada/.test(f)) return "Comidas";
   if (/mano de obra|jornal|pe[oó]n|ayudante|oficial/.test(f)) return "Mano de obra";
   if (/herramienta|equipo|m[aá]quina|alquiler/.test(f)) return "Herramientas / Equipamiento";
   if (/seguro|art|p[oó]liza/.test(f)) return "Seguros";
