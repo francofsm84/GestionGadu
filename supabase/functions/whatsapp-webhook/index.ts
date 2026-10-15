@@ -30,6 +30,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
   parseIncoming,
   matchVerificationCode,
+  normalizePhone,
   phoneMatches,
   buildContext,
   executeAction,
@@ -170,7 +171,7 @@ serve(async (req) => {
       row.data.settings.profile.whatsapp = {
         ...wp,
         linked: true,
-        linkedPhone: inc.from,
+        linkedPhone: normalizePhone(inc.from),   // forma canónica (54 sin 9)
         linkedAt: new Date().toISOString(),
       };
       const up = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
@@ -188,18 +189,34 @@ serve(async (req) => {
       return json({ ok: true, from: inc.from, reply });
     }
 
-    /* 2) Usuario vinculado por teléfono */
-    const q2 = "data->settings->profile->whatsapp->>linkedPhone=eq." + encodeURIComponent(inc.from);
-    const r2 = await rest("app_data?select=user_id,data&" + q2 + "&limit=1");
-    const rows2 = await r2.json().catch(() => []);
-    console.log("[whatsapp-webhook] consulta app_data (teléfono):", inc.from, "→ http", r2.status, "·", (Array.isArray(rows2) ? rows2.length : 0), "coincidencia(s)", (Array.isArray(rows2) && rows2[0]) ? ("user_id=" + rows2[0].user_id) : "");
-    if (!r2.ok || !Array.isArray(rows2) || !rows2.length) {
-      console.warn("[whatsapp-webhook] número no vinculado:", inc.from, "(http", r2.status + ")");
+    /* 2) Usuario vinculado: busca por linkedPhone O por el teléfono del perfil,
+       probando todas las variantes del número (con/sin el 9, con/sin '+').
+       Cubre el caso donde el perfil se guarda como "+543547469000" y el wa_id
+       llega como "5493547469000" (o viceversa). */
+    const fromCandidates = [...new Set([
+      inc.from,
+      normalizePhone(inc.from),
+      "+" + normalizePhone(inc.from),
+    ])];
+    let row2: { user_id: string; data: Record<string, unknown> } | null = null;
+    const fields = ["linkedPhone", "phone"];
+    for (const field of fields) {
+      for (const phone of fromCandidates) {
+        const q2 = "data->settings->profile->whatsapp->>" + field + "=eq." + encodeURIComponent(phone);
+        const r2 = await rest("app_data?select=user_id,data&" + q2 + "&limit=1");
+        const rows2 = await r2.json().catch(() => []);
+        console.log("[whatsapp-webhook] consulta app_data (" + field + "):", phone, "→ http", r2.status, "·", (Array.isArray(rows2) ? rows2.length : 0), "coincidencia(s)");
+        if (Array.isArray(rows2) && rows2.length) { row2 = rows2[0]; break; }
+      }
+      if (row2) break;
+    }
+    if (!row2) {
+      console.warn("[whatsapp-webhook] número no vinculado:", inc.from);
       const rpl = "🤖 No reconozco este número. Primero vinculá tu cuenta: desde la app generá tu código y envialo por WhatsApp.";
       await sendWhatsApp(inc.from, rpl);
       return json({ ok: false, error: "número no vinculado", reply: rpl });
     }
-    const row = rows2[0];
+    const row = row2;
     const data = row.data || {};
 
     /* 3) Mismo motor que el chat web: ai-assistant en modo servidor.
