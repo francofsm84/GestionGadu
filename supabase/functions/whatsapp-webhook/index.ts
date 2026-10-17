@@ -195,40 +195,66 @@ serve(async (req) => {
         console.error("[whatsapp-webhook] falló marcar linked:", up.status);
         return json({ ok: false, error: "no se pudo guardar la vinculación" });
       }
+      /* Sincronizar la columna canónica whatsapp_number en public.profiles */
+      try {
+        const pPatch = await rest("profiles?user_id=eq." + encodeURIComponent(row.user_id), {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ whatsapp_number: normalizePhone(inc.from) }),
+        });
+        if (!pPatch.ok) console.warn("[whatsapp-webhook] no se pudo sincronizar profiles.whatsapp_number:", pPatch.status);
+      } catch (e) {
+        console.warn("[whatsapp-webhook] error sincronizando profiles.whatsapp_number:", e);
+      }
       console.log("[whatsapp-webhook] cuenta vinculada:", row.user_id, "teléfono:", inc.from);
       const reply = "¡Hola! Tu cuenta de Gestión GADU ha sido vinculada correctamente con este número de WhatsApp. Ya podés recibir tus avisos y reportes aquí.";
       await sendWhatsApp(inc.from, reply);
       return json({ ok: true, from: inc.from, reply });
     }
 
-    /* 2) Usuario vinculado: busca por linkedPhone O por el teléfono del perfil,
-       probando todas las variantes del número (con/sin el 9, con/sin '+').
-       Cubre el caso donde el perfil se guarda como "+543547469000" y el wa_id
-       llega como "5493547469000" (o viceversa). */
+    /* 2) Usuario vinculado: busca por linkedPhone/phone (app_data) y por la
+       columna canónica whatsapp_number (public.profiles), probando todas las
+       variantes del número (con/sin el 9, con/sin '+'). */
     const fromCandidates = [...new Set([
       inc.from,
       normalizePhone(inc.from),
       "+" + normalizePhone(inc.from),
     ])];
-    let row2: { user_id: string; data: Record<string, unknown> } | null = null;
+    let userId2: string | null = null;
     const fields = ["linkedPhone", "phone"];
-    for (const field of fields) {
-      for (const phone of fromCandidates) {
+    for (const phone of fromCandidates) {
+      /* 2a) app_data: linkedPhone y phone */
+      for (const field of fields) {
         const q2 = "data->settings->profile->whatsapp->>" + field + "=eq." + encodeURIComponent(phone);
-        const r2 = await rest("app_data?select=user_id,data&" + q2 + "&limit=1");
+        const r2 = await rest("app_data?select=user_id&" + q2 + "&limit=1");
         const rows2 = await r2.json().catch(() => []);
         console.log("[whatsapp-webhook] consulta app_data (" + field + "):", phone, "→ http", r2.status, "·", (Array.isArray(rows2) ? rows2.length : 0), "coincidencia(s)");
-        if (Array.isArray(rows2) && rows2.length) { row2 = rows2[0]; break; }
+        if (Array.isArray(rows2) && rows2.length) { userId2 = rows2[0].user_id; break; }
       }
-      if (row2) break;
+      if (userId2) break;
+      /* 2b) public.profiles: columna canónica whatsapp_number */
+      const qp = "whatsapp_number=eq." + encodeURIComponent(phone);
+      const rp = await rest("profiles?select=user_id&" + qp + "&limit=1");
+      const rowsp = await rp.json().catch(() => []);
+      console.log("[whatsapp-webhook] consulta profiles (whatsapp_number):", phone, "→ http", rp.status, "·", (Array.isArray(rowsp) ? rowsp.length : 0), "coincidencia(s)");
+      if (Array.isArray(rowsp) && rowsp.length) { userId2 = rowsp[0].user_id; break; }
     }
-    if (!row2) {
+    if (!userId2) {
       console.warn("[whatsapp-webhook] número no vinculado:", inc.from);
       const rpl = "🤖 No reconozco este número. Primero vinculá tu cuenta: desde la app generá tu código y envialo por WhatsApp.";
       await sendWhatsApp(inc.from, rpl);
       return json({ ok: false, error: "número no vinculado", reply: rpl });
     }
-    const row = row2;
+    /* 2c) Recuperar el documento app_data del usuario encontrado */
+    const rData = await rest("app_data?select=user_id,data&user_id=eq." + encodeURIComponent(userId2) + "&limit=1");
+    const rowsData = await rData.json().catch(() => []);
+    if (!Array.isArray(rowsData) || !rowsData.length) {
+      console.warn("[whatsapp-webhook] usuario sin app_data:", userId2);
+      const rpl = "🤖 Encontré tu cuenta pero aún no tiene datos. Abrí la app una vez para sincronizar y volvé a intentarlo.";
+      await sendWhatsApp(inc.from, rpl);
+      return json({ ok: false, error: "sin app_data", reply: rpl });
+    }
+    const row = rowsData[0];
     const data = row.data || {};
 
     /* 3) Mismo motor que el chat web: ai-assistant en modo servidor.
