@@ -583,7 +583,8 @@ async function processMessage(body: unknown) {
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
   } catch (error) {
-    console.error("CRITICAL ERROR:", error);
+    console.error("[GADU-WA-QUEUE-FIX] CRITICAL ERROR en processMessage:", error);
+    throw error;   // ← propagar para que drainPhone lo marque como fallido y siga
   }
 }
 
@@ -597,12 +598,15 @@ async function drainPhone(phone: string) {
 
   let item = await claimNext(rest, phone);
   while (item) {
+    console.log("[GADU-WA-QUEUE-FIX] Procesando mensaje", item.id, "· status=", item.status, "· attempts=", item.attempts);
     try {
       await processMessage(item.payload);
       await markDone(rest, item.id);
+      console.log("[GADU-WA-QUEUE-FIX] mensaje", item.id, "procesado OK");
     } catch (e) {
-      console.error("[whatsapp-webhook] falló mensaje " + item.id, e);
+      console.error("[GADU-WA-QUEUE-FIX] Error en mensaje", item.id + ":", e);
       await markFailed(rest, item.id);
+      console.log("[GADU-WA-QUEUE-FIX] mensaje", item.id, "marcado como fallido, sigo con el siguiente");
     }
     item = await claimNext(rest, phone);
   }

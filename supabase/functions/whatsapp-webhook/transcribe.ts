@@ -70,30 +70,41 @@ async function geminiTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<
   }
   const model = Deno.env.get("GEMINI_MODEL") || "gemini-1.5-flash";
   const base64 = arrayBufferToBase64(buffer);
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: "Transcribí el audio de WhatsApp. Respondé SOLO con el texto transcrito, sin comentarios." },
-            { inline_data: { mime_type: mimeType, data: base64 } },
-          ],
-        }],
-      }),
-    },
-  );
-  if (!res.ok) {
-    console.error("[GADU-WA-AUDIO] geminiTranscribe falló:", res.status, await res.text().catch(() => ""));
+  /* Timeout de 8s: si Gemini tarda, abortamos y liberamos la cola. */
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: "Transcribí el audio de WhatsApp. Respondé SOLO con el texto transcrito, sin comentarios." },
+              { inline_data: { mime_type: mimeType, data: base64 } },
+            ],
+          }],
+        }),
+        signal: controller.signal,
+      },
+    );
+    if (!res.ok) {
+      console.error("[GADU-WA-AUDIO] geminiTranscribe falló:", res.status, await res.text().catch(() => ""));
+      return "";
+    }
+    const j = await res.json();
+    const text = j?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    if (text) console.log("[GADU-WA-AUDIO] ✅ transcripción Gemini:", text.slice(0, 80));
+    else console.warn("[GADU-WA-AUDIO] Gemini respondió 200 pero sin texto:", JSON.stringify(j).slice(0, 200));
+    return String(text).trim();
+  } catch (e) {
+    console.error("[GADU-WA-AUDIO] geminiTranscribe timeout/error:", e);
     return "";
+  } finally {
+    clearTimeout(timer);
   }
-  const j = await res.json();
-  const text = j?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  if (text) console.log("[GADU-WA-AUDIO] ✅ transcripción Gemini:", text.slice(0, 80));
-  else console.warn("[GADU-WA-AUDIO] Gemini respondió 200 pero sin texto:", JSON.stringify(j).slice(0, 200));
-  return String(text).trim();
 }
 
 async function transcribeMedia(mediaId: string): Promise<string> {
