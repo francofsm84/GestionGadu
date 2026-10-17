@@ -28,7 +28,6 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import {
-  parseIncoming,
   matchVerificationCode,
   normalizePhone,
   phoneMatches,
@@ -36,7 +35,9 @@ import {
   executeAction,
   localIntent,
   toMetaPhone,
+  extractFrom,
 } from "./core.ts";
+import { resolveIncomingText } from "./transcribe.ts";
 import { enqueueMessage, claimNext, markDone, markFailed } from "./queue.ts";
 
 const corsHeaders = {
@@ -168,8 +169,8 @@ serve(async (req) => {
   console.log("RAW BODY:", JSON.stringify(body));
 
   /* Encolar inmediato y procesar FIFO en segundo plano (no se pierde en ráfagas) */
-  const incQuick = parseIncoming(body);
-  const phoneQuick = incQuick ? normalizePhone(incQuick.from) : "desconocido";
+  const fromQuick = extractFrom(body);
+  const phoneQuick = fromQuick ? normalizePhone(fromQuick) : "desconocido";
   /* Encolar PRIMERO y recién después drenar (secuencial): si el drain corre
      antes de insertar, no ve el mensaje y queda "pending" para siempre. */
   fireAndForget((async () => {
@@ -277,11 +278,17 @@ async function processMessage(body: unknown) {
       await handleButtonReply(btn.from, btn.buttonId);
       return;
     }
-    const inc = parseIncoming(body);
-    if (!inc) {
+    const resolved = await resolveIncomingText(body);
+    if (!resolved) {
       console.warn("[whatsapp-webhook] payload no reconocido:", JSON.stringify(body));
       return;
     }
+    if (resolved.audioFailed) {
+      console.warn("[GADU-WA-AUDIO] transcripción falló para", resolved.from);
+      fireAndForget(sendWhatsApp(resolved.from, "🤖 No pude escuchar el audio, ¿me lo escribís?"));
+      return;
+    }
+    const inc = { from: resolved.from, text: resolved.text };
     console.log("[whatsapp-webhook] from=" + inc.from + " text=" + JSON.stringify(inc.text));
     console.log("[DEBUG] Remitente detectado: " + inc.from);
 

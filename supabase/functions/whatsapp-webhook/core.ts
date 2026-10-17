@@ -46,6 +46,21 @@ export function parseIncoming(payload: unknown): Incoming | null {
   }
 }
 
+/* Extrae SOLO el teléfono del remitente (síncrono, sin transcripción).
+   Se usa para rutear la cola: el texto se resuelve aparte con
+   resolveIncomingText (que sí transcribe audio). */
+export function extractFrom(payload: unknown): string {
+  try {
+    const p = (payload || {}) as Record<string, any>;
+    if (typeof p.from === "string") return String(p.from).replace(/\D/g, "");
+    const value = p.entry?.[0]?.changes?.[0]?.value;
+    const msg = value?.messages?.[0];
+    return String(msg?.from || value?.contacts?.[0]?.wa_id || "").replace(/\D/g, "");
+  } catch (_e) {
+    return "";
+  }
+}
+
 /* Extrae el código de verificación del mensaje.
    Soporta el formato actual del botón "Vincular WhatsApp" ("Código: 99DKFR",
    alfanumérico) y el formato histórico ("código de verificación: 123456").
