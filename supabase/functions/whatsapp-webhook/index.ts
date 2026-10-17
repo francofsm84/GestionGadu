@@ -170,8 +170,12 @@ serve(async (req) => {
   /* Encolar inmediato y procesar FIFO en segundo plano (no se pierde en ráfagas) */
   const incQuick = parseIncoming(body);
   const phoneQuick = incQuick ? normalizePhone(incQuick.from) : "desconocido";
-  fireAndForget(enqueueMessage(rest, phoneQuick, body));
-  fireAndForget(drainPhone(phoneQuick));
+  /* Encolar PRIMERO y recién después drenar (secuencial): si el drain corre
+     antes de insertar, no ve el mensaje y queda "pending" para siempre. */
+  fireAndForget((async () => {
+    await enqueueMessage(rest, phoneQuick, body);
+    await drainPhone(phoneQuick);
+  })());
 
   return json({ ok: true });
 });
