@@ -496,6 +496,51 @@ async function processMessage(body: unknown) {
     const row = rowsData[0];
     const data = row.data || {};
 
+    /* 2d) RESTAURAR: recuperar el último registro de la papelera */
+    if (String(inc.text || "").trim().toUpperCase() === "RESTAURAR") {
+      const trash = Array.isArray(data.trash) ? data.trash : [];
+      if (!trash.length) {
+        fireAndForget(sendWhatsApp(inc.from, "🤖 No hay registros para restaurar en tu papelera."));
+        return json({ ok: true, from: inc.from });
+      }
+      const t = trash[0];   // el más reciente (unshift)
+      if (!t || !t.collection || !Array.isArray(data[t.collection])) {
+        fireAndForget(sendWhatsApp(inc.from, "🤖 No pude restaurar el registro."));
+        return json({ ok: true, from: inc.from });
+      }
+      data[t.collection].unshift(t.item);
+      data.trash = data.trash.filter(x => x.id !== t.id);
+
+      const item = t.item || {};
+      const tipos: Record<string, string> = {
+        expenses: "Gasto", incomes: "Ingreso", works: "Obra", employees: "Empleado",
+        contacts: "Contacto", budgets: "Presupuesto", attendance: "Jornada",
+        assets: "Herramienta", seguros: "Seguro", compromisos: "Compromiso",
+      };
+      const tipo = tipos[t.collection] || String(t.collection);
+      let detalle = "";
+      if (t.collection === "expenses") detalle = "$" + (item.amount || 0) + " · " + (item.category || item.description || "");
+      else if (t.collection === "incomes") detalle = "$" + (item.amount || 0);
+      else if (t.collection === "works") detalle = item.name || item.nombre || "";
+      else if (t.collection === "employees") detalle = ((item.firstName || "") + " " + (item.lastName || "")).trim();
+      else if (t.collection === "contacts") detalle = item.name || "";
+      else detalle = item.description || item.name || item.nombre || "";
+
+      const up = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+      });
+      if (!up.ok) {
+        console.error("[GADU-WA-RESTORE] falló PATCH app_data:", up.status);
+        fireAndForget(sendWhatsApp(inc.from, "🤖 No pude restaurar el registro."));
+        return json({ ok: false, error: "patch " + up.status });
+      }
+      console.log("[GADU-WA-RESTORE] restaurado:", t.collection, t.id);
+      fireAndForget(sendWhatsApp(inc.from, "✅ El registro " + tipo + (detalle ? " · " + detalle : "") + " ha sido recuperado con éxito."));
+      return json({ ok: true, from: inc.from });
+    }
+
     /* 3) Mismo motor que el chat web: ai-assistant en modo servidor.
        Esperamos la respuesta de la IA con un timeout de seguridad de 10s.
        Recién si la IA FALLA (o tarda más de 10s) caemos al fallback local. */
