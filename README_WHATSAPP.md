@@ -28,10 +28,9 @@ Ruta: `/functions/v1/whatsapp-daily-cron`
 | Archivo | Propósito |
 |---|---|
 | `index.ts` | Handler GET/POST, `sendWhatsApp`, `processMessage`, `drainPhone`, `detectInteractive`, `handleButtonReply` |
-| `core.ts` | `parseIncoming`, `normalizePhone`, `matchVerificationCode`, `localIntent`, `executeAction`, `normCategory`, `buildContext` |
+| `core.ts` | `parseIncoming`, `extractFrom`, `normalizePhone`, `matchVerificationCode`, `localIntent`, `executeAction`, `normCategory`, `buildContext` |
 | `queue.ts` | Cola FIFO: `enqueueMessage`, `claimNext`, `markDone`, `markFailed` |
-
-> ⚠️ **Nota**: la transcripción de audio (`transcribe.ts`) quedó **diseñada pero NO implementada** todavía. Los mensajes de audio no se transcriben; solo se procesa texto.
+| `transcribe.ts` | Transcripción de notas de voz con Gemini: `getMediaUrl` → `downloadMedia` → `geminiTranscribe` → `resolveIncomingText` |
 
 ---
 
@@ -72,8 +71,20 @@ whatsapp-daily-cron (19:00) → busca workId null → envía botones
 | `WHATSAPP_WABA_ID` | WhatsApp Business Account ID |
 | `WHATSAPP_VERIFY_TOKEN` | Token del handshake GET |
 | `CRON_SECRET` | Secreto compartido para `whatsapp-daily-cron` |
-| `GEMINI_API_KEY` | Clave de Gemini (solo si se implementa transcripción de audio) |
-| `GEMINI_MODEL` | Modelo de Gemini (idem) |
+| `SERVICE_SECRET` | Secreto compartido `webhook → ai-assistant` (modo servidor) |
+| `GEMINI_API_KEY` | Clave de Gemini (transcripción de audio + IA) |
+| `GEMINI_MODEL` | Modelo de Gemini. **⚠️ DEBE ser un modelo válido que soporte audio** (ver nota abajo) |
+
+> ### ⚠️ CRÍTICO: `GEMINI_MODEL`
+> El valor **debe ser un modelo real y multimodal**. Un typo aquí rompe **toda** la transcripción de voz y la IA.
+> - ✅ Válidos: `gemini-2.0-flash`, `gemini-1.5-flash`, `gemini-1.5-pro`.
+> - ❌ Inválido: `gemini-3.5-flash` (no existe — fue la causa de que el audio fallara).
+>
+> Verificar/actualizar:
+> ```bash
+> npx supabase secrets list --project-ref kalqvykomlfwxmsdaipf | Select-String GEMINI
+> npx supabase secrets set GEMINI_MODEL="gemini-2.0-flash" --project-ref kalqvykomlfwxmsdaipf
+> ```
 
 ---
 
@@ -93,6 +104,7 @@ whatsapp-daily-cron (19:00) → busca workId null → envía botones
 ```bash
 npx supabase functions deploy whatsapp-webhook --project-ref kalqvykomlfwxmsdaipf --no-verify-jwt
 npx supabase functions deploy whatsapp-daily-cron --project-ref kalqvykomlfwxmsdaipf --no-verify-jwt
+npx supabase functions deploy ai-assistant --project-ref kalqvykomlfwxmsdaipf --no-verify-jwt
 ```
 
 ## 🧪 Prueba manual rápida
@@ -104,3 +116,53 @@ npx supabase functions deploy whatsapp-daily-cron --project-ref kalqvykomlfwxmsd
      -H "Authorization: Bearer <CRON_SECRET>" -H "Content-Type: application/json" -d '{}'
    ```
 3. Tocar el botón en WhatsApp → asigna el gasto a la obra o como "Gasto General".
+
+---
+
+## 🧰 Troubleshooting (Solución de problemas)
+
+### 1. "El bot no responde por WhatsApp"
+- Revisá en **Meta for Developers → WhatsApp → Configuración → Webhook**:
+  - **Callback URL** exacta: `https://kalqvykomlfwxmsdaipf.supabase.co/functions/v1/whatsapp-webhook`
+  - **Verify token** = el valor de `WHATSAPP_VERIFY_TOKEN`.
+  - Field **`messages`** = **Subscribed**.
+- Verificá el handshake: `GET .../whatsapp-webhook?hub.mode=subscribe&hub.verify_token=...&hub.challenge=123` debe devolver `123`.
+- Asegurate de que la App esté **suscrita a la WABA**:
+  ```bash
+  curl -X POST "https://graph.facebook.com/v21.0/4685722798416623/subscribed_apps" -H "Authorization: Bearer $WHATSAPP_TOKEN"
+  ```
+
+### 2. "El bot responde pero no guarda los gastos"
+- Revisá si hay **más de una obra activa** en `app_data.data.works`. Con varias activas, el gasto sin obra cae en Quick Capture (se guarda con `workId = null`, correcto) o pide la obra.
+- Revisá que el gasto NO quedó en la cola trabado:
+  ```sql
+  select id, phone, status, attempts from whatsapp_queue order by id desc limit 10;
+  ```
+  - `pending` = no se drenó; `processing` por mucho tiempo = quedó trabado (limpiar manualmente).
+- Confirmá que `SUPABASE_SERVICE_ROLE_KEY` está disponible (la Edge Function la usa para escribir en `app_data`).
+
+### 3. "El bot manda el mensaje genérico de fallback"
+- **Causa más común: `GEMINI_MODEL` inválido** (ej. `gemini-3.5-flash`). Verificá que sea `gemini-2.0-flash` (ver nota arriba).
+- Revisá que `ai-assistant` no devuelva **401**: la llamada `webhook → ai-assistant` usa `SERVICE_SECRET` (`x-service-secret`) y `Authorization: Bearer <service_role>`.
+- Mirá los logs del webhook buscando `[GADU-WA-AI] ai-assistant http …` para ver el status/body real de la IA.
+
+---
+
+## ✅ Checklist de mantenimiento (antes/después de cada cambio)
+
+- [ ] Desplegar **siempre** con `--no-verify-jwt`:
+  ```bash
+  npx supabase functions deploy <funcion> --project-ref kalqvykomlfwxmsdaipf --no-verify-jwt
+  ```
+- [ ] Verificar que `GEMINI_MODEL` siga siendo un modelo válido (`gemini-2.0-flash`).
+- [ ] Revisar que la cola no tenga mensajes en `processing` trabados:
+  ```sql
+  select count(*) from whatsapp_queue where status = 'processing';
+  ```
+- [ ] Confirmar que el cron sigue programado:
+  ```sql
+  select jobid, jobname, schedule, active from cron.job;
+  ```
+- [ ] Probar los 4 canales: **texto**, **audio (nota de voz)**, **botón interactivo** y **cola en ráfaga** (3 mensajes seguidos).
+- [ ] Verificar que los secretos críticos estén cargados (`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `CRON_SECRET`, `SERVICE_SECRET`, `GEMINI_API_KEY`, `GEMINI_MODEL`).
+- [ ] Recordar que los cambios de **secret** toman efecto al instante (no requieren redeploy), pero los cambios de **código** sí.
