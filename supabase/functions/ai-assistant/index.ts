@@ -130,7 +130,16 @@ serve(async (req) => {
     //    role y el userId explícito — mismo motor, distinto canal. La web sigue
     //    usando su token de sesión y no cambia en nada.
     let userId = "";
-    if (service === true && serviceKey && auth === `Bearer ${serviceKey}` && typeof providedUserId === "string" && providedUserId) {
+    // Modo servidor robusto: acepta el secreto compartido (x-service-secret)
+    // o el service_role exacto. Así el conector de WhatsApp no depende de que
+    // el JWT de service_role coincida byte a byte entre funciones.
+    const serviceSecret = Deno.env.get("SERVICE_SECRET") || "";
+    const serviceAuth = req.headers.get("x-service-secret") || "";
+    const serviceOk = service === true && typeof providedUserId === "string" && providedUserId && (
+      (serviceSecret && serviceAuth === serviceSecret) ||
+      (serviceKey && auth === `Bearer ${serviceKey}`)
+    );
+    if (serviceOk) {
       userId = providedUserId;
     } else {
       const userRes = await fetch(`${supabaseUrl}/auth/v1/user`, {

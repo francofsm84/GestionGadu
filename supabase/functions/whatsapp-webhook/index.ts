@@ -408,6 +408,7 @@ async function processMessage(body: unknown) {
           "Content-Type": "application/json",
           apikey: anonKey(),
           Authorization: `Bearer ${serviceKey()}`,
+          "x-service-secret": Deno.env.get("SERVICE_SECRET") || "",
         },
         body: JSON.stringify({
           message: inc.text,
