@@ -40,20 +40,11 @@
     return { prefix: '54', local: digits.replace(/^0+/, '') };
   }
 
-  /* Genera el código de verificación de WhatsApp. Intenta el endpoint del
-     backend; si no está disponible, cae a un código local alfanumérico. */
+  /* Genera el código de verificación de WhatsApp: 6 DÍGITOS numéricos.
+     Se genera en el cliente y se persiste en settings.profile.whatsapp.code
+     para que el webhook lo valide contra app_data (búsqueda ilike). */
   async function generateVerificationCode() {
-    try {
-      if (G.api) {
-        const res = await G.api('POST', '/rpc/generate_whatsapp_code', {});
-        const c = res && (res.code || (res.data && res.data.code));
-        if (c) return String(c);
-      }
-    } catch (e) { /* sin backend: código local */ }
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let out = '';
-    for (let i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
-    return out;
+    return String(Math.floor(100000 + Math.random() * 900000));
   }
 
   function open() {
@@ -131,9 +122,25 @@
       try {
         code = await generateVerificationCode();
       } catch (e) {
-        code = 'ERRGEN';
+        code = '123456';
       }
       m.panel.querySelector('#obCode').value = code;
+      /* Persistir YA el código + teléfono: el webhook lo valida contra app_data
+         sin esperar al botón "Guardar". */
+      try {
+        const st = S.data.settings;
+        st.profile = st.profile || {};
+        const wa = st.profile.whatsapp || {};
+        st.profile.whatsapp = {
+          ...wa,
+          phone: phoneDigits(),
+          code,
+          linked: !!wa.linked,
+          linkedPhone: wa.linkedPhone || '',
+          linkedAt: wa.linkedAt || '',
+        };
+        S.save();
+      } catch (e) { /* no bloquear la UI */ }
       updateLink();
       btn.disabled = false;
       btn.innerHTML = UI.icon('zap', 14) + 'Generar código';
@@ -157,7 +164,13 @@
           apellido: m.panel.querySelector('#obApellido').value.trim(),
           apodo: m.panel.querySelector('#obApodo').value.trim(),
           moneda: m.panel.querySelector('#obMoneda').value,
-          whatsapp: { phone: phoneDigits(), code, linked: !!((p.whatsapp && p.whatsapp.linked)) },
+          whatsapp: {
+            phone: phoneDigits(),
+            code,
+            linked: !!((p.whatsapp && p.whatsapp.linked)),
+            linkedPhone: (p.whatsapp && p.whatsapp.linkedPhone) || '',
+            linkedAt: (p.whatsapp && p.whatsapp.linkedAt) || '',
+          },
         };
         S.data.settings.onboardingDone = true;
         S.save();

@@ -263,6 +263,7 @@
         '<button class="btn btn-soft-info" id="bPull">' + UI.icon('download') + 'Descargar mis datos</button>' +
         '<button class="btn btn-soft" id="bCloudTest">' + UI.icon('activity') + 'Probar conexión</button>' +
         '</div>' +
+        '<button class="btn btn-soft-success" id="bWhatsApp" style="margin-top:10px">' + UI.icon('whatsapp', 15) + 'Vincular WhatsApp</button>' +
         '<button class="btn btn-soft" id="bProfile" style="margin-top:10px">' + UI.icon('user', 15) + 'Completar mi perfil (onboarding)</button>' +
         '<label class="form-hint" style="display:block;margin-top:10px"><input type="checkbox" id="cAuto"' + (cfg.autoPush ? ' checked' : '') + ' style="accent-color:var(--primary)"> Sincronizar automáticamente cada vez que guardo</label>' +
         '<label class="form-hint" style="display:flex;align-items:center;gap:8px;margin-top:10px">⏰ Horario de recordatorio diario <input type="time" id="fReminder" value="' + UI.escapeHtml((S.data.settings && S.data.settings.reminderTime) || '09:00') + '" style="max-width:130px"></label>' +
@@ -313,6 +314,10 @@
       if (e.target.checked) UI.toast('Sincronización automática activada', 'info');
     });
     m.panel.querySelector('#bProfile').addEventListener('click', () => {
+      m.close();
+      try { if (G.onboarding && G.onboarding.open) G.onboarding.open(); } catch (e) {}
+    });
+    m.panel.querySelector('#bWhatsApp').addEventListener('click', () => {
       m.close();
       try { if (G.onboarding && G.onboarding.open) G.onboarding.open(); } catch (e) {}
     });
