@@ -159,6 +159,11 @@ export function localIntent(text: string): { modulo: string; campos: Record<stri
   if (m && num(m[1]) > 0) {
     return { modulo: "gasto", campos: { monto: num(m[1]), categoria: String(m[2] || "").trim() } };
   }
+  /* Variante sin preposición: "Gasto 1000 prueba" (monto + descripción) */
+  m = f.match(/gas(?:te|to|t[eé]|t[oó])\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+([a-záéíóúñ].*)/i);
+  if (m && num(m[1]) > 0) {
+    return { modulo: "gasto", campos: { monto: num(m[1]), categoria: String(m[2] || "").trim() } };
+  }
   m = f.match(/ingres(?:e|o|[eé]|[oó]|te|to)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:por|de)\s+(.+)/i);
   if (m && num(m[1]) > 0) {
     return { modulo: "ingreso", campos: { monto: num(m[1]), concepto: String(m[2] || "").trim() } };
