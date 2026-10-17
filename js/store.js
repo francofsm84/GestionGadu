@@ -292,6 +292,7 @@
   let data = null;
   let key = KEY;
   let _hasData = false;   // "¿hay datos persistidos?" (flag en memoria, sin tocar storage)
+  let _userId = null;     // id del usuario actual (para notificaciones)
 
   /* Resuelve el backend de storage: usa G.storage (localForage/IndexedDB) si
      está disponible; si no (tests en Node o storage.js no cargado), cae a un
@@ -319,6 +320,7 @@
       } catch (e) {}
     }
     key = newKey;
+    _userId = uid || null;
     data = null;
     _hasData = false;
   }
@@ -608,13 +610,15 @@
     const it = data[coll].find(x => x.id === id);
     if (it) {
       data.trash = data.trash || [];
-      data.trash.unshift({
+      const trashItem = {
         id: uid(),
         collection: coll,
         item: it,
         deletedAt: new Date().toISOString(),
-      });
+      };
+      data.trash.unshift(trashItem);
       data[coll] = data[coll].filter(x => x.id !== id);
+      notifyDelete(trashItem);
     }
     save();
   }
@@ -625,6 +629,51 @@
     data.trash = data.trash.filter(x => x.id !== trashId);
     save();
     return true;
+  }
+
+  /* Etiqueta legible del item borrado (para el mensaje de WhatsApp) */
+  function describeItem(coll, item) {
+    item = item || {};
+    const tipos = {
+      expenses: 'Gasto', incomes: 'Ingreso', works: 'Obra', employees: 'Empleado',
+      contacts: 'Contacto', budgets: 'Presupuesto', attendance: 'Jornada',
+      assets: 'Herramienta', seguros: 'Seguro', compromisos: 'Compromiso', distributions: 'Reparto',
+    };
+    const tipo = tipos[coll] || String(coll);
+    let detalle = '';
+    if (coll === 'expenses') detalle = '$' + (item.amount || 0) + ' · ' + (item.category || item.description || '');
+    else if (coll === 'incomes') detalle = '$' + (item.amount || 0) + ' · ' + (item.concepto || '');
+    else if (coll === 'works') detalle = item.name || item.nombre || '';
+    else if (coll === 'employees') detalle = ((item.firstName || '') + ' ' + (item.lastName || '')).trim();
+    else if (coll === 'contacts') detalle = item.name || '';
+    else if (coll === 'budgets') detalle = item.name || item.nombre || '';
+    else if (coll === 'attendance') detalle = (item.date || '') + ' · ' + (item.employeeId || '');
+    else if (coll === 'assets') detalle = item.name || item.nombre || '';
+    else if (coll === 'seguros') detalle = item.tipo || item.compania || '';
+    else if (coll === 'compromisos') detalle = item.titulo || item.tipo || '';
+    else detalle = item.description || item.name || item.nombre || '';
+    return { tipo, detalle };
+  }
+
+  /* Dispara la notificación WhatsApp (fire-and-forget, no bloquea el borrado) */
+  function notifyDelete(t) {
+    try {
+      if (!G.auth || !G.sync) return;
+      const sess = G.auth.getSession ? G.auth.getSession() : null;
+      const uid = (sess && sess.userId) || _userId;
+      if (!uid) return;
+      const { tipo, detalle } = describeItem(t.collection, t.item);
+      const url = (G.auth.SUPABASE_URL || '') + '/functions/v1/whatsapp-delete-notify';
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': G.auth.SUPABASE_ANON_KEY || '',
+          'Authorization': 'Bearer ' + ((sess && sess.accessToken) || ''),
+        },
+        body: JSON.stringify({ userId: uid, trashId: t.id, tipo, detalle }),
+      }).catch(() => {});
+    } catch (e) { /* sin conexión / sin auth: se omite el aviso */ }
   }
   function removeWork(id) {
     data.works = data.works.filter(x => x.id !== id);
