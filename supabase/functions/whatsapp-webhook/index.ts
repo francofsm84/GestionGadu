@@ -60,11 +60,11 @@ function fireAndForget(p: Promise<unknown>) {
     // deno-lint-ignore no-undef
     if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") {
       // deno-lint-ignore no-undef
-      EdgeRuntime.waitUntil(p);
+      EdgeRuntime.waitUntil(p.catch(e => console.error("[GADU-WA-CRITICAL-FIX] async error (waitUntil):", e)));
       return;
     }
   } catch (_e) { /* caer al fallback */ }
-  p.catch(e => console.error("[whatsapp-webhook] async error:", e));
+  p.catch(e => console.error("[GADU-WA-CRITICAL-FIX] async error:", e));
 }
 
 /* Configuración de Supabase (lectura LAZY por request: el runtime inyecta
@@ -598,15 +598,21 @@ async function drainPhone(phone: string) {
 
   let item = await claimNext(rest, phone);
   while (item) {
-    console.log("[GADU-WA-QUEUE-FIX] Procesando mensaje", item.id, "· status=", item.status, "· attempts=", item.attempts);
+    console.log("[GADU-WA-CRITICAL-FIX] Procesando mensaje", item.id, "· status=", item.status, "· attempts=", item.attempts);
     try {
       await processMessage(item.payload);
       await markDone(rest, item.id);
-      console.log("[GADU-WA-QUEUE-FIX] mensaje", item.id, "procesado OK");
+      console.log("[GADU-WA-CRITICAL-FIX] mensaje", item.id, "procesado OK");
     } catch (e) {
-      console.error("[GADU-WA-QUEUE-FIX] Error en mensaje", item.id + ":", e);
+      console.error("[GADU-WA-CRITICAL-FIX] Fallo en mensaje", item.id + ":", e);
       await markFailed(rest, item.id);
-      console.log("[GADU-WA-QUEUE-FIX] mensaje", item.id, "marcado como fallido, sigo con el siguiente");
+      /* Avisar al usuario y SEGUIR con el siguiente mensaje de la cola */
+      try {
+        await sendWhatsApp(item.phone, "🤖 Falló el procesamiento, reintenta o escríbelo por texto.");
+      } catch (e2) {
+        console.error("[GADU-WA-CRITICAL-FIX] no se pudo notificar el fallo:", e2);
+      }
+      console.log("[GADU-WA-CRITICAL-FIX] mensaje", item.id, "marcado como fallido, sigo con el siguiente");
     }
     item = await claimNext(rest, phone);
   }

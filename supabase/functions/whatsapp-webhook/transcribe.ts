@@ -26,39 +26,58 @@ function normalizeMime(raw: string): string {
   return m;
 }
 
-/* 1) Obtiene la URL del archivo de audio desde Graph API */
+/* 1) Obtiene la URL del archivo de audio desde Graph API (timeout 8s) */
 async function getMediaUrl(mediaId: string): Promise<string> {
   const token = Deno.env.get("WHATSAPP_TOKEN") || "";
   if (!token) throw new Error("falta WHATSAPP_TOKEN");
-  const res = await fetch(`https://graph.facebook.com/${API_VERSION}/${mediaId}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    console.error("[GADU-WA-AUDIO] getMediaUrl falló:", res.status, body);
-    throw new Error("getMediaUrl HTTP " + res.status);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(`https://graph.facebook.com/${API_VERSION}/${mediaId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error("[GADU-WA-AUDIO] getMediaUrl falló:", res.status, body);
+      throw new Error("getMediaUrl HTTP " + res.status);
+    }
+    const j = await res.json();
+    const url = String((j as { url?: string }).url || "");
+    if (!url) throw new Error("getMediaUrl sin url");
+    console.log("[GADU-WA-AUDIO] ✅ URL del media obtenida:", url.slice(0, 80) + "…");
+    return url;
+  } catch (e) {
+    console.error("[GADU-WA-CRITICAL-FIX] getMediaUrl timeout/error:", e);
+    throw e;
+  } finally {
+    clearTimeout(timer);
   }
-  const j = await res.json();
-  const url = String((j as { url?: string }).url || "");
-  if (!url) throw new Error("getMediaUrl sin url");
-  console.log("[GADU-WA-AUDIO] ✅ URL del media obtenida:", url.slice(0, 80) + "…");
-  return url;
 }
 
-/* 2) Descarga el archivo de audio.
+/* 2) Descarga el archivo de audio (timeout 8s).
    IMPORTANTE: la URL que devuelve Meta es una URL FIRMADA (lookaside.fbsbx.com)
    y NO lleva el Bearer token; mandarlo puede devolver 403. */
 async function downloadMedia(url: string): Promise<{ buffer: ArrayBuffer; mimeType: string }> {
-  const res = await fetch(url);
-  if (!res.ok) {
-    console.error("[GADU-WA-AUDIO] downloadMedia HTTP", res.status, url.slice(0, 120));
-    throw new Error("downloadMedia HTTP " + res.status);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) {
+      console.error("[GADU-WA-AUDIO] downloadMedia HTTP", res.status, url.slice(0, 120));
+      throw new Error("downloadMedia HTTP " + res.status);
+    }
+    const buffer = await res.arrayBuffer();
+    const rawMime = res.headers.get("content-type") || "audio/ogg";
+    const mimeType = normalizeMime(rawMime);
+    console.log("[GADU-WA-AUDIO] ✅ audio descargado:", buffer.byteLength, "bytes · mime:", mimeType, "(raw:", rawMime + ")");
+    return { buffer, mimeType };
+  } catch (e) {
+    console.error("[GADU-WA-CRITICAL-FIX] downloadMedia timeout/error:", e);
+    throw e;
+  } finally {
+    clearTimeout(timer);
   }
-  const buffer = await res.arrayBuffer();
-  const rawMime = res.headers.get("content-type") || "audio/ogg";
-  const mimeType = normalizeMime(rawMime);
-  console.log("[GADU-WA-AUDIO] ✅ audio descargado:", buffer.byteLength, "bytes · mime:", mimeType, "(raw:", rawMime + ")");
-  return { buffer, mimeType };
 }
 
 /* 3) Transcribe con Gemini (inline_data) */
@@ -150,7 +169,13 @@ export async function resolveIncomingText(payload: unknown): Promise<ResolvedInc
       const mediaId = String(msg.audio?.id || msg.voice?.id || "");
       if (!mediaId) return null;
       console.log("[GADU-WA-AUDIO] audio detectado, media_id:", mediaId);
-      const text = await transcribeMedia(mediaId);
+      let text = "";
+      try {
+        text = await transcribeMedia(mediaId);
+      } catch (e) {
+        console.error("[GADU-WA-CRITICAL-FIX] transcribeMedia falló:", e);
+        return { from, text: "", audioFailed: true };
+      }
       if (!text) {
         console.warn("[GADU-WA-AUDIO] transcripción vacía para media", mediaId);
         return { from, text: "", audioFailed: true };
