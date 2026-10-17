@@ -37,6 +37,7 @@ import {
   localIntent,
   toMetaPhone,
 } from "./core.ts";
+import { enqueueMessage, claimNext, markDone, markFailed } from "./queue.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -63,6 +64,23 @@ function fireAndForget(p: Promise<unknown>) {
     }
   } catch (_e) { /* caer al fallback */ }
   p.catch(e => console.error("[whatsapp-webhook] async error:", e));
+}
+
+/* Configuración de Supabase (lectura LAZY por request: el runtime inyecta
+   las variables por petición, no siempre disponibles a nivel de módulo) */
+function supabaseUrl() { return Deno.env.get("SUPABASE_URL") || ""; }
+function serviceKey() { return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""; }
+function anonKey() { return Deno.env.get("SUPABASE_ANON_KEY") || ""; }
+
+async function rest(path: string, opts: Record<string, unknown> = {}) {
+  const sk = serviceKey();
+  const headers = {
+    apikey: sk,
+    Authorization: `Bearer ${sk}`,
+    "Content-Type": "application/json",
+    ...((opts.headers as Record<string, string>) || {}),
+  };
+  return await fetch(supabaseUrl() + "/rest/v1/" + path, { ...opts, headers } as RequestInit);
 }
 
 /* Envío de la respuesta al usuario por WhatsApp (Meta Cloud API).
@@ -145,38 +163,34 @@ serve(async (req) => {
   }
 
   const body = await req.json().catch(() => ({}));
-  /* Registro INCONDICIONAL de cualquier evento enviado por Meta */
   console.log("=== PAYLOAD ENTRANTE ===", JSON.stringify(body));
   console.log("=== WEBHOOK EVENT RECEIVED ===", JSON.stringify(body));
   console.log("RAW BODY:", JSON.stringify(body));
-  /* Responder 200 YA a Meta y procesar (IA + insert en Supabase) en segundo
-     plano: si la IA tarda >3s, Meta ya recibió el ack y NO reintenta. */
-  fireAndForget((async () => {
-    try {
-      const inc = parseIncoming(body);
-      if (!inc) {
-        console.warn("[whatsapp-webhook] payload no reconocido:", JSON.stringify(body));
-        return json({ ok: false, error: "mensaje no reconocido (se espera texto o nota de voz transcrita)" });
-      }
-      console.log("[whatsapp-webhook] from=" + inc.from + " text=" + JSON.stringify(inc.text));
-      console.log("[DEBUG] Remitente detectado: " + inc.from);
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    if (!supabaseUrl || !serviceKey) {
-      console.error("[whatsapp-webhook] falta SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
-      return json({ ok: false, error: "configuración incompleta" });
+  /* Encolar inmediato y procesar FIFO en segundo plano (no se pierde en ráfagas) */
+  const incQuick = parseIncoming(body);
+  const phoneQuick = incQuick ? normalizePhone(incQuick.from) : "desconocido";
+  fireAndForget(enqueueMessage(rest, phoneQuick, body));
+  fireAndForget(drainPhone(phoneQuick));
+
+  return json({ ok: true });
+});
+
+/* ===== Procesamiento del mensaje (extraído del handler) ===== */
+async function processMessage(body: unknown) {
+  try {
+    const inc = parseIncoming(body);
+    if (!inc) {
+      console.warn("[whatsapp-webhook] payload no reconocido:", JSON.stringify(body));
+      return;
     }
+    console.log("[whatsapp-webhook] from=" + inc.from + " text=" + JSON.stringify(inc.text));
+    console.log("[DEBUG] Remitente detectado: " + inc.from);
 
-    const rest = async (path: string, opts: Record<string, unknown> = {}) => {
-      const headers = {
-        apikey: serviceKey,
-        Authorization: `Bearer ${serviceKey}`,
-        "Content-Type": "application/json",
-        ...((opts.headers as Record<string, string>) || {}),
-      };
-      return await fetch(supabaseUrl + "/rest/v1/" + path, { ...opts, headers } as RequestInit);
-    };
+    if (!supabaseUrl() || !serviceKey()) {
+      console.error("[whatsapp-webhook] falta SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
+      return;
+    }
 
     /* 1) Vinculación: código alfanumérico (mayúsculas, sin espacios).
        Búsqueda CASE-INSENSITIVE por código (ilike) y SIN filtrar por prefijo
@@ -280,16 +294,15 @@ serve(async (req) => {
     /* 3) Mismo motor que el chat web: ai-assistant en modo servidor.
        Si el LLM no responde o falla la auth, hay fallback local (localIntent)
        para "Gasté X en Y" / "Ingresé X por Y" y el negocio sigue operando. */
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
     let aiReply = "";
     let action: { modulo: string; campos?: Record<string, unknown> } | null = null;
     try {
-      const aiRes = await fetch(supabaseUrl + "/functions/v1/ai-assistant", {
+      const aiRes = await fetch(supabaseUrl() + "/functions/v1/ai-assistant", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          apikey: anonKey,
-          Authorization: `Bearer ${serviceKey}`,
+          apikey: anonKey(),
+          Authorization: `Bearer ${serviceKey()}`,
         },
         body: JSON.stringify({
           message: inc.text,
@@ -349,10 +362,28 @@ serve(async (req) => {
       const reply = aiReply || "🤖 Recibí tu mensaje. Para cargas complejas (obras, empleados, jornadas) te conviene completarlas en la app: https://gestiongadu.vercel.app";
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
-    } catch (error) {
-      console.error("CRITICAL ERROR:", error);
+  } catch (error) {
+    console.error("CRITICAL ERROR:", error);
+  }
+}
+
+/* ===== Drain FIFO de la cola ===== */
+async function drainPhone(phone: string) {
+  /* Mutex por teléfono: si otro drain ya tiene un mensaje en 'processing',
+     salimos para no pisar el read-modify-write de app_data. */
+  const busy = await rest("whatsapp_queue?status=eq.processing&phone=eq." + encodeURIComponent(phone) + "&limit=1", { method: "GET" });
+  const busyRows = (await busy.json().catch(() => [])) as Array<{ id: number }>;
+  if (Array.isArray(busyRows) && busyRows.length) return;
+
+  let item = await claimNext(rest, phone);
+  while (item) {
+    try {
+      await processMessage(item.payload);
+      await markDone(rest, item.id);
+    } catch (e) {
+      console.error("[whatsapp-webhook] falló mensaje " + item.id, e);
+      await markFailed(rest, item.id);
     }
-  })());
-  /* Respuesta inmediata a Meta (200 OK) — evita timeout y reintentos */
-  return json({ ok: true });
-});
+    item = await claimNext(rest, phone);
+  }
+}

@@ -215,6 +215,18 @@
         payload.percent = Math.max(0, Math.min(100, UI.readNum(m.panel.querySelector('#fPercent'))));
         payload.active = m.panel.querySelector('#fActive').value === '1';
       }
+      /* Validación de duplicados: por teléfono o nombre exacto */
+      const normName = name.toLowerCase().replace(/\s+/g, ' ').trim();
+      const phoneDigits = (payload.phone || '').replace(/\D/g, '');
+      const dup = S.data.contacts.find(x => x.id !== (c && c.id) && (
+        (phoneDigits && String(x.phone || '').replace(/\D/g, '') === phoneDigits) ||
+        String(x.name || '').toLowerCase().replace(/\s+/g, ' ').trim() === normName
+      ));
+      if (dup) {
+        UI.toast('Ya existe el contacto "' + dup.name + '" con ese nombre o teléfono', 'error');
+        return;
+      }
+
       if (isEdit) {
         S.update('contacts', c.id, payload);
         UI.toast('Contacto actualizado');

@@ -175,9 +175,19 @@
     });
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
     m.panel.querySelector('[data-save]').addEventListener('click', () => {
-      const name = m.panel.querySelector('#fName').value.trim();
-      const cost = UI.readNum(m.panel.querySelector('#fCost'));
+      /* Limpiar nombre: quitar signos iniciales, colapsar espacios, truncar a 40 */
+      const rawName = m.panel.querySelector('#fName').value;
+      const name = rawName.replace(/^[\s.\-–—_',;:¿?¡!]+/, '').replace(/\s+/g, ' ').trim().slice(0, 40);
       if (!name) { UI.toast('Ingresá el nombre del activo', 'error'); return; }
+
+      let cost = UI.readNum(m.panel.querySelector('#fCost'));
+      /* Detectar un número grande en el nombre → sugerir como costo */
+      const numEnNombre = rawName.match(/\d{4,}/);
+      if (numEnNombre && cost <= 0) {
+        cost = Number(numEnNombre[0]);
+        m.panel.querySelector('#fCost').value = cost;
+        UI.toast('Detecté $' + cost + ' en el nombre y lo usé como costo. Verificalo.', 'info');
+      }
       if (cost <= 0) { UI.toast('Ingresá el costo de compra', 'error'); return; }
       const payload = {
         name,
