@@ -129,6 +129,108 @@ async function sendWhatsApp(to: string, text: string) {
   return res.ok;
 }
 
+/* Envía un mensaje interactivo con hasta 3 botones de respuesta (obras) */
+async function sendWhatsAppButtons(
+  to: string,
+  text: string,
+  buttons: Array<{ id: string; title: string }>,
+): Promise<boolean> {
+  const token = Deno.env.get("WHATSAPP_TOKEN") || "";
+  const phoneId = Deno.env.get("WHATSAPP_PHONE_ID") || "";
+  const apiVersion = Deno.env.get("WHATSAPP_API_VERSION") || "v21.0";
+  if (!token || !phoneId) {
+    console.warn("[GADU-WA-BUTTONS] sin WHATSAPP_TOKEN/WHATSAPP_PHONE_ID");
+    return false;
+  }
+  const body = {
+    messaging_product: "whatsapp",
+    to: toMetaPhone(to),
+    type: "interactive",
+    interactive: {
+      type: "button",
+      body: { text },
+      action: {
+        buttons: buttons.slice(0, 3).map(b => ({
+          type: "reply",
+          reply: { id: b.id, title: b.title.slice(0, 20) },
+        })),
+      },
+    },
+  };
+  console.log("[GADU-WA-BUTTONS] payload:", JSON.stringify(body));
+  const res = await fetch(`https://graph.facebook.com/${apiVersion}/${phoneId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  const respText = await res.text().catch(() => "");
+  if (!res.ok) console.error("[GADU-WA-BUTTONS] Meta falló:", res.status, respText);
+  else console.log("[GADU-WA-BUTTONS] Meta OK:", res.status);
+  return res.ok;
+}
+
+/* Busca el user_id por teléfono (variantes con/sin 9, con/sin +) */
+async function findUserId(from: string): Promise<string | null> {
+  const fromCandidates = [...new Set([from, normalizePhone(from), "+" + normalizePhone(from)])];
+  for (const phone of fromCandidates) {
+    for (const field of ["linkedPhone", "phone"]) {
+      const q = "data->settings->profile->whatsapp->>" + field + "=eq." + encodeURIComponent(phone);
+      const r = await rest("app_data?select=user_id&" + q + "&limit=1");
+      const rows = (await r.json().catch(() => [])) as Array<{ user_id: string }>;
+      if (Array.isArray(rows) && rows.length) return rows[0].user_id;
+    }
+    const qp = "whatsapp_number=eq." + encodeURIComponent(phone);
+    const rp = await rest("profiles?select=user_id&" + qp + "&limit=1");
+    const rowsP = (await rp.json().catch(() => [])) as Array<{ user_id: string }>;
+    if (Array.isArray(rowsP) && rowsP.length) return rowsP[0].user_id;
+  }
+  return null;
+}
+
+/* Sesiones del wizard (tabla whatsapp_sessions) */
+async function getSession(phone: string) {
+  const r = await rest("whatsapp_sessions?phone_number=eq." + encodeURIComponent(phone) + "&limit=1", { method: "GET" });
+  const rows = (await r.json().catch(() => [])) as Array<{ state: string; context: Record<string, unknown> }>;
+  return (Array.isArray(rows) && rows.length) ? rows[0] : null;
+}
+async function upsertSession(phone: string, userId: string, state: string, context: Record<string, unknown>) {
+  await rest("whatsapp_sessions", {
+    method: "POST",
+    headers: { Prefer: "resolution=merge-duplicates" },
+    body: JSON.stringify({ phone_number: phone, user_id: userId, state, context, updated_at: new Date().toISOString() }),
+  });
+}
+async function deleteSession(phone: string) {
+  await rest("whatsapp_sessions?phone_number=eq." + encodeURIComponent(phone), { method: "DELETE" });
+}
+
+/* Al pedir obra: SELECT obras activas (LIMIT 3) y envía botones */
+async function askForWork(phone: string, userId: string, data: Record<string, any>) {
+  const activeWorks = (data.works || []).filter((w: any) => w.status === "activa");
+
+  if (activeWorks.length >= 1 && activeWorks.length <= 3) {
+    const buttons = activeWorks.map((w: any) => ({
+      id: "assign_work:" + String(w.id),
+      title: String(w.nombre || w.name || "Obra"),
+    }));
+    buttons.push({ id: "assign_general", title: "Gasto General" });
+    await upsertSession(phone, userId, "WAITING_WORK", {});
+    await sendWhatsAppButtons(phone, "¿A qué obra asignamos el gasto?", buttons);
+    return;
+  }
+
+  if (activeWorks.length > 3) {
+    await upsertSession(phone, userId, "WAITING_WORK", {});
+    await sendWhatsApp(phone, "Tenés varias obras activas. Escribime el nombre de la obra para asignarlo.");
+    return;
+  }
+
+  await upsertSession(phone, userId, "WAITING_WORK", {});
+  await sendWhatsAppButtons(phone, "No tenés obras activas. ¿Lo dejamos como Gasto General?", [
+    { id: "assign_general", title: "Gasto General" },
+  ]);
+}
+
 serve(async (req) => {
   /* Rastreo verbose: imprime SIEMPRE método, URL y headers de cualquier
      petición, para descartar filtros internos y validar el formato de los
@@ -199,22 +301,8 @@ function detectInteractive(body: unknown): { from: string; buttonId: string } | 
 async function handleButtonReply(from: string, buttonId: string) {
   console.log("[GADU-WA-INTERACTIVE] botón:", buttonId, "de", from);
 
-  /* 1) Buscar usuario (misma lógica de candidatos que el flujo de texto) */
-  const fromCandidates = [...new Set([from, normalizePhone(from), "+" + normalizePhone(from)])];
-  let userId: string | null = null;
-  for (const phone of fromCandidates) {
-    for (const field of ["linkedPhone", "phone"]) {
-      const q = "data->settings->profile->whatsapp->>" + field + "=eq." + encodeURIComponent(phone);
-      const r = await rest("app_data?select=user_id&" + q + "&limit=1");
-      const rows = (await r.json().catch(() => [])) as Array<{ user_id: string }>;
-      if (Array.isArray(rows) && rows.length) { userId = rows[0].user_id; break; }
-    }
-    if (userId) break;
-    const qp = "whatsapp_number=eq." + encodeURIComponent(phone);
-    const rp = await rest("profiles?select=user_id&" + qp + "&limit=1");
-    const rowsP = (await rp.json().catch(() => [])) as Array<{ user_id: string }>;
-    if (Array.isArray(rowsP) && rowsP.length) { userId = rowsP[0].user_id; break; }
-  }
+  /* 1) Buscar usuario (helper compartido) */
+  const userId = await findUserId(from);
   if (!userId) {
     console.warn("[GADU-WA-INTERACTIVE] usuario no encontrado para", from);
     fireAndForget(sendWhatsApp(from, "🤖 No pude identificar tu cuenta."));
@@ -265,8 +353,11 @@ async function handleButtonReply(from: string, buttonId: string) {
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
   });
-  if (!up.ok) console.error("[GADU-WA-INTERACTIVE] falló PATCH app_data:", up.status);
-  else console.log("[GADU-WA-INTERACTIVE] gasto asignado OK:", buttonId);
+  if (!up.ok) console.error("[GADU-WA-BUTTONS] falló PATCH app_data:", up.status);
+  else console.log("[GADU-WA-BUTTONS] gasto asignado OK:", buttonId);
+
+  /* 6) Limpiar el estado WAITING_WORK */
+  await deleteSession(normalizePhone(from));
 }
 
 /* ===== Procesamiento del mensaje (extraído del handler) ===== */
@@ -354,30 +445,7 @@ async function processMessage(body: unknown) {
     /* 2) Usuario vinculado: busca por linkedPhone/phone (app_data) y por la
        columna canónica whatsapp_number (public.profiles), probando todas las
        variantes del número (con/sin el 9, con/sin '+'). */
-    const fromCandidates = [...new Set([
-      inc.from,
-      normalizePhone(inc.from),
-      "+" + normalizePhone(inc.from),
-    ])];
-    let userId2: string | null = null;
-    const fields = ["linkedPhone", "phone"];
-    for (const phone of fromCandidates) {
-      /* 2a) app_data: linkedPhone y phone */
-      for (const field of fields) {
-        const q2 = "data->settings->profile->whatsapp->>" + field + "=eq." + encodeURIComponent(phone);
-        const r2 = await rest("app_data?select=user_id&" + q2 + "&limit=1");
-        const rows2 = await r2.json().catch(() => []);
-        console.log("[whatsapp-webhook] consulta app_data (" + field + "):", phone, "→ http", r2.status, "·", (Array.isArray(rows2) ? rows2.length : 0), "coincidencia(s)");
-        if (Array.isArray(rows2) && rows2.length) { userId2 = rows2[0].user_id; break; }
-      }
-      if (userId2) break;
-      /* 2b) public.profiles: columna canónica whatsapp_number */
-      const qp = "whatsapp_number=eq." + encodeURIComponent(phone);
-      const rp = await rest("profiles?select=user_id&" + qp + "&limit=1");
-      const rowsp = await rp.json().catch(() => []);
-      console.log("[whatsapp-webhook] consulta profiles (whatsapp_number):", phone, "→ http", rp.status, "·", (Array.isArray(rowsp) ? rowsp.length : 0), "coincidencia(s)");
-      if (Array.isArray(rowsp) && rowsp.length) { userId2 = rowsp[0].user_id; break; }
-    }
+    const userId2 = await findUserId(inc.from);
     if (!userId2) {
       console.warn("[whatsapp-webhook] número no vinculado:", inc.from);
       const rpl = "🤖 No reconozco este número. Primero vinculá tu cuenta: desde la app generá tu código y envialo por WhatsApp.";
@@ -467,6 +535,10 @@ async function processMessage(body: unknown) {
         }
         const reply = (aiReply ? aiReply + "\n\n" : "") + "✅ " + res.label;
         fireAndForget(sendWhatsApp(inc.from, reply));
+        /* Si fue gasto SIN obra (bandeja), enviar botones para asignarlo ya */
+        if (action.modulo === "gasto" && res.label.includes("bandeja")) {
+          await askForWork(inc.from, row.user_id, data);
+        }
         return json({ ok: true, from: inc.from, reply });
       }
       const reply = aiReply || ("🤖 Me falta " + (res.missing || "un dato") + " para cargarlo. Decímelo por acá.");
