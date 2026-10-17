@@ -114,6 +114,43 @@ function tools() {
   }];
 }
 
+/* Herramientas en formato OpenAI (para DeepSeek): mismo contrato de la
+   herramienta "abrir_formulario", pero con type: "function". */
+function toolsOpenAI() {
+  return [{
+    type: "function",
+    function: {
+      name: "abrir_formulario",
+      description: "Abrir el formulario de creación de GADU con los datos que el usuario ya mencionó, para que él termine de completar y confirme. Usar cuando el usuario quiere crear/registrar: empleado, obra, cliente, presupuesto, gasto, ingreso o jornada.",
+      parameters: {
+        type: "object",
+        properties: {
+          modulo: { type: "string", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada"], description: "Qué formulario abrir" },
+          campos: {
+            type: "object",
+            description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol (oficio/puesto del empleado), cliente, obra, empleado, monto (número), concepto, categoria, horas (número), ubicacion (para obra), presupuesto (número, monto total de obra).",
+            properties: {
+              nombre: { type: "string" },
+              apellido: { type: "string" },
+              rol: { type: "string" },
+              cliente: { type: "string" },
+              obra: { type: "string" },
+              empleado: { type: "string" },
+              monto: { type: "number" },
+              concepto: { type: "string" },
+              categoria: { type: "string" },
+              horas: { type: "number" },
+              ubicacion: { type: "string" },
+              presupuesto: { type: "number" },
+            },
+          },
+        },
+        required: ["modulo"],
+      },
+    },
+  }];
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -171,13 +208,6 @@ serve(async (req) => {
           console.error(`[ai-assistant] no pude leer métricas: ${mRes.status}`);
         }
       } catch (e) { console.error("[ai-assistant] error leyendo métricas:", e); }
-    }
-
-    const key = Deno.env.get("GEMINI_API_KEY");
-    if (!key) {
-      return new Response(JSON.stringify({ reply: fallbackText() }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
     }
 
     const systemPrompt = mode === "admin" ? ADMIN_PROMPT : USER_PROMPT;
@@ -329,70 +359,74 @@ serve(async (req) => {
       });
     }
 
-    const callGemini = async (modelo, contents) => {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`;
-      // Timeout por modelo: evita que un modelo colgado bloquee toda la cadena
-      // de respaldo y deje al usuario en "Pensando…" indefinido.
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 8000);
-      try {
-        const aiRes = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-          body: JSON.stringify({
-            system_instruction: { parts: [{ text: systemPrompt }] },
-            contents,
-            tools: tools(),
-            generationConfig: { temperature: 0.4, maxOutputTokens: 700 },
-          }),
-          signal: controller.signal,
-        });
-        if (!aiRes.ok) {
-          const errBody = await aiRes.text();
-          console.error(`[ai-assistant] ${modelo} falló (${aiRes.status}): ${errBody.slice(0, 400)}`);
-          return null;
-        }
-        return await aiRes.json();
-      } catch (e) {
-        console.error(`[ai-assistant] ${modelo} timeout/error:`, e);
-        return null;
-      } finally {
-        clearTimeout(timer);
-      }
-    };
-
+    // ===== DeepSeek (no-streaming, con function calling) =====
+    // El motor de TEXTO es DeepSeek. Gemini queda SOLO para audio (transcribe.ts).
+    const deepseekKey = Deno.env.get("DEEPSEEK_API_KEY");
+    if (!deepseekKey) {
+      return new Response(JSON.stringify({ reply: fallbackText() }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const deepseekModel = Deno.env.get("DEEPSEEK_MODEL") || "deepseek-chat";
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
     let reply = "";
-    let ultimoError = "";
-    let functionCall = null;
-
-    // 1) Primera pasada: texto o llamada a herramienta
-    for (const modelo of modelos) {
-      try {
-        const data = await callGemini(modelo, [{ role: "user", parts: [{ text: userText }] }]);
-        if (!data) { ultimoError = "sin respuesta"; continue; }
-        const part = data?.candidates?.[0]?.content?.parts?.[0];
-        if (part?.functionCall) { functionCall = part.functionCall; break; }
-        const t = part?.text;
-        if (t) { reply = t; console.log(`[ai-assistant] respondió con ${modelo}`); break; }
-      } catch (e) { ultimoError = String(e); console.error(`[ai-assistant] ${modelo} excepción:`, e); }
+    let functionCall: { name: string; args: Record<string, unknown> } | null = null;
+    try {
+      const aiRes = await fetch("https://api.deepseek.com/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${deepseekKey}` },
+        body: JSON.stringify({
+          model: deepseekModel,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userText },
+          ],
+          tools: toolsOpenAI(),
+          temperature: 0.3,
+          max_tokens: 800,
+        }),
+        signal: controller.signal,
+      });
+      if (!aiRes.ok) {
+        const errBody = await aiRes.text();
+        console.error(`[ai-assistant] deepseek falló (${aiRes.status}): ${errBody.slice(0, 400)}`);
+      } else {
+        const data = await aiRes.json();
+        const msg = data?.choices?.[0]?.message;
+        const t = msg?.content;
+        if (t) reply = String(t).trim();
+        const toolCalls = (msg?.tool_calls || []) as Array<{ function?: { name?: string; arguments?: string } }>;
+        if (toolCalls.length) {
+          const tc = toolCalls[0];
+          if (tc?.function?.name === "abrir_formulario") {
+            let args: Record<string, unknown> = {};
+            try { args = JSON.parse(tc.function.arguments || "{}"); } catch (e) { console.error("[ai-assistant] args JSON inválido:", e); }
+            functionCall = { name: "abrir_formulario", args };
+          }
+        }
+      }
+    } catch (e) {
+      console.error("[ai-assistant] deepseek timeout/error:", e);
+    } finally {
+      clearTimeout(timer);
     }
 
-    // 2) Si hay llamada a "abrir_formulario", devolver la acción para que el frontend
-    //    abra el modal y pre-complete los campos (confirmación por voz/texto).
-    let action = null;
+    // Si hay llamada a "abrir_formulario", devolver la acción (compatible con executeAction)
+    let action: { modulo: string; campos: Record<string, unknown> } | null = null;
     if (functionCall && functionCall.name === "abrir_formulario") {
       const args = functionCall.args || {};
-      const modulo = args.modulo;
-      const campos = args.campos || {};
+      const modulo = String(args.modulo || "");
+      const campos = (args.campos || {}) as Record<string, unknown>;
       action = { modulo, campos };
       console.log("[ai-assistant] abrir_formulario →", JSON.stringify(action));
-      const etiquetas = { empleado: "Empleados", obra: "Obras", cliente: "Clientes", presupuesto: "Presupuestos", gasto: "Gastos", ingreso: "Ingresos", jornada: "Jornada" };
+      const etiquetas: Record<string, string> = { empleado: "Empleados", obra: "Obras", cliente: "Clientes", presupuesto: "Presupuestos", gasto: "Gastos", ingreso: "Ingresos", jornada: "Jornada" };
       const resumen = Object.entries(campos).map(([k, v]) => `${k}: ${v}`).join(", ");
       reply = `¡De acuerdo! Abrí el formulario de ${etiquetas[modulo] || modulo}${resumen ? " con " + resumen : ""}. Completá lo que falta o confirmá la carga.`;
     }
 
     if (!reply) {
-      console.error("[ai-assistant] sin respuesta final. Último error:", ultimoError);
+      console.error("[ai-assistant] sin respuesta final de DeepSeek");
       return new Response(JSON.stringify({ reply: fallbackText() }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
