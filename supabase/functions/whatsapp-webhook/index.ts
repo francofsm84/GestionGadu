@@ -331,12 +331,12 @@ function detectInteractive(body: unknown): { from: string; buttonId: string } | 
 }
 
 async function handleButtonReply(from: string, buttonId: string) {
-  console.log("[GADU-WA-INTERACTIVE] botón:", buttonId, "de", from);
+  console.log("[GADU-WA-BUTTONS] botón:", buttonId, "de", from);
 
   /* 1) Buscar usuario (helper compartido) */
   const userId = await findUserId(from);
   if (!userId) {
-    console.warn("[GADU-WA-INTERACTIVE] usuario no encontrado para", from);
+    console.warn("[GADU-WA-BUTTONS] usuario no encontrado para", from);
     fireAndForget(sendWhatsApp(from, "🤖 No pude identificar tu cuenta."));
     return;
   }
@@ -345,7 +345,7 @@ async function handleButtonReply(from: string, buttonId: string) {
   const rData = await rest("app_data?select=user_id,data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
   const rowsData = (await rData.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
   if (!Array.isArray(rowsData) || !rowsData.length) {
-    console.warn("[GADU-WA-INTERACTIVE] usuario sin app_data:", userId);
+    console.warn("[GADU-WA-BUTTONS] usuario sin app_data:", userId);
     fireAndForget(sendWhatsApp(from, "🤖 No encontré tus datos."));
     return;
   }
@@ -355,7 +355,7 @@ async function handleButtonReply(from: string, buttonId: string) {
   const expenses = (data.expenses || []) as Array<Record<string, any>>;
   const idx = expenses.findIndex(e => e.source === "whatsapp" && e.workId == null);
   if (idx === -1) {
-    console.warn("[GADU-WA-INTERACTIVE] sin gastos pendientes para", userId);
+    console.warn("[GADU-WA-BUTTONS] sin gastos pendientes para", userId);
     fireAndForget(sendWhatsApp(from, "🤖 No encontré gastos pendientes de asignar."));
     return;
   }
@@ -375,7 +375,7 @@ async function handleButtonReply(from: string, buttonId: string) {
     expense.type = "general";
     fireAndForget(sendWhatsApp(from, "✅ Listo, el gasto de $" + monto + " quedó registrado como Gasto General."));
   } else {
-    console.warn("[GADU-WA-INTERACTIVE] botón desconocido:", buttonId);
+    console.warn("[GADU-WA-BUTTONS] botón desconocido:", buttonId);
     return;
   }
 
