@@ -420,6 +420,7 @@ async function processMessage(body: unknown) {
         }),
       });
       const ai = await aiRes.json().catch(() => ({}));
+      console.log("[GADU-WA-AI] ai-assistant http", aiRes.status, "· body:", JSON.stringify(ai));
       aiReply = ai.reply || "";
       if (ai.action && ai.action.modulo) action = ai.action;
     } catch (e) {
