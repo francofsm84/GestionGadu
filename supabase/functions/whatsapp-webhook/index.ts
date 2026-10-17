@@ -142,18 +142,21 @@ serve(async (req) => {
     }
   }
 
-  try {
-    const body = await req.json().catch(() => ({}));
-    /* Registro INCONDICIONAL de cualquier evento enviado por Meta */
-    console.log("=== PAYLOAD ENTRANTE ===", JSON.stringify(body));
-    console.log("=== WEBHOOK EVENT RECEIVED ===", JSON.stringify(body));
-    console.log("RAW BODY:", JSON.stringify(body));
-    const inc = parseIncoming(body);
-    if (!inc) {
-      console.warn("[whatsapp-webhook] payload no reconocido:", JSON.stringify(body));
-      return json({ ok: false, error: "mensaje no reconocido (se espera texto o nota de voz transcrita)" });
-    }
-    console.log("[whatsapp-webhook] from=" + inc.from + " text=" + JSON.stringify(inc.text));
+  const body = await req.json().catch(() => ({}));
+  /* Registro INCONDICIONAL de cualquier evento enviado por Meta */
+  console.log("=== PAYLOAD ENTRANTE ===", JSON.stringify(body));
+  console.log("=== WEBHOOK EVENT RECEIVED ===", JSON.stringify(body));
+  console.log("RAW BODY:", JSON.stringify(body));
+  /* Responder 200 YA a Meta y procesar (IA + insert en Supabase) en segundo
+     plano: si la IA tarda >3s, Meta ya recibió el ack y NO reintenta. */
+  fireAndForget((async () => {
+    try {
+      const inc = parseIncoming(body);
+      if (!inc) {
+        console.warn("[whatsapp-webhook] payload no reconocido:", JSON.stringify(body));
+        return json({ ok: false, error: "mensaje no reconocido (se espera texto o nota de voz transcrita)" });
+      }
+      console.log("[whatsapp-webhook] from=" + inc.from + " text=" + JSON.stringify(inc.text));
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -331,17 +334,14 @@ serve(async (req) => {
       return json({ ok: true, from: inc.from, reply });
     }
 
-    /* 5) Consultas y otros módulos: responde la IA (igual que el chat web) */
-    const reply = aiReply || "🤖 Recibí tu mensaje. Para cargas complejas (obras, empleados, jornadas) te conviene completarlas en la app: https://gestiongadu.vercel.app";
-    fireAndForget(sendWhatsApp(inc.from, reply));
-    return json({ ok: true, from: inc.from, reply });
-  } catch (error) {
-    /* Traza clara de cualquier error interno, SIN bloquear a Meta:
-       responde HTTP 200 para que Meta no reintente en bucle. */
-    console.error("CRITICAL ERROR:", error);
-    return new Response(
-      JSON.stringify({ ok: false, error: (error && (error as Error).message) || String(error) }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
+      /* 5) Consultas y otros módulos: responde la IA (igual que el chat web) */
+      const reply = aiReply || "🤖 Recibí tu mensaje. Para cargas complejas (obras, empleados, jornadas) te conviene completarlas en la app: https://gestiongadu.vercel.app";
+      fireAndForget(sendWhatsApp(inc.from, reply));
+      return json({ ok: true, from: inc.from, reply });
+    } catch (error) {
+      console.error("CRITICAL ERROR:", error);
+    }
+  })());
+  /* Respuesta inmediata a Meta (200 OK) — evita timeout y reintentos */
+  return json({ ok: true });
 });
