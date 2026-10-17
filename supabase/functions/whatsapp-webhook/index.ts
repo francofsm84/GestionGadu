@@ -51,6 +51,20 @@ function json(obj: unknown, status = 200) {
   });
 }
 
+/* Desacopla trabajo pesado de la respuesta a Meta: responde 200 YA y sigue
+   procesando en segundo plano. Evita que Meta marque timeout y deje de entregar. */
+function fireAndForget(p: Promise<unknown>) {
+  try {
+    // deno-lint-ignore no-undef
+    if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") {
+      // deno-lint-ignore no-undef
+      EdgeRuntime.waitUntil(p);
+      return;
+    }
+  } catch (_e) { /* caer al fallback */ }
+  p.catch(e => console.error("[whatsapp-webhook] async error:", e));
+}
+
 /* Envío de la respuesta al usuario por WhatsApp (Meta Cloud API).
    Sin token configurado, la respuesta viaja en el body del webhook (útil
    para puentes propios o pruebas). */
@@ -170,14 +184,14 @@ serve(async (req) => {
       console.log("[whatsapp-webhook] consulta app_data (código):", code, "→ http", r.status, "·", (Array.isArray(rows) ? rows.length : 0), "coincidencia(s)", (Array.isArray(rows) && rows[0]) ? ("user_id=" + rows[0].user_id) : "");
       if (!r.ok || !Array.isArray(rows) || !rows.length) {
         console.warn("[whatsapp-webhook] código no encontrado/vencido:", code, "(http", r.status + ")");
-        await sendWhatsApp(inc.from, "🤖 El código no es válido o ya expiró. Volvé a generarlo desde la app (Perfil → Vincular WhatsApp → Generar código) y envialo de nuevo.");
+        fireAndForget(sendWhatsApp(inc.from, "🤖 El código no es válido o ya expiró. Volvé a generarlo desde la app (Perfil → Vincular WhatsApp → Generar código) y envialo de nuevo."));
         return json({ ok: false, error: "código no encontrado o expirado" });
       }
       const row = rows[0];
       const wp = row.data?.settings?.profile?.whatsapp || {};
       if (!phoneMatches(wp.phone, inc.from)) {
         console.warn("[whatsapp-webhook] teléfono no coincide: from=" + inc.from + " perfil=" + String(wp.phone));
-        await sendWhatsApp(inc.from, "🤖 El código es válido pero este número no coincide con el teléfono registrado en tu perfil.");
+        fireAndForget(sendWhatsApp(inc.from, "🤖 El código es válido pero este número no coincide con el teléfono registrado en tu perfil."));
         return json({ ok: false, error: "teléfono no coincide" });
       }
       row.data.settings.profile.whatsapp = {
@@ -208,7 +222,7 @@ serve(async (req) => {
       }
       console.log("[whatsapp-webhook] cuenta vinculada:", row.user_id, "teléfono:", inc.from);
       const reply = "¡Hola! Tu cuenta de Gestión GADU ha sido vinculada correctamente con este número de WhatsApp. Ya podés recibir tus avisos y reportes aquí.";
-      await sendWhatsApp(inc.from, reply);
+      fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
     }
 
@@ -242,7 +256,7 @@ serve(async (req) => {
     if (!userId2) {
       console.warn("[whatsapp-webhook] número no vinculado:", inc.from);
       const rpl = "🤖 No reconozco este número. Primero vinculá tu cuenta: desde la app generá tu código y envialo por WhatsApp.";
-      await sendWhatsApp(inc.from, rpl);
+      fireAndForget(sendWhatsApp(inc.from, rpl));
       return json({ ok: false, error: "número no vinculado", reply: rpl });
     }
     /* 2c) Recuperar el documento app_data del usuario encontrado */
@@ -251,7 +265,7 @@ serve(async (req) => {
     if (!Array.isArray(rowsData) || !rowsData.length) {
       console.warn("[whatsapp-webhook] usuario sin app_data:", userId2);
       const rpl = "🤖 Encontré tu cuenta pero aún no tiene datos. Abrí la app una vez para sincronizar y volvé a intentarlo.";
-      await sendWhatsApp(inc.from, rpl);
+      fireAndForget(sendWhatsApp(inc.from, rpl));
       return json({ ok: false, error: "sin app_data", reply: rpl });
     }
     const row = rowsData[0];
@@ -309,17 +323,17 @@ serve(async (req) => {
           return json({ ok: false, error: "no se pudo guardar el movimiento" });
         }
         const reply = (aiReply ? aiReply + "\n\n" : "") + "✅ " + res.label;
-        await sendWhatsApp(inc.from, reply);
+        fireAndForget(sendWhatsApp(inc.from, reply));
         return json({ ok: true, from: inc.from, reply });
       }
       const reply = aiReply || ("🤖 Me falta " + (res.missing || "un dato") + " para cargarlo. Decímelo por acá.");
-      await sendWhatsApp(inc.from, reply);
+      fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
     }
 
     /* 5) Consultas y otros módulos: responde la IA (igual que el chat web) */
     const reply = aiReply || "🤖 Recibí tu mensaje. Para cargas complejas (obras, empleados, jornadas) te conviene completarlas en la app: https://gestiongadu.vercel.app";
-    await sendWhatsApp(inc.from, reply);
+    fireAndForget(sendWhatsApp(inc.from, reply));
     return json({ ok: true, from: inc.from, reply });
   } catch (error) {
     /* Traza clara de cualquier error interno, SIN bloquear a Meta:
