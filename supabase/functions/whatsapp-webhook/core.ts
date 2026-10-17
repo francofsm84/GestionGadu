@@ -206,10 +206,10 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
     return { modulo: "ingreso", campos: { monto: num(m[1]), concepto: "Cobro" } };
   }
 
-  /* 5) Empleado: "Agrega un nuevo empleado Juan Carlos Maldonado" */
-  m = f.match(/(?:agreg[aá]|agrega|alta|sumar|crear|contratar)\s+(?:un\s+)?(?:nuevo\s+)?empleado\s+(.+)/i);
+  /* 5) Empleado: "Agrega un nuevo empleado Juan Carlos Maldonado" / "empleado. Jorge" */
+  m = f.match(/(?:agreg[aá]|agrega|alta|sumar|crear|contratar)\s+(?:un\s+)?(?:nuevo\s+)?empleado[\s.,;:]+(.+)/i);
   if (m && String(m[1] || "").trim()) return { modulo: "empleado", campos: { nombre: String(m[1] || "").trim() } };
-  m = f.match(/nuevo\s+empleado\s+(.+)/i);
+  m = f.match(/nuevo\s+empleado[\s.,;:]+(.+)/i);
   if (m && String(m[1] || "").trim()) return { modulo: "empleado", campos: { nombre: String(m[1] || "").trim() } };
 
   /* 6) Adelanto: "Carga adelanto de 25000 a Luis Álamo" */
@@ -315,13 +315,14 @@ export function executeAction(
   if (action.modulo === "empleado") {
     const nombre = String(c.nombre || "").trim();
     if (!nombre) return { ok: false, missing: "el nombre del empleado" };
+    const rol = String(c.rol || "").trim();
     const partes = nombre.split(/\s+/);
     const firstName = partes[0] || "";
     const lastName = partes.slice(1).join(" ");
     (d.employees || (d.employees = [])).push({
-      id: idGen(), firstName, lastName, phone: "", role: "empleado", active: true, source: "whatsapp",
+      id: idGen(), firstName, lastName, phone: "", role: rol || "empleado", active: true, source: "whatsapp",
     } as unknown as Record<string, unknown>);
-    return { ok: true, label: "Empleado '" + nombre + "' agregado correctamente ✓" };
+    return { ok: true, label: "Empleado '" + nombre + "'" + (rol ? " (" + rol + ")" : "") + " agregado correctamente ✓" };
   }
 
   if (action.modulo === "adelanto") {
