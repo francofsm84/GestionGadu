@@ -291,6 +291,19 @@
      ------------------------------------------------------------ */
   let data = null;
   let key = KEY;
+  let _hasData = false;   // "¿hay datos persistidos?" (flag en memoria, sin tocar storage)
+
+  /* Resuelve el backend de storage: usa G.storage (localForage/IndexedDB) si
+     está disponible; si no (tests en Node o storage.js no cargado), cae a un
+     fallback síncrono sobre localStorage. */
+  function storage() {
+    if (G.storage && G.storage.get && G.storage.set) return G.storage;
+    return {
+      get(k) { try { return Promise.resolve(localStorage.getItem(k)); } catch (e) { return Promise.resolve(null); } },
+      set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} return Promise.resolve(v); },
+      del(k) { try { localStorage.removeItem(k); } catch (e) {} return Promise.resolve(); },
+    };
+  }
 
   /* En modo SaaS cada usuario tiene su almacén local separado.
      Al migrar desde la versión sin usuarios, se copian los datos
@@ -307,26 +320,55 @@
     }
     key = newKey;
     data = null;
+    _hasData = false;
+  }
+
+  /* Migración automática: si hay datos viejos en localStorage, los pasa a
+     IndexedDB (vía G.storage) y recién después borra localStorage. */
+  async function migrateFromLocalStorage() {
+    try {
+      const raw = localStorage.getItem(key) || localStorage.getItem(KEY);
+      if (raw) {
+        const existing = await storage().get(key);
+        if (!existing) await storage().set(key, raw);
+      }
+      localStorage.removeItem(key);
+      localStorage.removeItem(KEY);
+      console.log('[GADU-STORAGE] migración localStorage → IndexedDB completa');
+    } catch (e) {}
   }
 
   function hasLocalData() {
+    if (_hasData) return true;
     try { return !!localStorage.getItem(key); } catch (e) { return false; }
   }
 
   function load() {
-    if (data) return data;
+    if (data) return Promise.resolve(data);
+    /* 1) SYNC: leer localStorage legacy (arranque + tests Node). Deja `data`
+       no-null de inmediato para que S.totals()/S.data nunca revienten. */
     try {
-      const raw = localStorage.getItem(key);
+      const raw = localStorage.getItem(key) || localStorage.getItem(KEY);
       if (raw) {
         const d = JSON.parse(raw);
-        if (d && Array.isArray(d.works) && Array.isArray(d.incomes)) data = d;
+        if (d && Array.isArray(d.works) && Array.isArray(d.incomes)) { data = d; _hasData = true; }
       }
-    } catch (e) { /* usar seed */ }
-    /* Arranque limpio: SIN datos de demostración automáticos.
-       Entorno nuevo o registros borrados → la app inicia en $0. */
+    } catch (e) {}
+    /* 2) Arranque limpio: SIN datos de demostración automáticos. */
     if (!data) data = emptySeed();
     normalize();
-    return data;
+    /* 3) ASYNC: migrar + leer IndexedDB (puede reemplazar con datos más nuevos). */
+    return (async () => {
+      await migrateFromLocalStorage();
+      try {
+        const raw = await storage().get(key);
+        if (raw) {
+          const d = JSON.parse(raw);
+          if (d && Array.isArray(d.works) && Array.isArray(d.incomes)) { data = d; _hasData = true; normalize(); }
+        }
+      } catch (e) {}
+      return data;
+    })();
   }
   /* Estado inicial en blanco (sin seed ficticio) */
   function emptySeed() {
@@ -334,6 +376,7 @@
       settings: currentSettings(),
       contacts: [], works: [], budgets: [], incomes: [], expenses: [],
       employees: [], attendance: [], assets: [], distributions: [], compromisos: [], seguros: [],
+      trash: [],
     };
   }
   function normalize() {
@@ -343,7 +386,7 @@
        mantiene SIEMPRE como respaldo ante cortes de conexión. */
     if (!data.settings.cloud) data.settings.cloud = {};
     if (data.settings.cloud.autoPush === undefined) data.settings.cloud.autoPush = true;
-    ['contacts', 'works', 'budgets', 'incomes', 'expenses', 'assets', 'distributions', 'employees', 'attendance', 'seguros', 'compromisos'].forEach(k => {
+    ['contacts', 'works', 'budgets', 'incomes', 'expenses', 'assets', 'distributions', 'employees', 'attendance', 'seguros', 'compromisos', 'trash'].forEach(k => {
       if (!Array.isArray(data[k])) data[k] = [];
     });
     /* Migración limpia: compromisos de la agenda (visitas/entregas/eventos) */
@@ -414,11 +457,12 @@
     return { key: 'al-dia', tone: 'success', label: 'Al día · ' + days + ' días', days };
   }
   function save() {
-    try { localStorage.setItem(key, JSON.stringify(data)); }
-    catch (e) {
-      try {
-        if (G.ui && G.ui.toast) G.ui.toast('No se pudo guardar en este navegador (' + e.message + '). Exportá un respaldo para no perder datos.', 'error');
-      } catch (ignored) {}
+    if (data) {
+      storage().set(key, JSON.stringify(data)).catch(e => {
+        try {
+          if (G.ui && G.ui.toast) G.ui.toast('No se pudo guardar (' + (e && e.message ? e.message : e) + '). Exportá un respaldo.', 'error');
+        } catch (ignored) {}
+      });
     }
     /* Sincronización automática con la nube (si está activada) */
     if (data && data.settings && data.settings.cloud && data.settings.cloud.autoPush) {
@@ -436,7 +480,8 @@
       !Array.isArray(newData.works) || !Array.isArray(newData.incomes) || !Array.isArray(newData.expenses)) return false;
     data = newData;
     normalize();
-    try { localStorage.setItem(key, JSON.stringify(data)); } catch (e) {}
+    _hasData = true;
+    storage().set(key, JSON.stringify(data)).catch(() => {});
     return true;
   }
 
@@ -559,7 +604,28 @@
     return prev;
   }
   function update(coll, id, patch) { const it = data[coll].find(x => x.id === id); if (it) Object.assign(it, patch); save(); return it; }
-  function remove(coll, id) { data[coll] = data[coll].filter(x => x.id !== id); save(); }
+  function remove(coll, id) {
+    const it = data[coll].find(x => x.id === id);
+    if (it) {
+      data.trash = data.trash || [];
+      data.trash.unshift({
+        id: uid(),
+        collection: coll,
+        item: it,
+        deletedAt: new Date().toISOString(),
+      });
+      data[coll] = data[coll].filter(x => x.id !== id);
+    }
+    save();
+  }
+  function restore(trashId) {
+    const t = (data.trash || []).find(x => x.id === trashId);
+    if (!t || !t.collection || !Array.isArray(data[t.collection])) return false;
+    data[t.collection].unshift(t.item);
+    data.trash = data.trash.filter(x => x.id !== trashId);
+    save();
+    return true;
+  }
   function removeWork(id) {
     data.works = data.works.filter(x => x.id !== id);
     data.incomes = data.incomes.filter(x => x.workId !== id);
@@ -848,7 +914,7 @@
 
   G.store = {
     load, save, reset, exportJSON, importJSON, reload, startReal, startEmpty,
-    add, update, remove, removeWork, removeEmployee, nextCode,
+    add, update, remove, restore, removeWork, removeEmployee, nextCode,
     workStats, totals, totalsBetween, monthlySeries, expenseDistribution, distributionSummary, socios, splitsFor, contactById,
     employeeById, employeeName, attendanceFor, employeePayments, employeeStats, employeeMonth, employeeAdvances, employeeAdvancesThisMonth, employeeAccumulated, presentToday, employeesPaidThisMonth,
     workClientAdvances, workEmployeeAdvances, workEmployees,
