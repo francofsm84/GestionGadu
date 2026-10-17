@@ -17,6 +17,15 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+/* Normaliza el MIME para Gemini: WhatsApp manda "audio/ogg; codecs=opus";
+   Gemini solo acepta el tipo simple (ej. "audio/ogg"). */
+function normalizeMime(raw: string): string {
+  const m = String(raw || "").split(";")[0].trim().toLowerCase();
+  if (m === "audio/opus") return "audio/ogg";       // Opus sin contenedor → ogg
+  if (!m.startsWith("audio/")) return "audio/ogg";   // desconocido → ogg por defecto
+  return m;
+}
+
 /* 1) Obtiene la URL del archivo de audio desde Graph API */
 async function getMediaUrl(mediaId: string): Promise<string> {
   const token = Deno.env.get("WHATSAPP_TOKEN") || "";
@@ -32,6 +41,7 @@ async function getMediaUrl(mediaId: string): Promise<string> {
   const j = await res.json();
   const url = String((j as { url?: string }).url || "");
   if (!url) throw new Error("getMediaUrl sin url");
+  console.log("[GADU-WA-AUDIO] ✅ URL del media obtenida:", url.slice(0, 80) + "…");
   return url;
 }
 
@@ -45,7 +55,9 @@ async function downloadMedia(url: string): Promise<{ buffer: ArrayBuffer; mimeTy
     throw new Error("downloadMedia HTTP " + res.status);
   }
   const buffer = await res.arrayBuffer();
-  const mimeType = res.headers.get("content-type") || "audio/ogg";
+  const rawMime = res.headers.get("content-type") || "audio/ogg";
+  const mimeType = normalizeMime(rawMime);
+  console.log("[GADU-WA-AUDIO] ✅ audio descargado:", buffer.byteLength, "bytes · mime:", mimeType, "(raw:", rawMime + ")");
   return { buffer, mimeType };
 }
 
@@ -79,6 +91,8 @@ async function geminiTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<
   }
   const j = await res.json();
   const text = j?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  if (text) console.log("[GADU-WA-AUDIO] ✅ transcripción Gemini:", text.slice(0, 80));
+  else console.warn("[GADU-WA-AUDIO] Gemini respondió 200 pero sin texto:", JSON.stringify(j).slice(0, 200));
   return String(text).trim();
 }
 
