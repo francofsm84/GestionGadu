@@ -397,10 +397,12 @@ async function processMessage(body: unknown) {
     const data = row.data || {};
 
     /* 3) Mismo motor que el chat web: ai-assistant en modo servidor.
-       Si el LLM no responde o falla la auth, hay fallback local (localIntent)
-       para "Gasté X en Y" / "Ingresé X por Y" y el negocio sigue operando. */
+       Esperamos la respuesta de la IA con un timeout de seguridad de 10s.
+       Recién si la IA FALLA (o tarda más de 10s) caemos al fallback local. */
     let aiReply = "";
     let action: { modulo: string; campos?: Record<string, unknown> } | null = null;
+    const aiController = new AbortController();
+    const aiTimer = setTimeout(() => aiController.abort(), 10000);
     try {
       const aiRes = await fetch(supabaseUrl() + "/functions/v1/ai-assistant", {
         method: "POST",
@@ -418,20 +420,23 @@ async function processMessage(body: unknown) {
           service: true,
           userId: row.user_id,
         }),
+        signal: aiController.signal,
       });
       const ai = await aiRes.json().catch(() => ({}));
-      console.log("[GADU-WA-AI] ai-assistant http", aiRes.status, "· body:", JSON.stringify(ai));
+      console.log("[GADU-WA-BACKGROUND] ai-assistant http", aiRes.status, "· body:", JSON.stringify(ai));
       aiReply = ai.reply || "";
       if (ai.action && ai.action.modulo) action = ai.action;
     } catch (e) {
-      console.error("[whatsapp-webhook] ai-assistant falló:", e);
+      console.error("[GADU-WA-BACKGROUND] ai-assistant falló/abortó:", e);
+    } finally {
+      clearTimeout(aiTimer);
     }
-    /* Fallback local: si no hubo acción de la IA, intentamos el patrón simple */
+    /* Fallback local SOLO si la IA no devolvió acción */
     if (!action) {
       const local = localIntent(inc.text);
       if (local) {
         action = local;
-        console.log("[whatsapp-webhook] usando intent local:", JSON.stringify(local));
+        console.log("[GADU-WA-BACKGROUND] usando intent local (fallback):", JSON.stringify(local));
       }
     }
     console.log("[DEBUG] Intent detectado: " + (action ? action.modulo : "ninguno"));
