@@ -290,22 +290,24 @@ serve(async (req) => {
   console.log("=== WEBHOOK EVENT RECEIVED ===", JSON.stringify(body));
   console.log("RAW BODY:", JSON.stringify(body));
 
-  /* ===== Idempotencia: si Meta reintenta, no procesar dos veces ===== */
   const messageId = extractMessageId(body);
-  if (messageId) {
-    if (await isDuplicate(messageId)) {
-      console.log("[GADU-WA-DEDUP] message_id ya procesado:", messageId);
-      return new Response("OK", { status: 200, headers: corsHeaders });
-    }
-    await markProcessed(messageId);
-  }
-
-  /* Encolar inmediato y procesar FIFO en segundo plano (no se pierde en ráfagas) */
   const fromQuick = extractFrom(body);
   const phoneQuick = fromQuick ? normalizePhone(fromQuick) : "desconocido";
-  /* Encolar PRIMERO y recién después drenar (secuencial): si el drain corre
-     antes de insertar, no ve el mensaje y queda "pending" para siempre. */
+
+  /* Responder 200 OK INMEDIATAMENTE (en <1s) y procesar TODO en segundo plano.
+     Así un audio que tarde (o falle) NUNCA bloquea el 200 OK ni los mensajes
+     siguientes. La idempotencia también va en background. */
   fireAndForget((async () => {
+    /* Idempotencia: si este message.id ya se procesó, salir sin tocar nada */
+    if (messageId) {
+      if (await isDuplicate(messageId)) {
+        console.log("[GADU-WA-DEDUP] message_id ya procesado:", messageId);
+        return;
+      }
+      await markProcessed(messageId);
+    }
+    /* Encolar PRIMERO y recién después drenar (secuencial): si el drain corre
+       antes de insertar, no ve el mensaje y queda "pending" para siempre. */
     await enqueueMessage(rest, phoneQuick, body);
     await drainPhone(phoneQuick);
   })());
