@@ -180,13 +180,32 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
     return { modulo: "gasto", campos: { monto: num(m[2]), categoria: String(m[1] || "").trim() } };
   }
 
-  /* 4) Ingreso explícito: "Ingresé 80000 por la obra" */
-  m = f.match(/ingres(?:e|o|[eé]|[oó]|te|to)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:por|de)\s+(.+)/i);
+  /* 4) Ingreso: "Cobré 50000 por la obra" / "Ingresé 80000 por la obra" */
+  m = f.match(/(?:cobr[eé]?|ingres[eé]?|cobro|ingreso)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:por|de)\s+(.+)/i);
   if (m && num(m[1]) > 0) {
     return { modulo: "ingreso", campos: { monto: num(m[1]), concepto: String(m[2] || "").trim() } };
   }
+  /* 4b) Ingreso solo monto: "Ingreso de 30000" / "Cobré 30000" */
+  m = f.match(/(?:cobr[eé]?|ingres[eé]?|cobro|ingreso)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s*$/i);
+  if (m && num(m[1]) > 0) {
+    return { modulo: "ingreso", campos: { monto: num(m[1]), concepto: "Cobro" } };
+  }
 
-  /* 5) Gasto implícito SIN la palabra "gasto": "Flete 15000" / "Nafta 8000" */
+  /* 5) Empleado: "Agrega un nuevo empleado Juan Carlos Maldonado" */
+  m = f.match(/(?:agreg[aá]|agrega|alta|sumar|crear|contratar)\s+(?:un\s+)?(?:nuevo\s+)?empleado\s+(.+)/i);
+  if (m && String(m[1] || "").trim()) return { modulo: "empleado", campos: { nombre: String(m[1] || "").trim() } };
+  m = f.match(/nuevo\s+empleado\s+(.+)/i);
+  if (m && String(m[1] || "").trim()) return { modulo: "empleado", campos: { nombre: String(m[1] || "").trim() } };
+
+  /* 6) Adelanto: "Carga adelanto de 25000 a Luis Álamo" */
+  m = f.match(/(?:adelanto|anticipo)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:a|para)\s+(.+)/i);
+  if (m && num(m[1]) > 0) return { modulo: "adelanto", campos: { monto: num(m[1]), empleado: String(m[2] || "").trim() } };
+
+  /* 7) Obra: "Nueva obra Pérez en Alta Gracia" */
+  m = f.match(/(?:nueva\s+obra|crear\s+obra|obra\s+nueva)\s+(.+?)(?:\s+en\s+(.+))?$/i);
+  if (m && String(m[1] || "").trim()) return { modulo: "obra", campos: { nombre: String(m[1] || "").trim(), ubicacion: String(m[2] || "").trim() } };
+
+  /* 8) Gasto implícito SIN la palabra "gasto": "Flete 15000" / "Nafta 8000" */
   m = f.match(/^([a-záéíóúñ][a-záéíóúñ0-9\s]{1,40}?)\s+([\d][\d.,]*)\s*$/i);
   if (m && num(m[2]) > 0) {
     return { modulo: "gasto", campos: { monto: num(m[2]), categoria: String(m[1] || "").trim() } };
@@ -269,6 +288,39 @@ export function executeAction(
     } as unknown as Record<string, unknown>);
     return { ok: true, label: "Ingreso de $" + monto + " (" + concepto + ") en " + ob.label + " ✓" };
   }
+  if (action.modulo === "empleado") {
+    const nombre = String(c.nombre || "").trim();
+    if (!nombre) return { ok: false, missing: "el nombre del empleado" };
+    const partes = nombre.split(/\s+/);
+    const firstName = partes[0] || "";
+    const lastName = partes.slice(1).join(" ");
+    (d.employees || (d.employees = [])).push({
+      id: idGen(), firstName, lastName, phone: "", role: "empleado", active: true, source: "whatsapp",
+    } as unknown as Record<string, unknown>);
+    return { ok: true, label: "Empleado '" + nombre + "' agregado correctamente ✓" };
+  }
+
+  if (action.modulo === "adelanto") {
+    const montoAd = Number(c.monto);
+    if (!(montoAd > 0)) return { ok: false, missing: "el monto del adelanto" };
+    const empleado = String(c.empleado || "").trim();
+    (d.incomes || (d.incomes = [])).unshift({
+      id: idGen(), workId: null, clientId: null, date: todayISO, amount: montoAd,
+      concept: "Adelanto", method: "", reference: "", notes: "Adelanto a " + (empleado || "empleado"),
+      incomeKind: "adelanto", source: "whatsapp",
+    } as unknown as Record<string, unknown>);
+    return { ok: true, label: "Adelanto de $" + montoAd + (empleado ? " a " + empleado : "") + " registrado ✓" };
+  }
+
+  if (action.modulo === "obra") {
+    const nombreObra = String(c.nombre || "").trim();
+    if (!nombreObra) return { ok: false, missing: "el nombre de la obra" };
+    (d.works || (d.works = [])).unshift({
+      id: idGen(), nombre: nombreObra, ubicacion: String(c.ubicacion || ""), status: "activa", source: "whatsapp",
+    } as unknown as Record<string, unknown>);
+    return { ok: true, label: "Obra '" + nombreObra + "' creada ✓" };
+  }
+
   /* Módulos con wizard complejo: los responde la IA guiando a la app web */
   return { ok: false, unsupported: action.modulo };
 }

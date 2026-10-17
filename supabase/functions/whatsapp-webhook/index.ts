@@ -324,7 +324,7 @@ serve(async (req) => {
     }
 
     /* 4) Ejecutar la acción contable (gasto/ingreso) e impactar en app_data */
-    if (action && (action.modulo === "gasto" || action.modulo === "ingreso")) {
+    if (action && ["gasto", "ingreso", "empleado", "adelanto", "obra"].includes(action.modulo)) {
       const res = executeAction(data, action, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
       if (res.ok) {
         const up = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
