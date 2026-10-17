@@ -268,7 +268,16 @@ export function executeAction(
     const cat = normCategory(String(c.categoria || sourceText));
     if (!cat) return { ok: false, missing: "la categoría" };
     const ob = resolveObra();
-    if (ob.missing) return { ok: false, missing: ob.missing };
+    if (ob.missing) {
+      /* Quick Capture: sin obra → se guarda "sin asignar" (workId null). */
+      (d.expenses || (d.expenses = [])).unshift({
+        id: idGen(), type: "general", workId: null, date: todayISO, amount: monto,
+        category: cat, providerId: null, employeeId: null, expenseKind: null,
+        description: String(sourceText || "").slice(0, 200), invoiceNumber: "", paymentMethod: "", source: "whatsapp",
+      } as unknown as Record<string, unknown>);
+      console.log("[GADU-WA-INBOX] gasto sin obra guardado en bandeja: $" + monto + " (" + cat + ")");
+      return { ok: true, label: "Gasto de $" + monto + " (" + cat + ") guardado en tu bandeja. Al final del día te recuerdo asignarlo a una obra." };
+    }
     (d.expenses || (d.expenses = [])).unshift({
       id: idGen(), type: "obra", workId: ob.workId, date: todayISO, amount: monto,
       category: cat, providerId: null, employeeId: null, expenseKind: null,

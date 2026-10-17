@@ -176,9 +176,103 @@ serve(async (req) => {
   return json({ ok: true });
 });
 
+/* ===== Mensajes interactivos (botones) ===== */
+function detectInteractive(body: unknown): { from: string; buttonId: string } | null {
+  try {
+    const p = body as Record<string, any>;
+    const msg = p?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+    if (!msg || msg.type !== "interactive") return null;
+    const buttonId = String(msg.interactive?.button_reply?.id || "");
+    const from = String(msg.from || p?.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.wa_id || "");
+    if (!buttonId || !from) return null;
+    return { from: String(from).replace(/\D/g, ""), buttonId };
+  } catch (_e) {
+    return null;
+  }
+}
+
+async function handleButtonReply(from: string, buttonId: string) {
+  console.log("[GADU-WA-INTERACTIVE] botón:", buttonId, "de", from);
+
+  /* 1) Buscar usuario (misma lógica de candidatos que el flujo de texto) */
+  const fromCandidates = [...new Set([from, normalizePhone(from), "+" + normalizePhone(from)])];
+  let userId: string | null = null;
+  for (const phone of fromCandidates) {
+    for (const field of ["linkedPhone", "phone"]) {
+      const q = "data->settings->profile->whatsapp->>" + field + "=eq." + encodeURIComponent(phone);
+      const r = await rest("app_data?select=user_id&" + q + "&limit=1");
+      const rows = (await r.json().catch(() => [])) as Array<{ user_id: string }>;
+      if (Array.isArray(rows) && rows.length) { userId = rows[0].user_id; break; }
+    }
+    if (userId) break;
+    const qp = "whatsapp_number=eq." + encodeURIComponent(phone);
+    const rp = await rest("profiles?select=user_id&" + qp + "&limit=1");
+    const rowsP = (await rp.json().catch(() => [])) as Array<{ user_id: string }>;
+    if (Array.isArray(rowsP) && rowsP.length) { userId = rowsP[0].user_id; break; }
+  }
+  if (!userId) {
+    console.warn("[GADU-WA-INTERACTIVE] usuario no encontrado para", from);
+    fireAndForget(sendWhatsApp(from, "🤖 No pude identificar tu cuenta."));
+    return;
+  }
+
+  /* 2) Recuperar app_data */
+  const rData = await rest("app_data?select=user_id,data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+  const rowsData = (await rData.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+  if (!Array.isArray(rowsData) || !rowsData.length) {
+    console.warn("[GADU-WA-INTERACTIVE] usuario sin app_data:", userId);
+    fireAndForget(sendWhatsApp(from, "🤖 No encontré tus datos."));
+    return;
+  }
+  const data = rowsData[0].data || {};
+
+  /* 3) Gasto pendiente más reciente (unshift = el primero que cumple) */
+  const expenses = (data.expenses || []) as Array<Record<string, any>>;
+  const idx = expenses.findIndex(e => e.source === "whatsapp" && e.workId == null);
+  if (idx === -1) {
+    console.warn("[GADU-WA-INTERACTIVE] sin gastos pendientes para", userId);
+    fireAndForget(sendWhatsApp(from, "🤖 No encontré gastos pendientes de asignar."));
+    return;
+  }
+  const expense = expenses[idx];
+  const monto = Number(expense.amount) || 0;
+
+  /* 4) Asignar según el botón */
+  if (buttonId.startsWith("assign_work:")) {
+    const workId = buttonId.slice("assign_work:".length);
+    const work = (data.works || []).find((w: Record<string, any>) => String(w.id) === workId);
+    const workName = String(work?.nombre || work?.name || "la obra");
+    expense.workId = workId;
+    expense.type = "obra";
+    fireAndForget(sendWhatsApp(from, "✅ Listo, el gasto de $" + monto + " fue asignado a la obra " + workName + "."));
+  } else if (buttonId === "assign_general") {
+    expense.workId = null;
+    expense.type = "general";
+    fireAndForget(sendWhatsApp(from, "✅ Listo, el gasto de $" + monto + " quedó registrado como Gasto General."));
+  } else {
+    console.warn("[GADU-WA-INTERACTIVE] botón desconocido:", buttonId);
+    return;
+  }
+
+  /* 5) Guardar el JSON actualizado */
+  const up = await rest("app_data?user_id=eq." + encodeURIComponent(userId), {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+  });
+  if (!up.ok) console.error("[GADU-WA-INTERACTIVE] falló PATCH app_data:", up.status);
+  else console.log("[GADU-WA-INTERACTIVE] gasto asignado OK:", buttonId);
+}
+
 /* ===== Procesamiento del mensaje (extraído del handler) ===== */
 async function processMessage(body: unknown) {
   try {
+    /* Mensajes interactivos (botones) → asignar gasto pendiente */
+    const btn = detectInteractive(body);
+    if (btn) {
+      await handleButtonReply(btn.from, btn.buttonId);
+      return;
+    }
     const inc = parseIncoming(body);
     if (!inc) {
       console.warn("[whatsapp-webhook] payload no reconocido:", JSON.stringify(body));
