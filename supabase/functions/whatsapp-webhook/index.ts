@@ -231,6 +231,26 @@ async function askForWork(phone: string, userId: string, data: Record<string, an
   ]);
 }
 
+/* Idempotencia: evita procesar dos veces el mismo mensaje (reintentos de Meta) */
+function extractMessageId(payload: unknown): string {
+  const p = payload as Record<string, any>;
+  return String(p?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.id || "");
+}
+async function isDuplicate(messageId: string): Promise<boolean> {
+  if (!messageId) return false;
+  const r = await rest("whatsapp_processed_messages?message_id=eq." + encodeURIComponent(messageId) + "&limit=1", { method: "GET" });
+  const rows = await r.json().catch(() => []);
+  return Array.isArray(rows) && rows.length > 0;
+}
+async function markProcessed(messageId: string): Promise<void> {
+  if (!messageId) return;
+  await rest("whatsapp_processed_messages", {
+    method: "POST",
+    headers: { Prefer: "resolution=ignore-duplicates" },
+    body: JSON.stringify({ message_id: messageId }),
+  });
+}
+
 serve(async (req) => {
   /* Rastreo verbose: imprime SIEMPRE método, URL y headers de cualquier
      petición, para descartar filtros internos y validar el formato de los
@@ -269,6 +289,16 @@ serve(async (req) => {
   console.log("=== PAYLOAD ENTRANTE ===", JSON.stringify(body));
   console.log("=== WEBHOOK EVENT RECEIVED ===", JSON.stringify(body));
   console.log("RAW BODY:", JSON.stringify(body));
+
+  /* ===== Idempotencia: si Meta reintenta, no procesar dos veces ===== */
+  const messageId = extractMessageId(body);
+  if (messageId) {
+    if (await isDuplicate(messageId)) {
+      console.log("[GADU-WA-DEDUP] message_id ya procesado:", messageId);
+      return new Response("OK", { status: 200, headers: corsHeaders });
+    }
+    await markProcessed(messageId);
+  }
 
   /* Encolar inmediato y procesar FIFO en segundo plano (no se pierde en ráfagas) */
   const fromQuick = extractFrom(body);

@@ -245,6 +245,12 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
   m = f.match(/(?:nueva\s+obra|crear\s+obra|obra\s+nueva)\s+(.+?)(?:\s+en\s+(.+))?$/i);
   if (m && String(m[1] || "").trim()) return { modulo: "obra", campos: { nombre: String(m[1] || "").trim(), ubicacion: String(m[2] || "").trim() } };
 
+  /* 7b) Gasto SIN verbo: "45678 de nafta" / "5000 de cemento" (número + "de" + concepto) */
+  m = f.match(/^([\d][\d.,]*)\s+de\s+(.+)/i);
+  if (m && num(m[1]) > 0) {
+    return { modulo: "gasto", campos: { monto: num(m[1]), categoria: String(m[2] || "").trim() } };
+  }
+
   /* 8) Gasto implícito SIN la palabra "gasto": "Flete 15000" / "Nafta 8000" */
   m = f.match(/^([a-záéíóúñ][a-záéíóúñ0-9\s]{1,40}?)\s+([\d][\d.,]*)\s*$/i);
   if (m && num(m[2]) > 0) {
