@@ -35,11 +35,15 @@ async function getMediaUrl(mediaId: string): Promise<string> {
   return url;
 }
 
-/* 2) Descarga el archivo de audio */
+/* 2) Descarga el archivo de audio.
+   IMPORTANTE: la URL que devuelve Meta es una URL FIRMADA (lookaside.fbsbx.com)
+   y NO lleva el Bearer token; mandarlo puede devolver 403. */
 async function downloadMedia(url: string): Promise<{ buffer: ArrayBuffer; mimeType: string }> {
-  const token = Deno.env.get("WHATSAPP_TOKEN") || "";
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) throw new Error("downloadMedia HTTP " + res.status);
+  const res = await fetch(url);
+  if (!res.ok) {
+    console.error("[GADU-WA-AUDIO] downloadMedia HTTP", res.status, url.slice(0, 120));
+    throw new Error("downloadMedia HTTP " + res.status);
+  }
   const buffer = await res.arrayBuffer();
   const mimeType = res.headers.get("content-type") || "audio/ogg";
   return { buffer, mimeType };
