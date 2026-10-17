@@ -72,6 +72,8 @@ async function sendWhatsApp(to: string, text: string) {
   const token = Deno.env.get("WHATSAPP_TOKEN") || "";
   const phoneId = Deno.env.get("WHATSAPP_PHONE_ID") || "";
   const apiVersion = Deno.env.get("WHATSAPP_API_VERSION") || "v21.0";
+  console.log("[DEBUG] Destinatario (to): " + to);
+  console.log("[DEBUG] phone_number_id usado para enviar: " + phoneId);
   if (!token || !phoneId) {
     console.log("[whatsapp-webhook] sin WHATSAPP_TOKEN/WHATSAPP_PHONE_ID → respuesta en body");
     return false;
@@ -157,6 +159,7 @@ serve(async (req) => {
         return json({ ok: false, error: "mensaje no reconocido (se espera texto o nota de voz transcrita)" });
       }
       console.log("[whatsapp-webhook] from=" + inc.from + " text=" + JSON.stringify(inc.text));
+      console.log("[DEBUG] Remitente detectado: " + inc.from);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -310,6 +313,14 @@ serve(async (req) => {
         action = local;
         console.log("[whatsapp-webhook] usando intent local:", JSON.stringify(local));
       }
+    }
+    console.log("[DEBUG] Intent detectado: " + (action ? action.modulo : "ninguno"));
+
+    /* Saludo → respuesta directa (sin acción contable) */
+    if (action && action.modulo === "saludo") {
+      const reply = ((action as unknown) as { reply?: string }).reply || "¡Hola! 👋 Soy GADU. ¿En qué te ayudo?";
+      fireAndForget(sendWhatsApp(inc.from, reply));
+      return json({ ok: true, from: inc.from, reply });
     }
 
     /* 4) Ejecutar la acción contable (gasto/ingreso) e impactar en app_data */

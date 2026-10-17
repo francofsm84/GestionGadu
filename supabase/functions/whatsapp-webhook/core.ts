@@ -25,9 +25,8 @@ export function parseIncoming(payload: unknown): Incoming | null {
        El payload de prueba de Meta trae el número en messages[0].from (y a veces
        contacts vacío); metadata.display_phone_number es el número del BOT (último recurso). */
     const from = String(
-      (value?.contacts as Array<Record<string, unknown>>)?.[0]?.wa_id
-      || (msg.from as string | undefined)
-      || (value?.metadata as Record<string, unknown>)?.display_phone_number
+      (msg.from as string | undefined)
+      || (value?.contacts as Array<Record<string, unknown>>)?.[0]?.wa_id
       || ""
     );
     let text = "";
@@ -152,22 +151,47 @@ export function normCategory(raw: string): string {
    frases naturales, por si el motor de IA no está disponible o falla la auth
    servidor→servidor. Ej.: "Gasté 15000 en bolsas de cemento" ·
    "Ingresé 80000 por la obra de Pablo". */
-export function localIntent(text: string): { modulo: string; campos: Record<string, unknown> } | null {
-  const f = flat(String(text || ""));
+export function localIntent(text: string): { modulo: string; campos?: Record<string, unknown>; reply?: string } | null {
+  const f = flat(String(text || "")).trim();
+  if (!f) return null;
   const num = (s: string) => Number(s.replace(/\./g, "").replace(",", "."));
+
+  /* 0) Saludo → intent de saludo (respuesta directa, sin acción contable) */
+  if (/^(hola|holis|holi|buenas|buen\s*d[ií]a|buenos\s*d[ií]as|que\s*tal|c[oó]mo\s+(est[aá]s|est[aá]n|va)|hey|alo)\b/.test(f)) {
+    return {
+      modulo: "saludo",
+      reply: "¡Hola! 👋 Soy GADU, tu asistente de obra. Podés cargarme gastos o ingresos por acá, por ejemplo:\n• \"Gasté 15000 en cemento\"\n• \"Cobré 50000 por la obra\"\n\n¿En qué te ayudo?",
+    };
+  }
+
+  /* 1) Gasto explícito: monto + "en/de" + descripción ("Gasté 5000 criollos") */
   let m = f.match(/gas(?:te|to|t[eé]|t[oó])\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:en|de)\s+(.+)/i);
   if (m && num(m[1]) > 0) {
     return { modulo: "gasto", campos: { monto: num(m[1]), categoria: String(m[2] || "").trim() } };
   }
-  /* Variante sin preposición: "Gasto 1000 prueba" (monto + descripción) */
+  /* 2) Gasto explícito: monto + descripción sin preposición ("Gasto 1000 prueba") */
   m = f.match(/gas(?:te|to|t[eé]|t[oó])\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+([a-záéíóúñ].*)/i);
   if (m && num(m[1]) > 0) {
     return { modulo: "gasto", campos: { monto: num(m[1]), categoria: String(m[2] || "").trim() } };
   }
+  /* 3) Gasto explícito: descripción + monto al final ("Gasto flete 15000") */
+  m = f.match(/gas(?:te|to|t[eé]|t[oó])\s+(.+?)\s+([\d][\d.,]*)\s*$/i);
+  if (m && num(m[2]) > 0) {
+    return { modulo: "gasto", campos: { monto: num(m[2]), categoria: String(m[1] || "").trim() } };
+  }
+
+  /* 4) Ingreso explícito: "Ingresé 80000 por la obra" */
   m = f.match(/ingres(?:e|o|[eé]|[oó]|te|to)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:por|de)\s+(.+)/i);
   if (m && num(m[1]) > 0) {
     return { modulo: "ingreso", campos: { monto: num(m[1]), concepto: String(m[2] || "").trim() } };
   }
+
+  /* 5) Gasto implícito SIN la palabra "gasto": "Flete 15000" / "Nafta 8000" */
+  m = f.match(/^([a-záéíóúñ][a-záéíóúñ0-9\s]{1,40}?)\s+([\d][\d.,]*)\s*$/i);
+  if (m && num(m[2]) > 0) {
+    return { modulo: "gasto", campos: { monto: num(m[2]), categoria: String(m[1] || "").trim() } };
+  }
+
   return null;
 }
 
