@@ -206,11 +206,36 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
     return { modulo: "ingreso", campos: { monto: num(m[1]), concepto: "Cobro" } };
   }
 
-  /* 5) Empleado: "Agrega un nuevo empleado Juan Carlos Maldonado" / "empleado. Jorge" */
+  /* 5) Empleado: "Agrega un nuevo empleado Juan Carlos Maldonado" / "empleado. Jorge"
+        Extrae el nombre y, si detecta un oficio conocido al final, lo separa como rol
+        (red de seguridad si la IA no responde). */
+  const OFICIOS = [
+    "peon de albanil", "oficial albanil", "oficial electricista", "oficial plomero",
+    "maestro mayor de obra", "albanil", "plomero", "electricista", "pintor",
+    "carpintero", "ayudante", "oficial", "herrero", "gasista", "yesero", "tornero",
+  ];
+  const separarEmpleado = (raw: string): { nombre: string; rol: string } => {
+    const nombre = String(raw || "").trim();
+    const fn = flat(nombre);
+    for (const o of OFICIOS) {
+      if (fn.endsWith(o) && nombre.length > o.length) {
+        const nombreLimpio = nombre.slice(0, nombre.length - o.length).trim();
+        const rol = nombre.slice(nombre.length - o.length).trim();
+        if (nombreLimpio) return { nombre: nombreLimpio, rol };
+      }
+    }
+    return { nombre, rol: "" };
+  };
   m = f.match(/(?:agreg[aá]|agrega|alta|sumar|crear|contratar)\s+(?:un\s+)?(?:nuevo\s+)?empleado[\s.,;:]+(.+)/i);
-  if (m && String(m[1] || "").trim()) return { modulo: "empleado", campos: { nombre: String(m[1] || "").trim() } };
+  if (m && String(m[1] || "").trim()) {
+    const sp = separarEmpleado(m[1]);
+    return { modulo: "empleado", campos: { nombre: sp.nombre, rol: sp.rol } };
+  }
   m = f.match(/nuevo\s+empleado[\s.,;:]+(.+)/i);
-  if (m && String(m[1] || "").trim()) return { modulo: "empleado", campos: { nombre: String(m[1] || "").trim() } };
+  if (m && String(m[1] || "").trim()) {
+    const sp = separarEmpleado(m[1]);
+    return { modulo: "empleado", campos: { nombre: sp.nombre, rol: sp.rol } };
+  }
 
   /* 6) Adelanto: "Carga adelanto de 25000 a Luis Álamo" */
   m = f.match(/(?:adelanto|anticipo)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:a|para)\s+(.+)/i);

@@ -423,9 +423,13 @@ async function processMessage(body: unknown) {
         signal: aiController.signal,
       });
       const ai = await aiRes.json().catch(() => ({}));
-      console.log("[GADU-WA-BACKGROUND] ai-assistant http", aiRes.status, "· body:", JSON.stringify(ai));
+      console.log("[GADU-WA-BACKGROUND] ai-assistant http", aiRes.status, "· action:", JSON.stringify(ai.action || null), "· reply:", JSON.stringify(ai.reply || ai.error || ""));
       aiReply = ai.reply || "";
-      if (ai.action && ai.action.modulo) action = ai.action;
+      if (ai.action && ai.action.modulo) {
+        action = ai.action;
+      } else {
+        console.warn("[GADU-WA-BACKGROUND] IA SIN acción. status=", aiRes.status, "· body:", JSON.stringify(ai));
+      }
     } catch (e) {
       console.error("[GADU-WA-BACKGROUND] ai-assistant falló/abortó:", e);
     } finally {
