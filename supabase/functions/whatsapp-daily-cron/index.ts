@@ -107,7 +107,7 @@ serve(async (req) => {
     let processed = 0;
     for (const row of rows) {
       const expenses = (row.data?.expenses || []).filter(
-        (e: Record<string, any>) => e.source === "whatsapp" && e.workId == null && isRecent24h(e.date),
+        (e: Record<string, any>) => e.source === "whatsapp" && e.workId == null && !e.resolved && isRecent24h(e.date),
       );
       if (!expenses.length) continue;
 
