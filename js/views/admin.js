@@ -301,7 +301,7 @@
       '<div class="field"><label>Plan</label><select class="select" id="lcPlan">' +
       planes.map(p => '<option value="' + p.id + '">' + p.nombre + '</option>').join('') +
       '</select></div>' +
-      '<div class="field"><label>Días de duración</label><input class="input" type="number" id="lcDays" value="30" min="1"></div>' +
+      '<div class="field"><label>Días de duración</label><input class="input" type="number" id="lcDays" value="90" min="1"></div>' +
       '<div class="field"><label>&nbsp;</label><button class="btn btn-primary" id="lcGen">' + UI.icon('plus', 16) + 'Generar Código</button></div>' +
       '</div></div>' +
       '<div class="card"><div class="card-head"><div><h3>Códigos generados</h3><p class="muted">' + codes.length + ' códigos</p></div></div>' +
@@ -320,7 +320,7 @@
 
     body.querySelector('#lcGen').addEventListener('click', async () => {
       const plan_id = body.querySelector('#lcPlan').value;
-      const duration_days = Number(body.querySelector('#lcDays').value) || 30;
+      const duration_days = Number(body.querySelector('#lcDays').value) || 90;
       const code = randomCode();
       try {
         await G.api('POST', '/license_codes', { code, plan_id, duration_days });
@@ -762,8 +762,7 @@
       '<div class="split-row"><strong style="font-size:16px">' + UI.escapeHtml(p.nombre) + '</strong>' +
       '<label class="form-hint"><input type="checkbox" ' + (p.activo ? 'checked' : '') + ' data-activo="' + p.id + '"> activo</label></div>' +
       '<div class="grid-form" style="margin-top:8px">' +
-      '<div class="field"><label>Precio mensual ($)</label><input class="input" type="number" data-campo="precio_mensual" data-id="' + p.id + '" value="' + p.precio_mensual + '"></div>' +
-      '<div class="field"><label>Precio anual ($)</label><input class="input" type="number" data-campo="precio_anual" data-id="' + p.id + '" value="' + p.precio_anual + '"></div>' +
+      '<div class="field"><label>Precio por 90 días ($)</label><input class="input" type="number" data-campo="precio_mensual" data-id="' + p.id + '" value="' + p.precio_mensual + '"></div>' +
       '<div class="field"><label>Máx. obras activas</label><input class="input" type="number" data-campo="limite_obras_activas" data-id="' + p.id + '" value="' + p.limite_obras_activas + '"></div>' +
       '<div class="field"><label>Máx. empleados</label><input class="input" type="number" data-campo="limite_empleados" data-id="' + p.id + '" value="' + p.limite_empleados + '"></div>' +
       '</div>' +
