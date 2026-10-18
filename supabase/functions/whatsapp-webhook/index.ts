@@ -302,6 +302,56 @@ async function markProcessed(messageId: string): Promise<void> {
   });
 }
 
+/* ===== Consultas (Q&A) sobre app_data ===== */
+function money(n: unknown): string {
+  return "$" + Math.round(Number(n) || 0).toLocaleString("es-AR");
+}
+function findWorkByName(data: Record<string, any>, target: string): Record<string, any> | null {
+  const ws = (data.works || []) as Array<Record<string, any>>;
+  if (!ws.length) return null;
+  const t = String(target || "").toLowerCase();
+  if (t) {
+    const hit = ws.find((w) => String(w.name || w.nombre || "").toLowerCase().includes(t));
+    if (hit) return hit;
+  }
+  return ws[0];
+}
+function queryBalanceWork(data: Record<string, any>, target: string): string {
+  const w = findWorkByName(data, target);
+  if (!w) return "🤖 No encontré esa obra.";
+  const cobrado = (data.incomes || []).filter((i: any) => i.workId === w.id).reduce((s: number, i: any) => s + (Number(i.amount) || 0), 0);
+  const gastos = (data.expenses || []).filter((e: any) => e.type === "obra" && e.workId === w.id).reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+  return "📊 El saldo de la obra *" + (w.name || w.nombre || "sin nombre") + "* es de *" + money(cobrado - gastos) + "* (Cobrado: " + money(cobrado) + ", Gastos: " + money(gastos) + ")";
+}
+function queryExpensesWeek(data: Record<string, any>): string {
+  const cutoff = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const list = (data.expenses || []).filter((e: any) => String(e.date || "") >= cutoff);
+  if (!list.length) return "💰 No tenés gastos en los últimos 7 días.";
+  const total = list.reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+  const detalle = list.slice(0, 5).map((e: any) => "· " + (e.category || e.description || "gasto") + ": " + money(e.amount)).join("\n");
+  return "💰 Gastaste *" + money(total) + "* en los últimos 7 días (" + list.length + " gastos):\n" + detalle;
+}
+function queryAttendanceToday(data: Record<string, any>): string {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const att = (data.attendance || []).filter((a: any) => String(a.date || "").slice(0, 10) === hoy && a.status !== "ausente");
+  if (!att.length) return "👷 Hoy no registraste jornadas.";
+  const names = att.map((a: any) => {
+    const emp = (data.employees || []).find((e: any) => e.id === a.employeeId);
+    return emp ? ((emp.firstName || "") + " " + (emp.lastName || "")).trim() : "empleado";
+  });
+  return "👷 Hoy trabajaron: *" + names.join(", ") + "*";
+}
+function queryPendingSalaries(data: Record<string, any>, target: string): string {
+  const emps = (data.employees || []) as Array<Record<string, any>>;
+  if (!emps.length) return "🤖 No tenés empleados cargados.";
+  const t = String(target || "").toLowerCase();
+  const emp = (t && emps.find((e) => String((e.firstName || "") + " " + (e.lastName || "")).toLowerCase().includes(t))) || emps[0];
+  const nombre = ((emp.firstName || "") + " " + (emp.lastName || "")).trim();
+  const adelantos = (data.expenses || []).filter((e: any) => e.employeeId === emp.id && e.expenseKind === "adelanto").reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+  const pagos = (data.expenses || []).filter((e: any) => e.employeeId === emp.id && e.expenseKind !== "adelanto").reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+  return "💸 *" + nombre + "*: adelantos " + money(adelantos) + " · pagos " + money(pagos);
+}
+
 serve(async (req) => {
   /* Rastreo verbose: imprime SIEMPRE método, URL y headers de cualquier
      petición, para descartar filtros internos y validar el formato de los
@@ -644,6 +694,22 @@ async function processMessage(body: unknown) {
     /* Saludo → respuesta directa (sin acción contable) */
     if (action && action.modulo === "saludo") {
       const reply = ((action as unknown) as { reply?: string }).reply || "¡Hola! 👋 Soy GADU. ¿En qué te ayudo?";
+      fireAndForget(sendWhatsApp(inc.from, reply));
+      return json({ ok: true, from: inc.from, reply });
+    }
+
+    /* Consultas (QUERY_DATA): responder con cálculos en memoria (no guardar nada) */
+    if (action && action.modulo === "consulta") {
+      const c = (action.campos || {}) as Record<string, unknown>;
+      const qtype = String(c.query_type || "");
+      const target = String(c.target || "");
+      let reply = "";
+      if (qtype === "balance_work") reply = queryBalanceWork(data, target);
+      else if (qtype === "expenses_week") reply = queryExpensesWeek(data);
+      else if (qtype === "attendance_today") reply = queryAttendanceToday(data);
+      else if (qtype === "pending_salaries") reply = queryPendingSalaries(data, target);
+      else reply = "🤖 No entendí la consulta. Probá preguntando '¿Cuál es el saldo de la obra X?'";
+      console.log("[GADU-WA-QUERY]", qtype || "(sin tipo)", "· target:", target);
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
     }

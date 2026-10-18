@@ -54,6 +54,16 @@ MAPEO DE CAMPOS POR MÓDULO:
 
 - GASTO SIN VERBO: si el usuario escribe un NÚMERO seguido de "de" y un concepto (ej. "45678 de nafta", "5000 de cemento"), asumí que es un GASTO. Extraé "monto" = el número y "categoria" = el concepto. No preguntes.
 
+CONSULTAS (QUERY_DATA):
+- Si el usuario hace una PREGUNTA sobre sus datos (NO quiere crear/registrar nada), llamá "abrir_formulario" con modulo="consulta" y campos={"query_type": ..., "target": ...}.
+- query_type posibles:
+  - "expenses_week": preguntas de gastos de la última semana (ej. "¿Cuánto gasté esta semana?").
+  - "balance_work": saldo de una obra (ej. "¿Cuál es el saldo de la obra X?"). target = nombre de la obra.
+  - "attendance_today": quién trabajó hoy (ej. "¿Quién trabajó hoy?").
+  - "pending_salaries": deudas/pagos pendientes a un empleado (ej. "¿Cuánto le debo a Juan?"). target = nombre del empleado.
+- target = el nombre de la obra o empleado mencionado (vacío "" si no se nombra).
+- Si la pregunta no encaja en ninguno de esos 4 tipos, NO llames la herramienta: respondé con un texto corto pidiendo reformular (ej. "No entendí la consulta. Probá '¿Cuál es el saldo de la obra X?'").
+
 - Si el CONTEXTO muestra UNA sola obra activa y el usuario pide cargar un gasto/ingreso/adelanto SIN especificar obra, NO preguntes: llamá "abrir_formulario" con el campo "obra" vacío (la app la asigna sola automáticamente).
 - Si hay VARIAS obras y el usuario NOMBRA una obra o cliente, usá ese nombre exacto en "obra"/"cliente".
 - Si la información es ambigua o incompleta, NO adivines y NO llames la herramienta. Respondé con una pregunta aclaratoria corta que LISTE las opciones disponibles del CONTEXTO por su nombre (ej. "¿A qué obra corresponde: El arreglo del baño o Refacciones?"), para que el usuario conteste por voz. Si falta un dato obligatorio (ej. la obra en un ingreso), pedilo puntualmente.`;
@@ -90,10 +100,10 @@ function tools() {
       parameters: {
         type: "OBJECT",
         properties: {
-          modulo: { type: "STRING", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada"], description: "Qué formulario abrir" },
+          modulo: { type: "STRING", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada", "consulta"], description: "Qué formulario abrir. 'consulta' = el usuario hace una pregunta sobre sus datos (query_type + target)." },
           campos: {
             type: "OBJECT",
-            description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol (oficio/puesto del empleado), cliente, obra, empleado, monto (número), concepto, categoria, horas (número), ubicacion (para obra), presupuesto (número, monto total de obra).",
+            description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol (oficio/puesto del empleado), cliente, obra, empleado, monto (número), concepto, categoria, horas (número), ubicacion (para obra), presupuesto (número), query_type (solo con modulo='consulta'), target (solo con modulo='consulta').",
             properties: {
               nombre: { type: "STRING" },
               apellido: { type: "STRING" },
@@ -107,6 +117,8 @@ function tools() {
               horas: { type: "NUMBER" },
               ubicacion: { type: "STRING" },
               presupuesto: { type: "NUMBER" },
+              query_type: { type: "STRING", enum: ["expenses_week", "balance_work", "attendance_today", "pending_salaries"] },
+              target: { type: "STRING" },
             },
           },
         },
@@ -127,10 +139,10 @@ function toolsOpenAI() {
       parameters: {
         type: "object",
         properties: {
-          modulo: { type: "string", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada"], description: "Qué formulario abrir" },
+          modulo: { type: "string", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada", "consulta"], description: "Qué formulario abrir. 'consulta' = el usuario hace una pregunta sobre sus datos (query_type + target)." },
           campos: {
             type: "object",
-            description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol (oficio/puesto del empleado), cliente, obra, empleado, monto (número), concepto, categoria, horas (número), ubicacion (para obra), presupuesto (número, monto total de obra).",
+            description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol, cliente, obra, empleado, monto, concepto, categoria, horas, ubicacion, presupuesto, query_type (solo con modulo='consulta'), target (solo con modulo='consulta').",
             properties: {
               nombre: { type: "string" },
               apellido: { type: "string" },
@@ -144,6 +156,8 @@ function toolsOpenAI() {
               horas: { type: "number" },
               ubicacion: { type: "string" },
               presupuesto: { type: "number" },
+              query_type: { type: "string", enum: ["expenses_week", "balance_work", "attendance_today", "pending_salaries"] },
+              target: { type: "string" },
             },
           },
         },
