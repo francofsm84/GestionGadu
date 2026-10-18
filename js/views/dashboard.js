@@ -35,6 +35,29 @@
       '</div></div>';
   }
 
+  /* Empty state de bienvenida (usuario nuevo sin obras ni gastos) */
+  function emptyStateHTML() {
+    return '<div class="card" style="text-align:center;padding:48px 24px;max-width:520px;margin:0 auto">' +
+      '<span class="empty-ico">' + UI.icon('hard-hat', 40) + '</span>' +
+      '<h2 style="margin:12px 0 6px">¡Bienvenido a GADU! 👋</h2>' +
+      '<p class="muted" style="margin-bottom:20px">Todavía no tenés obras ni gastos cargados. Arrancá en 3 pasos simples.</p>' +
+      '<div class="stack" style="gap:10px">' +
+        '<button class="btn btn-primary btn-block" id="btnFirstWork">' + UI.icon('hard-hat', 16) + ' Crear mi primera Obra</button>' +
+        '<button class="btn btn-soft btn-block" id="btnFirstExpense">' + UI.icon('receipt', 16) + ' Cargar un Gasto</button>' +
+        '<button class="btn btn-soft-success btn-block" id="btnFirstWhatsApp">' + UI.icon('whatsapp', 16) + ' Vincular mi WhatsApp</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function bindEmptyState(view) {
+    const firstWork = view.querySelector('#btnFirstWork');
+    if (firstWork) firstWork.addEventListener('click', () => { try { G.actions.work(); } catch (e) { location.hash = '#/obras'; } });
+    const firstExp = view.querySelector('#btnFirstExpense');
+    if (firstExp) firstExp.addEventListener('click', () => { try { G.actions.expense(); } catch (e) { location.hash = '#/gastos'; } });
+    const firstWa = view.querySelector('#btnFirstWhatsApp');
+    if (firstWa) firstWa.addEventListener('click', () => { try { G.onboarding.open(); } catch (e) {} });
+  }
+
   function render(view) {
     /* Guard defensivo: dispara el getter de datos (auto-seed) y valida
        colecciones ANTES de calcular, evitando "Cannot read properties of
@@ -42,6 +65,12 @@
     const d = S.data;
     if (!d || !Array.isArray(d.incomes) || !Array.isArray(d.works) || !Array.isArray(d.expenses)) {
       view.innerHTML = UI.emptyState('activity', 'Cargando tus datos…', '');
+      return;
+    }
+    /* Empty state: usuario nuevo sin obras ni gastos → bienvenida + 3 acciones */
+    if (S.data.works.length === 0 && S.data.expenses.length === 0) {
+      view.innerHTML = emptyStateHTML();
+      bindEmptyState(view);
       return;
     }
     const range = periodRange();
@@ -90,6 +119,8 @@
       '<input type="date" class="input" id="pFrom" value="' + period.from + '"' + (period.preset === 'custom' ? '' : ' hidden') + '>' +
       '<input type="date" class="input" id="pTo" value="' + period.to + '"' + (period.preset === 'custom' ? '' : ' hidden') + '>' +
       '<span class="muted small" id="periodDesc">' + UI.escapeHtml(range.label) + '</span>' +
+      '<div style="flex:1"></div>' +
+      '<a class="btn btn-primary" href="https://wa.me/5493547665984?text=' + encodeURIComponent('Hola GADU, quiero cargar un gasto rápido.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 16) + ' Cargar por WhatsApp</a>' +
       '</div>' +
 
       '<section class="kpi-grid">' +
