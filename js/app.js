@@ -425,7 +425,7 @@
       '<div class="field" style="text-align:left"><input class="input" id="licCode" placeholder="Código (ej: GADU-90D-XXXX)" autocomplete="off" spellcheck="false"></div>' +
       '<button class="btn btn-primary" id="licValidate">Validar Código</button>' +
       '<p class="form-hint" id="licMsg" style="margin:8px 0"></p>' +
-      '<a class="btn" style="background:#16a34a;color:#fff" href="https://wa.me/5493547469000?text=' + encodeURIComponent('Hola, finalizó mi prueba gratuita de 45 días en GADU. Quiero adquirir un código de acceso por 90 días.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 16) + 'Comprar Pase de 90 Días por WhatsApp</a>' +
+      '<a class="btn" style="background:#16a34a;color:#fff" href="https://wa.me/' + (G.BOT_PHONE_NUMBER || '5493547665984') + '?text=' + encodeURIComponent('Hola, finalizó mi prueba gratuita de 45 días en GADU. Quiero adquirir un código de acceso por 90 días.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 16) + 'Comprar Pase de 90 Días por WhatsApp</a>' +
       '<button class="btn btn-ghost" id="lockLogout">Cerrar sesión</button>' +
       '</div>';
     document.body.appendChild(overlay);
@@ -804,7 +804,7 @@
           '<div class="split-row-end"><b>' + (Number(p.precio_mensual) > 0 ? UI.fmtMoney(Number(p.precio_mensual)) + '/90 días' : 'Gratis') + '</b></div>' +
           '</div>').join('') || '<p class="form-hint">No hay planes disponibles.</p>') +
         '</div>',
-      footer: '<button class="btn btn-ghost" data-cancel>Ahora no</button><a class="btn btn-soft" href="#/planes">Ver planes</a><a class="btn btn-primary" href="https://wa.me/5493547469000?text=' + encodeURIComponent('Hola! Quiero mejorar mi plan de GADU.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 15) + 'Mejorar por WhatsApp</a>',
+      footer: '<button class="btn btn-ghost" data-cancel>Ahora no</button><a class="btn btn-soft" href="#/planes">Ver planes</a><a class="btn btn-primary" href="https://wa.me/' + (G.BOT_PHONE_NUMBER || '5493547665984') + '?text=' + encodeURIComponent('Hola! Quiero mejorar mi plan de GADU.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 15) + 'Mejorar por WhatsApp</a>',
     });
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
   }
@@ -843,13 +843,24 @@
           '<li>' + (pl.limite_empleados >= 999 ? 'Empleados ilimitados' : pl.limite_empleados + ' empleados') + '</li>' +
           '</ul>' +
           (pl.id !== p.id
-            ? '<a class="btn btn-soft btn-block btn-sm" href="https://wa.me/5493547469000?text=' + encodeURIComponent('Hola! Quiero cambiar mi plan a ' + pl.nombre + '.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 14) + 'Suscribirme</a>'
+            ? '<a class="btn btn-soft btn-block btn-sm" data-suscribir="' + UI.escapeHtml(TITLES[pl.id] || pl.nombre) + '" href="https://wa.me/' + (G.BOT_PHONE_NUMBER || '5493547665984') + '?text=' + encodeURIComponent('Hola! Quiero suscribirme al plan ' + (TITLES[pl.id] || pl.nombre) + '.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 14) + 'Suscribirme</a>'
             : '<span class="chip chip-success">Plan actual</span>') +
           '</div>').join('') +
         '</div>',
-      footer: '<button class="btn btn-ghost" data-cancel>Cerrar</button><a class="btn btn-primary" href="https://wa.me/5493547469000?text=' + encodeURIComponent('Hola! Quiero información sobre los planes de GADU.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 15) + 'Contactar</a>',
+      footer: '<button class="btn btn-ghost" data-cancel>Cerrar</button><a class="btn btn-primary" href="https://wa.me/' + (G.BOT_PHONE_NUMBER || '5493547665984') + '?text=' + encodeURIComponent('Hola! Quiero información sobre los planes de GADU.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 15) + 'Contactar</a>',
     });
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+    /* "Suscribirme": crea el ticket de solicitud en el panel + abre WhatsApp al Bot */
+    m.panel.querySelectorAll('[data-suscribir]').forEach(a => a.addEventListener('click', () => {
+      try {
+        const sess = G.auth && G.auth.getSession ? G.auth.getSession() : null;
+        const uid = sess ? sess.userId : null;
+        const phone = prof.whatsapp_number || (prof.whatsapp && prof.whatsapp.phone) || '';
+        G.api('POST', '/support_tickets', {
+          user_id: uid, phone: String(phone || ''), message: 'Solicitud de suscripción: ' + a.dataset.suscribir, status: 'open',
+        }).catch(() => {});
+      } catch (e) { /* no bloquear la apertura de WhatsApp */ }
+    }));
   }
 
   /* Esqueleto de carga del Dashboard: se muestra solo cuando el dispositivo
