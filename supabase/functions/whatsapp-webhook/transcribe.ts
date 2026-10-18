@@ -126,10 +126,49 @@ async function geminiTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<
   }
 }
 
+/* 3b) Transcribe audio con Groq (whisper-large-v3). Devuelve "" si falla. */
+async function groqTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<string> {
+  const apiKey = Deno.env.get("GROQ_API_KEY") || "";
+  if (!apiKey) return "";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const form = new FormData();
+    form.append("file", new Blob([buffer], { type: normalizeMime(mimeType) }), "audio.ogg");
+    form.append("model", "whisper-large-v3");
+    const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + apiKey },
+      body: form,
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      console.warn("[GADU-WA-GROQ] transcripción falló:", res.status, await res.text().catch(() => ""));
+      return "";
+    }
+    const j = await res.json();
+    const text = String((j as { text?: string }).text || "").trim();
+    if (text) console.log("[GADU-WA-GROQ] ✅ transcripción:", text.slice(0, 80));
+    return text;
+  } catch (e) {
+    console.warn("[GADU-WA-GROQ] error transcribiendo:", e);
+    return "";
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/* Transcribe con Groq y, si falla, con Gemini (fallback). */
+async function transcribeAudio(buffer: ArrayBuffer, mimeType: string): Promise<string> {
+  const text = await groqTranscribe(buffer, mimeType);
+  if (text) return text;
+  return await geminiTranscribe(buffer, normalizeMime(mimeType));
+}
+
 async function transcribeMedia(mediaId: string): Promise<string> {
   const url = await getMediaUrl(mediaId);
   const { buffer, mimeType } = await downloadMedia(url);
-  return await geminiTranscribe(buffer, normalizeMime(mimeType));
+  return await transcribeAudio(buffer, mimeType);
 }
 
 /* Normaliza el MIME de imagen para Gemini Vision */
@@ -225,6 +264,59 @@ async function geminiAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption
   }
 }
 
+/* Analiza una imagen con Groq Vision (llama-3.2-11b-vision-preview). Devuelve "" si falla. */
+async function groqAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption: string): Promise<string> {
+  const apiKey = Deno.env.get("GROQ_API_KEY") || "";
+  if (!apiKey) return "";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12000);
+  try {
+    const base64 = arrayBufferToBase64(buffer);
+    const dataUrl = "data:" + normalizeImageMime(mimeType) + ";base64," + base64;
+    const prompt = "Analiza esta imagen y el texto que la acompaña: '" + (caption || "") + "'. " +
+      "Si es un ticket o comprobante, extrae el monto total, el proveedor y el concepto. " +
+      "Si es un producto, identifica qué es y el monto mencionado en el texto. " +
+      "Devolvé un string estructurado para registrar un gasto: 'Gasto de [Monto] en [Concepto]'.";
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "llama-3.2-11b-vision-preview",
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: dataUrl } },
+          ],
+        }],
+        max_tokens: 200,
+        temperature: 0.2,
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      console.warn("[GADU-WA-GROQ] visión falló:", res.status, await res.text().catch(() => ""));
+      return "";
+    }
+    const j = await res.json();
+    const text = String(j?.choices?.[0]?.message?.content || "").trim();
+    if (text) console.log("[GADU-WA-GROQ] ✅ visión:", text.slice(0, 80));
+    return text;
+  } catch (e) {
+    console.warn("[GADU-WA-GROQ] error analizando imagen:", e);
+    return "";
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/* Analiza la imagen con Groq y, si falla, con Gemini Vision (fallback). */
+async function analyzeImageWithFallback(buffer: ArrayBuffer, mimeType: string, caption: string): Promise<string> {
+  const text = await groqAnalyzeImage(buffer, mimeType, caption);
+  if (text) return text;
+  return await geminiAnalyzeImage(buffer, normalizeImageMime(mimeType), caption);
+}
+
 export interface ResolvedIncoming {
   from: string;
   text: string;
@@ -291,7 +383,7 @@ export async function resolveIncomingText(payload: unknown): Promise<ResolvedInc
            Y subimos el comprobante a Storage. */
         const url = await getMediaUrl(mediaId);
         const { buffer, mimeType } = await downloadMedia(url);
-        text = await geminiAnalyzeImage(buffer, normalizeImageMime(mimeType), caption);
+        text = await analyzeImageWithFallback(buffer, mimeType, caption);
         try {
           mediaUrl = await uploadMediaToStorage(buffer, mimeType, from);
         } catch (e) {
