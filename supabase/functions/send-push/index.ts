@@ -57,7 +57,22 @@ serve(async (req) => {
         await webpush.sendNotification(sub, payload);
         sent++;
       } catch (e) {
-        console.error("[send-push] falló el envío a un endpoint:", (e as Error)?.message || e);
+        const err = e as { statusCode?: number; status?: number; message?: string };
+        const status = err.statusCode || err.status;
+        if (status === 404 || status === 410) {
+          /* Suscripción muerta/revocada → limpiar de la base para no reenviar */
+          console.warn("[send-push] endpoint muerto (" + status + "), limpiando:", String(s.endpoint).slice(0, 60));
+          try {
+            await fetch(
+              `${SUPABASE_URL}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(s.endpoint)}`,
+              { method: "DELETE", headers: { apikey: SERVICE_ROLE, Authorization: `Bearer ${SERVICE_ROLE}` } },
+            );
+          } catch (e2) {
+            console.warn("[send-push] no se pudo limpiar endpoint:", (e2 as Error)?.message || e2);
+          }
+        } else {
+          console.error("[send-push] falló el envío a un endpoint:", err.message || e);
+        }
       }
     }
     return new Response(JSON.stringify({ ok: true, sent }), { headers: corsHeaders });

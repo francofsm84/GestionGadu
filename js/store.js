@@ -464,7 +464,11 @@
     if (days <= 7) return { key: 'por-vencer', tone: 'warning', label: 'Vence en ' + days + ' día' + (days !== 1 ? 's' : ''), days };
     return { key: 'al-dia', tone: 'success', label: 'Al día · ' + days + ' días', days };
   }
-  function save() {
+  /* Debounce de guardado local (500ms) para evitar write-amplification.
+     El flush inmediato se dispara en 'beforeunload' para no perder datos. */
+  let saveTimer = null;
+  function flushSave() {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
     if (data) {
       storage().set(key, JSON.stringify(data)).catch(e => {
         try {
@@ -472,10 +476,18 @@
         } catch (ignored) {}
       });
     }
+  }
+  function save() {
+    if (!data) return;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(flushSave, 500);
     /* Sincronización automática con la nube (si está activada) */
-    if (data && data.settings && data.settings.cloud && data.settings.cloud.autoPush) {
+    if (data.settings && data.settings.cloud && data.settings.cloud.autoPush) {
       try { if (G.sync && G.sync.schedulePush) G.sync.schedulePush(); } catch (e) {}
     }
+  }
+  if (typeof window !== 'undefined') {
+    try { window.addEventListener('beforeunload', flushSave); } catch (e) {}
   }
   function reset() { data = seed(); normalize(); save(); }
 
@@ -545,13 +557,13 @@
       ],
     };
   }
-  function startReal() { data = minimalSeed(); normalize(); save(); }
+  function startReal() { data = minimalSeed(); normalize(); flushSave(); }
   function startEmpty() {
     /* Documento vacío COMPLETO (todas las colecciones, incluida seguros)
        y normalizado: evita fallos de totals() tras limpiar los datos. */
     data = emptySeed();
     normalize();
-    save();
+    flushSave();
   }
   function exportJSON() { return JSON.stringify(data, null, 2); }
   function importJSON(text) {
