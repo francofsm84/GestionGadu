@@ -504,8 +504,17 @@
   function applyRemote(newData) {
     if (!newData || typeof newData !== 'object' ||
       !Array.isArray(newData.works) || !Array.isArray(newData.incomes) || !Array.isArray(newData.expenses)) return false;
+    const prev = data;
     data = newData;
     normalize();
+    /* Preservar estado local que un documento remoto viejo NO debe pisar:
+       - onboardingDone (para que el modal de bienvenida no reaparezca tras vincular)
+       - profile (nombre/apodo/WhatsApp recién guardados) si el remoto no lo trae */
+    if (prev && prev.settings) {
+      data.settings = data.settings || {};
+      if (prev.settings.onboardingDone) data.settings.onboardingDone = true;
+      if (!data.settings.profile && prev.settings.profile) data.settings.profile = prev.settings.profile;
+    }
     _hasData = true;
     storage().set(key, JSON.stringify(data)).catch(() => {});
     return true;

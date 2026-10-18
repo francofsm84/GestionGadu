@@ -1111,28 +1111,36 @@ async function processMessage(body: unknown) {
       if (sessObra && sessObra.state === "WAITING_OBRA") enWizardObra = true;
     } catch (e) {}
     if (enWizardObra) {
-      const mObra = inc.text.match(/^(.*?)\s+en\s+(.+)$/i);
-      const nombreObra = String(mObra ? mObra[1] : inc.text).trim();
-      const ubicacionObra = String(mObra ? mObra[2] : "").trim();
-      if (nombreObra) {
-        const res = executeAction(data, { modulo: "obra", campos: { nombre: nombreObra, ubicacion: ubicacionObra } }, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
-        if (res.ok) {
-          await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
-            method: "PATCH",
-            headers: { Prefer: "return=minimal" },
-            body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
-          });
-          await deleteSession(normalizePhone(inc.from));
-          const reply = "✅ " + res.label;
-          fireAndForget(sendWhatsApp(inc.from, reply));
-          return json({ ok: true, from: inc.from, reply });
-        }
+      /* Si el usuario cambió de idea (dijo un gasto/adelanto/consulta en lugar del
+         nombre de la obra), cancelar el wizard y dejar que la IA lo resuelva. */
+      const localOtra = localIntent(inc.text);
+      if (localOtra && localOtra.modulo && localOtra.modulo !== "obra") {
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "🤖 No pude crear la obra. Probá de nuevo: \"Casa Pérez en Alta Gracia\"."));
+        console.log("[GADU-WA-WIZARD] WAITING_OBRA cancelado, respuesta es:", localOtra.modulo);
+      } else {
+        const mObra = inc.text.match(/^(.*?)\s+en\s+(.+)$/i);
+        const nombreObra = String(mObra ? mObra[1] : inc.text).trim();
+        const ubicacionObra = String(mObra ? mObra[2] : "").trim();
+        if (nombreObra) {
+          const res = executeAction(data, { modulo: "obra", campos: { nombre: nombreObra, ubicacion: ubicacionObra } }, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
+          if (res.ok) {
+            await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+              method: "PATCH",
+              headers: { Prefer: "return=minimal" },
+              body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+            });
+            await deleteSession(normalizePhone(inc.from));
+            const reply = "✅ " + res.label;
+            fireAndForget(sendWhatsApp(inc.from, reply));
+            return json({ ok: true, from: inc.from, reply });
+          }
+          await deleteSession(normalizePhone(inc.from));
+          fireAndForget(sendWhatsApp(inc.from, "🤖 No pude crear la obra. Probá de nuevo: \"Casa Pérez en Alta Gracia\"."));
+          return json({ ok: true, from: inc.from, reply: "" });
+        }
+        fireAndForget(sendWhatsApp(inc.from, "🤖 ¿Cómo se llama la obra? Ej: \"Casa Pérez en Alta Gracia\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
-      fireAndForget(sendWhatsApp(inc.from, "🤖 ¿Cómo se llama la obra? Ej: \"Casa Pérez en Alta Gracia\"."));
-      return json({ ok: true, from: inc.from, reply: "" });
     }
 
     if (advIntent && !advIntent.nombre && advIntent.monto <= 0) {
