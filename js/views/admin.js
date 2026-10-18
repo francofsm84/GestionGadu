@@ -63,7 +63,7 @@
       return;
     }
     view.innerHTML =
-      '<div class="tabs">' +
+      '<div class="tabs admin-tabs">' +
       tabBtn('usuarios', '👥 Usuarios') + tabBtn('planes', '💳 Planes') + tabBtn('licencias', '🎫 Licencias') + tabBtn('soporte', '📞 Soporte') + tabBtn('config', '⚙️ Configuración') + tabBtn('metricas', '📊 Métricas') + tabBtn('auditoria', '🧾 Auditoría') +
       '</div>' +
       '<div id="adminBody"></div>';
@@ -215,7 +215,7 @@
 
     body.innerHTML =
       '<div class="toolbar">' +
-      '<div class="tabs">' +
+      '<div class="tabs admin-tabs">' +
       stabBtn('open', 'Abiertos', open.length) + stabBtn('progress', 'En Proceso', progress.length) + stabBtn('closed', 'Resueltos', closed.length) +
       '</div>' +
       '<div class="grow"></div>' +
@@ -225,7 +225,7 @@
       '<div class="card-head"><div><h3>Tickets de soporte</h3><p class="muted">' + filtered.length + ' en esta vista</p></div></div>' +
       '<div class="stack">' +
       (filtered.map(t =>
-        '<div class="card-inset" style="margin-top:10px">' +
+        '<div class="card-inset ticket-row" style="margin-top:10px">' +
         '<div class="split-row"><div class="split-row-main"><strong>' + UI.escapeHtml(t.phone || '—') + '</strong>' +
         '<span class="muted small">' + (t.created_at ? UI.fmtDate(t.created_at) : '—') + (hasReply(t) && t.status !== 'closed' ? ' ' + UI.chip('En proceso', 'info') : '') + '</span></div>' +
         '<div class="split-row-end">' +

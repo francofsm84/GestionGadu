@@ -778,6 +778,16 @@ canvas.chart { min-width: 0; max-width: 100%; }
   .user-cluster .chip { max-width: 96px; font-size: 10.5px; padding: 1px 8px; line-height: 1.5; }
   .user-cluster #btnUser { font-size: 12px; padding: 3px 9px; max-width: 110px; }
 }
+/* Admin (Soporte y panel): pestañas con scroll horizontal y tarjetas apiladas en móvil */
+@media (max-width: 768px) {
+  .admin-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+  .admin-tabs::-webkit-scrollbar { display: none; }
+  .admin-tabs .tab { flex: 0 0 auto; white-space: nowrap; }
+  .ticket-row .split-row { flex-direction: column; align-items: stretch; gap: 8px; }
+  .ticket-row .split-row-end { flex-wrap: wrap; gap: 8px; }
+  .ticket-row .split-row-end .btn { flex: 1 1 100%; }
+  .ticket-row .split-row-main { overflow-wrap: break-word; word-break: break-all; }
+}
 @media (max-width: 640px) {
   /* Herramientas y Máquinas: tarjeta ajustada al ancho del celular */
   .asset-card { min-width: 0; width: 100%; overflow-wrap: break-word; }
