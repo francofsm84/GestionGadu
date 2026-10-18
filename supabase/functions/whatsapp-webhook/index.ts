@@ -666,7 +666,7 @@ async function handleButtonReply(from: string, buttonId: string) {
       return;
     }
     if (act === "presupuesto") {
-      fireAndForget(sendWhatsApp(from, "📄 Contame el presupuesto, por ejemplo: \"Presupuesto para Juan Perez: 20m2 de cerámica, 3 bolsas de pegamento\"."));
+      fireAndForget(sendWhatsApp(from, "¿Para qué cliente es el presupuesto y qué ítems incluye?"));
       await deleteSession(normalizePhone(from));
       return;
     }
