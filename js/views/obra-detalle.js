@@ -36,36 +36,30 @@
     const w = ctx.w, st = ctx.st;
     const client = S.contactById(w.clientId);
     const hoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
+    const num = 'style="text-align:right;font-variant-numeric:tabular-nums"';
     const html =
       '<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Reporte de obra — ' + UI.escapeHtml(w.name) + '</title>' +
       '<style>' +
       'body{font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#1e293b;margin:0;padding:32px;background:#fff}' +
-      '.report{max-width:720px;margin:0 auto}' +
       'h1{font-size:24px;margin:0 0 4px;color:#0f172a}' +
-      '.sub{color:#64748b;font-size:13px;margin:0 0 28px}' +
       'table{width:100%;border-collapse:collapse}' +
       'th,td{text-align:left;padding:11px 12px;border-bottom:1px solid #e2e8f0;font-size:14px}' +
       'th{color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #cbd5e1}' +
-      'td.num{text-align:right;font-variant-numeric:tabular-nums}' +
-      'tr.margen td{font-weight:800;font-size:17px;border-top:2px solid #cbd5e1;color:#0f172a}' +
-      '.footer{color:#94a3b8;font-size:12px;margin-top:36px;text-align:center}' +
-      '.actions{text-align:right;margin-bottom:24px}' +
-      '.actions button{background:#f59e0b;color:#fff;border:0;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer}' +
       '@page{size:A4;margin:16mm}' +
-      '@media print{.actions{display:none!important}body{padding:0}}' +
+      '@media print{body{padding:0}#btnPrint{display:none!important}}' +
       '</style></head><body>' +
-      '<div class="report">' +
-      '<div class="actions"><button onclick="window.print()">Guardar como PDF</button></div>' +
+      '<div style="max-width:720px;margin:0 auto">' +
+      '<div style="text-align:right;margin-bottom:24px"><button id="btnPrint" style="background:#f59e0b;color:#fff;border:0;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer" onclick="window.print()">Guardar como PDF</button></div>' +
       '<h1>' + UI.escapeHtml(w.name) + (w.code ? ' <span style="color:#94a3b8;font-size:15px;font-weight:400">' + UI.escapeHtml(w.code) + '</span>' : '') + '</h1>' +
-      '<p class="sub">Cliente: ' + UI.escapeHtml(client ? client.name : 'Sin cliente') + ' · ' + UI.escapeHtml(w.location || '') + ' · Generado el ' + hoy + '</p>' +
+      '<p style="color:#64748b;font-size:13px;margin:0 0 28px">Cliente: ' + UI.escapeHtml(client ? client.name : 'Sin cliente') + ' · ' + UI.escapeHtml(w.location || '') + ' · Generado el ' + hoy + '</p>' +
       '<table>' +
-      '<tr><th>Concepto</th><th class="num">Monto</th></tr>' +
-      '<tr><td>Presupuesto total</td><td class="num">' + UI.fmtMoney(w.budgetTotal) + '</td></tr>' +
-      '<tr><td>Ingresos recibidos</td><td class="num">' + UI.fmtMoney(st.incomes) + '</td></tr>' +
-      '<tr><td>Gastos totales (directos)</td><td class="num">−' + UI.fmtMoney(st.costs) + '</td></tr>' +
-      '<tr class="margen"><td>Margen de ganancia</td><td class="num">' + UI.fmtMoney(st.margin) + '</td></tr>' +
+      '<tr><th>Concepto</th><th ' + num + '>Monto</th></tr>' +
+      '<tr><td>Presupuesto total</td><td ' + num + '>' + UI.fmtMoney(w.budgetTotal) + '</td></tr>' +
+      '<tr><td>Ingresos recibidos</td><td ' + num + '>' + UI.fmtMoney(st.incomes) + '</td></tr>' +
+      '<tr><td>Gastos totales (directos)</td><td ' + num + '>−' + UI.fmtMoney(st.costs) + '</td></tr>' +
+      '<tr><td style="font-weight:800;font-size:17px;border-top:2px solid #cbd5e1;color:#0f172a">Margen de ganancia</td><td style="text-align:right;font-weight:800;font-size:17px;border-top:2px solid #cbd5e1;color:#0f172a;font-variant-numeric:tabular-nums">' + UI.fmtMoney(st.margin) + '</td></tr>' +
       '</table>' +
-      '<p class="footer">Reporte generado por GADU Construye · gestiongadu.vercel.app</p>' +
+      '<p style="color:#94a3b8;font-size:12px;margin-top:36px;text-align:center">Reporte generado por GADU Construye · gestiongadu.vercel.app</p>' +
       '</div></body></html>';
 
     const win = window.open('', '_blank');
