@@ -260,6 +260,40 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
   return null;
 }
 
+/* Detecta la intención de "adelanto" y extrae nombre + monto (tolera "12000p").
+   "Adelanto de Hugo pereyra de 12000p" → { nombre: "hugo pereyra", monto: 12000 }
+   "Adelanto" → { nombre: "", monto: 0 } (para arrancar el wizard paso a paso) */
+export function detectAdvanceIntent(text: string): { nombre: string; monto: number } | null {
+  const f = flat(String(text || "")).trim();
+  if (!/(?:adelanto|anticipo)/i.test(f)) return null;
+
+  // monto: número, tolerando "p"/"pe"/"pesos" pegada al final ("12000p")
+  const mMonto = f.match(/([\d][\d.,]*)\s*(?:p|pe|pesos|peso)?(?=\s|$)/i);
+  const monto = mMonto ? Number(mMonto[1].replace(/\./g, "").replace(",", ".")) : 0;
+
+  // nombre: quitar palabras clave y el monto, quedan las palabras del nombre
+  const nombre = f
+    .replace(/adelanto|anticipo/gi, " ")
+    .replace(/\b(?:de|del|a|para|al|le)\b/gi, " ")
+    .replace(/[\d][\d.,]*\s*(?:p|pe|pesos|peso)?/gi, " ")
+    .replace(/[^\wáéíóúñÁÉÍÓÚÑ\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return { nombre, monto };
+}
+
+/* Parsea la respuesta del wizard de adelanto sin la palabra "adelanto":
+   "Hugo de 12000" → { nombre: "Hugo", monto: 12000 } */
+export function parseAdvanceNameAmount(text: string): { nombre: string; monto: number } | null {
+  const f = String(text || "").trim();
+  const m = f.match(/^([a-záéíóúñ][a-záéíóúñ\s.'-]{2,40}?)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s*(?:p|pe|pesos|peso)?\s*$/i);
+  if (!m) return null;
+  const monto = Number(m[2].replace(/\./g, "").replace(",", "."));
+  if (!(monto > 0)) return null;
+  return { nombre: m[1].trim(), monto };
+}
+
 export interface ExecResult {
   ok: boolean;
   label?: string;

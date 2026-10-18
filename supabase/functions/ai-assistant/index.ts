@@ -64,6 +64,12 @@ CONSULTAS (QUERY_DATA):
 - target = el nombre de la obra o empleado mencionado (vacío "" si no se nombra).
 - Si la pregunta no encaja en ninguno de esos 4 tipos, NO llames la herramienta: respondé con un texto corto pidiendo reformular (ej. "No entendí la consulta. Probá '¿Cuál es el saldo de la obra X?'").
 
+TOLERANCIA Y ADELANTOS (crítico):
+- MONTO CON "p": si el monto trae una "p" o "pesos" pegada (ej. "12000p", "12000 pesos"), ignorá esa letra y tomá solo el número (12000).
+- ADELANTO A EMPLEADO: si el usuario dice "adelanto de [Nombre]" o "anticipo de [Nombre]" y ese nombre coincide con un empleado del CONTEXTO, la intención es modulo="adelanto" con campos={"empleado": "<nombre>", "monto": <número>}. NO lo interpretes como gasto general.
+- Si el usuario escribe SOLO "adelanto" (sin nombre ni monto), respondé con UNA pregunta corta y amigable pidiendo los datos (ej. "¿A qué empleado y de cuánto es el adelanto?"). No lo mandes a la web.
+- ASK_FOR_CLARIFICATION: si falta un dato obligatorio (monto, empleado u obra), NO llames la herramienta con datos incompletos. Respondé con UNA pregunta corta pidiendo el dato que falta (ej. "¿De cuánto es el adelanto?" o "¿A qué obra corresponde?").
+
 - Si el CONTEXTO muestra UNA sola obra activa y el usuario pide cargar un gasto/ingreso/adelanto SIN especificar obra, NO preguntes: llamá "abrir_formulario" con el campo "obra" vacío (la app la asigna sola automáticamente).
 - Si hay VARIAS obras y el usuario NOMBRA una obra o cliente, usá ese nombre exacto en "obra"/"cliente".
 - Si la información es ambigua o incompleta, NO adivines y NO llames la herramienta. Respondé con una pregunta aclaratoria corta que LISTE las opciones disponibles del CONTEXTO por su nombre (ej. "¿A qué obra corresponde: El arreglo del baño o Refacciones?"), para que el usuario conteste por voz. Si falta un dato obligatorio (ej. la obra en un ingreso), pedilo puntualmente.`;
@@ -100,7 +106,7 @@ function tools() {
       parameters: {
         type: "OBJECT",
         properties: {
-          modulo: { type: "STRING", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada", "consulta"], description: "Qué formulario abrir. 'consulta' = el usuario hace una pregunta sobre sus datos (query_type + target)." },
+          modulo: { type: "STRING", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada", "adelanto", "consulta"], description: "Qué formulario abrir. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = el usuario hace una pregunta sobre sus datos." },
           campos: {
             type: "OBJECT",
             description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol (oficio/puesto del empleado), cliente, obra, empleado, monto (número), concepto, categoria, horas (número), ubicacion (para obra), presupuesto (número), query_type (solo con modulo='consulta'), target (solo con modulo='consulta').",
@@ -139,7 +145,7 @@ function toolsOpenAI() {
       parameters: {
         type: "object",
         properties: {
-          modulo: { type: "string", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada", "consulta"], description: "Qué formulario abrir. 'consulta' = el usuario hace una pregunta sobre sus datos (query_type + target)." },
+          modulo: { type: "string", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada", "adelanto", "consulta"], description: "Qué formulario abrir. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = el usuario hace una pregunta sobre sus datos." },
           campos: {
             type: "object",
             description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol, cliente, obra, empleado, monto, concepto, categoria, horas, ubicacion, presupuesto, query_type (solo con modulo='consulta'), target (solo con modulo='consulta').",

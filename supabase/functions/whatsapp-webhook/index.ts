@@ -34,6 +34,8 @@ import {
   buildContext,
   executeAction,
   localIntent,
+  detectAdvanceIntent,
+  parseAdvanceNameAmount,
   toMetaPhone,
   extractFrom,
 } from "./core.ts";
@@ -452,6 +454,23 @@ async function handleButtonReply(from: string, buttonId: string) {
     return;
   }
 
+  /* [GADU-WA-AI-UPGRADE] Botones del fallback inteligente (no necesitan gasto pendiente) */
+  if (buttonId === "fallback_gasto") {
+    fireAndForget(sendWhatsApp(from, "💰 Decime el gasto, por ejemplo: \"Gasté 15000 en cemento\" o \"5000 de nafta\"."));
+    await deleteSession(normalizePhone(from));
+    return;
+  }
+  if (buttonId === "fallback_adelanto") {
+    await upsertSession(from, userId, "WAITING_ADVANCE", {});
+    fireAndForget(sendWhatsApp(from, "💸 Decime *a qué empleado* y *de cuánto* es el adelanto. Ej: \"Adelanto de Hugo de 12000\"."));
+    return;
+  }
+  if (buttonId === "fallback_humano") {
+    fireAndForget(sendWhatsApp(from, "🙋 Un asesor humano te va a contactar a la brevedad. Mientras tanto podés seguir cargando por acá."));
+    await deleteSession(normalizePhone(from));
+    return;
+  }
+
   /* 2) Recuperar app_data */
   const rData = await rest("app_data?select=user_id,data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
   const rowsData = (await rData.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
@@ -657,6 +676,47 @@ async function processMessage(body: unknown) {
        Recién si la IA FALLA (o tarda más de 10s) caemos al fallback local. */
     let aiReply = "";
     let action: { modulo: string; campos?: Record<string, unknown> } | null = null;
+
+    /* [GADU-WA-AI-UPGRADE] Detección determinística de "adelanto" (regex de apoyo).
+       Si solo dijo "adelanto" sin datos → arrancamos el wizard paso a paso. */
+    const advIntent = detectAdvanceIntent(inc.text);
+
+    /* [GADU-WA-AI-UPGRADE] Wizard de adelanto en curso (estado WAITING_ADVANCE) */
+    let enWizardAdelanto = false;
+    try {
+      const sessAdv = await getSession(normalizePhone(inc.from));
+      if (sessAdv && sessAdv.state === "WAITING_ADVANCE") enWizardAdelanto = true;
+    } catch (e) {}
+    if (enWizardAdelanto) {
+      const parsed = (advIntent && advIntent.nombre && advIntent.monto > 0) ? advIntent : parseAdvanceNameAmount(inc.text);
+      if (parsed && parsed.nombre && parsed.monto > 0) {
+        const res = executeAction(data, { modulo: "adelanto", campos: { empleado: parsed.nombre, monto: parsed.monto } }, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
+        if (res.ok) {
+          await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+            method: "PATCH",
+            headers: { Prefer: "return=minimal" },
+            body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+          });
+          await deleteSession(normalizePhone(inc.from));
+          const reply = "✅ " + res.label;
+          fireAndForget(sendWhatsApp(inc.from, reply));
+          return json({ ok: true, from: inc.from, reply });
+        }
+        await deleteSession(normalizePhone(inc.from));
+        fireAndForget(sendWhatsApp(inc.from, "🤖 No pude cargarlo. Probá: \"Adelanto de Hugo de 12000\"."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      fireAndForget(sendWhatsApp(inc.from, "💸 ¿A qué empleado y de cuánto es el adelanto? Ej: \"Hugo de 12000\"."));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    if (advIntent && !advIntent.nombre && advIntent.monto <= 0) {
+      const reply = "💸 ¡Vamos a cargar el adelanto! Decime *a qué empleado* y *de cuánto* es. Por ejemplo: \"Adelanto de Hugo de 12000\".";
+      await upsertSession(inc.from, row.user_id, "WAITING_ADVANCE", {});
+      fireAndForget(sendWhatsApp(inc.from, reply));
+      return json({ ok: true, from: inc.from, reply });
+    }
+
     const aiController = new AbortController();
     const aiTimer = setTimeout(() => aiController.abort(), 10000);
     try {
@@ -698,6 +758,11 @@ async function processMessage(body: unknown) {
         action = local;
         console.log("[GADU-WA-BACKGROUND] usando intent local (fallback):", JSON.stringify(local));
       }
+    }
+    /* [GADU-WA-AI-UPGRADE] Si el regex detectó "adelanto" con nombre+monto, lo fuerza por encima de la IA */
+    if (advIntent && advIntent.nombre && advIntent.monto > 0) {
+      action = { modulo: "adelanto", campos: { empleado: advIntent.nombre, monto: advIntent.monto } };
+      console.log("[GADU-WA-AI-UPGRADE] adelanto detectado (regex):", JSON.stringify(advIntent));
     }
     console.log("[DEBUG] Intent detectado: " + (action ? action.modulo : "ninguno"));
 
@@ -755,9 +820,13 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
     }
 
-      /* 5) Consultas y otros módulos: responde la IA (igual que el chat web) */
-      const reply = aiReply || "🤖 Recibí tu mensaje. Para cargas complejas (obras, empleados, jornadas) te conviene completarlas en la app: https://gestiongadu.vercel.app";
-      fireAndForget(sendWhatsApp(inc.from, reply));
+      /* 5) Fallback inteligente: ofrecer opciones en lugar de mandar a la web */
+      const reply = aiReply || "🤖 No estoy seguro de qué querés hacer. Elegí una opción 👇";
+      fireAndForget(sendWhatsAppButtons(inc.from, reply, [
+        { id: "fallback_gasto", title: "Cargar un Gasto" },
+        { id: "fallback_adelanto", title: "Cargar un Adelanto" },
+        { id: "fallback_humano", title: "Hablar con un humano" },
+      ]));
       return json({ ok: true, from: inc.from, reply });
   } catch (error) {
     console.error("[GADU-WA-QUEUE-FIX] CRITICAL ERROR en processMessage:", error);
