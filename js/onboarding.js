@@ -219,6 +219,14 @@
       const S = G.store;
       if (!S || !S.data || !S.data.settings) return;
       if (S.data.settings.onboardingDone) return;
+      /* Si el WhatsApp ya está vinculado, el usuario ya pasó por el flujo:
+         marcar como completado y NO volver a interrumpir. */
+      const wa = S.data.settings.profile && S.data.settings.profile.whatsapp;
+      if (wa && wa.linked) {
+        S.data.settings.onboardingDone = true;
+        try { S.save(); } catch (e) {}
+        return;
+      }
       if (S.hasLocalData && S.hasLocalData()) return;   // jamás interrumpir a quien ya tiene datos
       open();
     } catch (e) { /* nunca bloquear el dashboard */ }
