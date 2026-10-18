@@ -102,12 +102,12 @@
     return STATUS_LABEL[u.subscription_status] || u.subscription_status;
   }
 
-  /* Auditoría de soporte: ver los datos de un cliente (solo lectura) */
+  /* Auditoría de soporte: ver y corregir los datos de un cliente */
   async function openVerDatos(uid, email) {
     const esc = UI.escapeHtml;
     const m = UI.openModal({
       title: 'Datos de ' + email,
-      subtitle: 'Auditoría de soporte · solo lectura',
+      subtitle: 'Auditoría de soporte',
       size: 'wide',
       body: '<div id="vdBody"><p class="form-hint">Cargando…</p></div>',
       footer: '<button class="btn btn-ghost" data-cancel>Cerrar</button><button class="btn btn-ghost" data-vd-back style="display:none">' + UI.icon('arrow-left', 14) + ' Volver</button>',
@@ -117,6 +117,7 @@
     backBtn.addEventListener('click', () => showSummary());
 
     let ctx = null;
+    let currentSection = null;
 
     const kpi = (section, label, value, sub) =>
       '<button class="kpi-card kpi-click" data-vd-section="' + section + '" style="width:100%"><div class="kpi-body"><span class="kpi-label">' + label + '</span><strong class="kpi-value">' + value + '</strong><span class="kpi-sub">' + sub + '</span></div></button>';
@@ -129,7 +130,9 @@
 
     function showSummary() {
       backBtn.style.display = 'none';
-      const works = ctx.works, contacts = ctx.contacts, employees = ctx.employees, budgets = ctx.budgets, incomes = ctx.incomes, expenses = ctx.expenses;
+      currentSection = null;
+      const d = ctx.d;
+      const works = d.works, contacts = d.contacts, employees = d.employees, budgets = d.budgets, incomes = d.incomes, expenses = d.expenses;
       const activas = works.filter(w => w.status === 'activa').length;
       const clientes = contacts.filter(c => c.type === 'cliente').length;
       const totalIn = S.sum(incomes.map(x => x.amount));
@@ -147,47 +150,97 @@
         row('gastos', 'Gastos', '<b class="neg">−' + UI.fmtMoney(totalOut) + '</b>') +
         '<div class="split-row"><strong>Balance</strong><b>' + UI.fmtMoney(totalIn - totalOut) + '</b></div>' +
         '</div>' +
-        '<p class="form-hint" style="margin-top:10px">Tocá una tarjeta o fila para ver el detalle.</p>';
+        '<p class="form-hint" style="margin-top:10px">Tocá una tarjeta o fila para ver el detalle. En Clientes/Gastos/Ingresos podés editar o eliminar.</p>';
     }
 
+    const actDel = (type, id) => '<button class="btn btn-soft btn-sm" data-vd-del="' + type + '" data-id="' + esc(String(id)) + '" title="Eliminar">' + UI.icon('trash', 13) + '</button>';
+    const actEditPhone = id => '<button class="btn btn-soft btn-sm" data-vd-edit="phone" data-id="' + esc(String(id)) + '" title="Editar teléfono">' + UI.icon('edit', 13) + '</button>';
+
     function showDetail(section) {
+      currentSection = section;
       backBtn.style.display = '';
       const body = m.panel.querySelector('#vdBody');
+      const d = ctx.d;
       let html = '';
       if (section === 'obras') {
-        html = ctx.works.map(w =>
+        html = d.works.map(w =>
           '<div class="card-inset" style="margin-top:6px"><div class="split-row"><strong>' + esc(w.name || '—') + '</strong>' + UI.chip(w.status || '', w.status === 'activa' ? 'success' : 'neutral') + '</div>' +
           (w.client ? '<span class="muted small">Cliente: ' + esc(w.client) + '</span>' : '') + '</div>').join('') || '<p class="form-hint">Sin obras registradas.</p>';
       } else if (section === 'clientes') {
-        const cli = ctx.contacts.filter(c => c.type === 'cliente');
+        const cli = d.contacts.filter(c => c.type === 'cliente');
         html = cli.map(c =>
-          '<div class="card-inset" style="margin-top:6px"><strong>' + esc(c.name || '—') + '</strong>' +
-          (c.phone ? '<span class="muted small"> · ' + esc(c.phone) + '</span>' : '') +
+          '<div class="card-inset" style="margin-top:6px"><div class="split-row"><strong>' + esc(c.name || '—') + '</strong>' +
+          '<span style="display:flex;gap:6px">' + actEditPhone(c.id) + actDel('contact', c.id) + '</span></div>' +
+          (c.phone ? '<span class="muted small">' + esc(c.phone) + '</span>' : '') +
           (c.email ? '<span class="muted small"> · ' + esc(c.email) + '</span>' : '') + '</div>').join('') || '<p class="form-hint">Sin clientes registrados.</p>';
       } else if (section === 'empleados') {
-        html = ctx.employees.map(em => {
+        html = d.employees.map(em => {
           const nm = String((em.firstName || '') + ' ' + (em.lastName || '')).trim() || em.name || '—';
           return '<div class="card-inset" style="margin-top:6px"><strong>' + esc(nm) + '</strong>' +
             (em.rol ? '<span class="muted small"> · ' + esc(em.rol) + '</span>' : '') +
             (em.cuil ? '<span class="muted small"> · CUIL ' + esc(em.cuil) + '</span>' : '') + '</div>';
         }).join('') || '<p class="form-hint">Sin empleados registrados.</p>';
       } else if (section === 'presupuestos') {
-        html = ctx.budgets.map(b =>
+        html = d.budgets.map(b =>
           '<div class="card-inset" style="margin-top:6px"><div class="split-row"><strong>' + esc(b.name || b.client || '—') + '</strong><b>' + UI.fmtMoney(b.total || b.amount || 0) + '</b></div>' +
           (b.status ? '<span class="muted small">' + esc(b.status) + '</span>' : '') + '</div>').join('') || '<p class="form-hint">Sin presupuestos.</p>';
       } else if (section === 'ingresos') {
-        html = ctx.incomes.map(i =>
+        html = d.incomes.map(i =>
           '<div class="card-inset" style="margin-top:6px"><div class="split-row"><strong>' + esc(i.description || i.name || '—') + '</strong><b class="pos">+' + UI.fmtMoney(i.amount) + '</b></div>' +
-          '<span class="muted small">' + esc(String(i.date || i.fecha || '')) + '</span></div>').join('') || '<p class="form-hint">Sin ingresos registrados.</p>';
+          '<div class="split-row" style="margin-top:4px"><span class="muted small">' + esc(String(i.date || i.fecha || '')) + '</span>' + actDel('income', i.id) + '</div></div>').join('') || '<p class="form-hint">Sin ingresos registrados.</p>';
       } else if (section === 'gastos') {
-        html = ctx.expenses.map(x =>
+        html = d.expenses.map(x =>
           '<div class="card-inset" style="margin-top:6px"><div class="split-row"><strong>' + esc(x.description || x.name || '—') + '</strong><b class="neg">−' + UI.fmtMoney(x.amount) + '</b></div>' +
-          '<span class="muted small">' + esc(String(x.date || x.fecha || '')) + (x.categoria || x.category ? ' · ' + esc(x.categoria || x.category) : '') + '</span></div>').join('') || '<p class="form-hint">Sin gastos registrados.</p>';
+          '<div class="split-row" style="margin-top:4px"><span class="muted small">' + esc(String(x.date || x.fecha || '')) + (x.categoria || x.category ? ' · ' + esc(x.categoria || x.category) : '') + '</span>' + actDel('expense', x.id) + '</div></div>').join('') || '<p class="form-hint">Sin gastos registrados.</p>';
       }
       body.innerHTML = '<h4 style="margin-bottom:10px">' + titleOf(section) + '</h4>' + html;
     }
 
+    async function persistData() {
+      await G.api('PATCH', '/app_data?user_id=eq.' + encodeURIComponent(uid), {
+        data: ctx.d,
+        updated_at: new Date().toISOString(),
+      });
+    }
+
+    async function handleDel(type, id) {
+      if (!window.confirm('¿Eliminar este elemento?')) return;
+      const d = ctx.d;
+      if (type === 'contact') d.contacts = d.contacts.filter(c => String(c.id) !== String(id));
+      else if (type === 'income') d.incomes = d.incomes.filter(x => String(x.id) !== String(id));
+      else if (type === 'expense') d.expenses = d.expenses.filter(x => String(x.id) !== String(id));
+      else return;
+      try {
+        await persistData();
+        UI.toast('✅ Elemento eliminado');
+        showDetail(currentSection);
+      } catch (e) {
+        UI.toast('❌ No se pudo guardar: ' + ((e && e.message) || e), 'error');
+      }
+    }
+
+    async function handleEdit(kind, id) {
+      if (kind === 'phone') {
+        const c = ctx.d.contacts.find(x => String(x.id) === String(id));
+        if (!c) return;
+        const np = window.prompt('Nuevo teléfono del cliente', c.phone || '');
+        if (np == null) return;
+        c.phone = np.trim();
+        try {
+          await persistData();
+          UI.toast('✅ Teléfono actualizado');
+          showDetail(currentSection);
+        } catch (e) {
+          UI.toast('❌ No se pudo guardar: ' + ((e && e.message) || e), 'error');
+        }
+      }
+    }
+
     m.panel.querySelector('#vdBody').addEventListener('click', (e) => {
+      const del = e.target.closest('[data-vd-del]');
+      if (del) { handleDel(del.dataset.vdDel, del.dataset.id); return; }
+      const edit = e.target.closest('[data-vd-edit]');
+      if (edit) { handleEdit(edit.dataset.vdEdit, edit.dataset.id); return; }
       const btn = e.target.closest('[data-vd-section]');
       if (btn) showDetail(btn.dataset.vdSection);
     });
@@ -195,11 +248,9 @@
     try {
       const rows = await G.api('GET', '/app_data?select=data,updated_at&user_id=eq.' + encodeURIComponent(uid) + '&limit=1');
       const d = (rows && rows[0] && rows[0].data) || {};
-      ctx = {
-        works: d.works || [], contacts: d.contacts || [], employees: d.employees || [],
-        budgets: d.budgets || [], incomes: d.incomes || [], expenses: d.expenses || [],
-        updatedAt: (rows && rows[0] && rows[0].updated_at) || '',
-      };
+      d.works = d.works || []; d.contacts = d.contacts || []; d.employees = d.employees || [];
+      d.budgets = d.budgets || []; d.incomes = d.incomes || []; d.expenses = d.expenses || [];
+      ctx = { d, updatedAt: (rows && rows[0] && rows[0].updated_at) || '' };
       showSummary();
       await G.plan.log('ver_datos_usuario', email);
     } catch (err) {
