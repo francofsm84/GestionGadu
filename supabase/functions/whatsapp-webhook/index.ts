@@ -809,7 +809,7 @@ async function processMessage(body: unknown) {
           return json({ ok: true, from: inc.from, reply });
         }
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "🤖 No pude cargarlo. Probá: \"Adelanto de Hugo de 12000\"."));
+        fireAndForget(sendWhatsApp(inc.from, res.notFound || "🤖 No pude cargarlo. Probá: \"Adelanto de Hugo de 12000\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       fireAndForget(sendWhatsApp(inc.from, "💸 ¿A qué empleado y de cuánto es el adelanto? Ej: \"Hugo de 12000\"."));
@@ -951,7 +951,7 @@ async function processMessage(body: unknown) {
         }
         return json({ ok: true, from: inc.from, reply });
       }
-      const reply = aiReply || ("🤖 Me falta " + (res.missing || "un dato") + " para cargarlo. Decímelo por acá.");
+      const reply = aiReply || (res.notFound ? res.notFound : "🤖 Me falta " + (res.missing || "un dato") + " para cargarlo. Decímelo por acá.");
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
     }

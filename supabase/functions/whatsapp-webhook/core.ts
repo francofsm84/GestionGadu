@@ -300,6 +300,7 @@ export interface ExecResult {
   missing?: string;      // dato faltante para pedirlo por chat
   unsupported?: string;  // módulo que el conector no ejecuta (lo responde la IA)
   pendingWork?: boolean; // se guardó sin obra: el webhook debe preguntar "¿a qué obra?"
+  notFound?: string;     // mensaje cuando la entidad nombrada no existe (ej. empleado)
 }
 
 /* Contexto compacto de la cuenta (mismo espíritu que context() del chat web) */
@@ -459,13 +460,22 @@ export function executeAction(
   if (action.modulo === "adelanto") {
     const montoAd = Number(c.monto);
     if (!(montoAd > 0)) return { ok: false, missing: "el monto del adelanto" };
-    const empleado = String(c.empleado || "").trim();
-    (d.incomes || (d.incomes = [])).unshift({
-      id: idGen(), workId: null, clientId: null, date: todayISO, amount: montoAd,
-      concept: "Adelanto", method: "", reference: "", notes: "Adelanto a " + (empleado || "empleado"),
-      incomeKind: "adelanto", source: "whatsapp",
+    const empleadoRaw = String(c.empleado || "").trim();
+    if (!empleadoRaw) return { ok: false, missing: "el nombre del empleado" };
+    /* Buscar el empleado por nombre (firstName + lastName) para obtener su employeeId */
+    const emp = (d.employees || []).find((e: Record<string, unknown>) =>
+      flat(String((e.firstName || "") + " " + (e.lastName || "")).trim()).includes(flat(empleadoRaw))
+    );
+    if (!emp) {
+      return { ok: false, notFound: "No encontré a ese empleado en tu lista. ¿Querés crearlo primero?" };
+    }
+    const nombreEmp = String((emp.firstName || "") + " " + (emp.lastName || "")).trim();
+    (d.expenses || (d.expenses = [])).unshift({
+      id: idGen(), type: "general", workId: null, date: todayISO, amount: montoAd,
+      category: "Adelanto", providerId: null, employeeId: String(emp.id || ""), expenseKind: "adelanto",
+      description: "Adelanto a " + nombreEmp, invoiceNumber: "", paymentMethod: "Efectivo", source: "whatsapp",
     } as unknown as Record<string, unknown>);
-    return { ok: true, label: "Adelanto de $" + montoAd + (empleado ? " a " + empleado : "") + " registrado ✓" };
+    return { ok: true, label: "Adelanto de $" + montoAd + " a " + nombreEmp + " registrado ✓" };
   }
 
   if (action.modulo === "obra") {
