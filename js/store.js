@@ -479,8 +479,14 @@
   }
   function save() {
     if (!data) return;
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(flushSave, 500);
+    /* IndexedDB (localForage): debounce 500ms para evitar write-amplification.
+       localStorage fallback (Node/tests): escritura sincrónica (no necesita debounce). */
+    if (G.storage && G.storage.isIDB) {
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(flushSave, 500);
+    } else {
+      flushSave();
+    }
     /* Sincronización automática con la nube (si está activada) */
     if (data.settings && data.settings.cloud && data.settings.cloud.autoPush) {
       try { if (G.sync && G.sync.schedulePush) G.sync.schedulePush(); } catch (e) {}

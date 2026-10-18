@@ -37,5 +37,5 @@
     try { await backend.del(key); } catch (e) {}
   }
 
-  G.storage = { get, set, del };
+  G.storage = { get, set, del, isIDB: !!lf };
 })(typeof window !== 'undefined' ? window : globalThis);
