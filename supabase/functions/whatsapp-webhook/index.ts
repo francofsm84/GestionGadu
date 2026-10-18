@@ -28,6 +28,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
+import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 import {
   matchVerificationCode,
   matchLicenseCode,
@@ -562,7 +563,7 @@ async function generateBudgetPDF(budgetData: { cliente: string; items: BudgetIte
   return await doc.save();
 }
 
-async function sendWhatsAppDocument(to: string, pdfBytes: Uint8Array, filename: string): Promise<boolean> {
+async function sendWhatsAppDocument(to: string, bytes: Uint8Array, filename: string, mimeType = "application/pdf", caption = "Presupuesto GADU"): Promise<boolean> {
   const token = Deno.env.get("WHATSAPP_TOKEN") || "";
   const phoneId = Deno.env.get("WHATSAPP_PHONE_ID") || "";
   const apiVersion = Deno.env.get("WHATSAPP_API_VERSION") || "v21.0";
@@ -571,11 +572,11 @@ async function sendWhatsAppDocument(to: string, pdfBytes: Uint8Array, filename: 
     return false;
   }
 
-  /* 1) Subir el PDF a Meta para obtener media_id */
+  /* 1) Subir el archivo a Meta para obtener media_id */
   const form = new FormData();
-  form.append("file", new Blob([pdfBytes], { type: "application/pdf" }), filename);
+  form.append("file", new Blob([bytes], { type: mimeType }), filename);
   form.append("messaging_product", "whatsapp");
-  form.append("type", "application/pdf");
+  form.append("type", mimeType);
   const up = await fetchWithTimeout(`https://graph.facebook.com/${apiVersion}/${phoneId}/media`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
@@ -593,7 +594,7 @@ async function sendWhatsAppDocument(to: string, pdfBytes: Uint8Array, filename: 
     messaging_product: "whatsapp",
     to: toMetaPhone(to),
     type: "document",
-    document: { id: mediaId, filename, caption: "Presupuesto GADU" },
+    document: { id: mediaId, filename, caption },
   };
   const res = await fetchWithTimeout(`https://graph.facebook.com/${apiVersion}/${phoneId}/messages`, {
     method: "POST",
@@ -604,6 +605,27 @@ async function sendWhatsAppDocument(to: string, pdfBytes: Uint8Array, filename: 
   if (!res.ok) console.error("[GADU-WA-DOC] enviar documento falló:", res.status, respText);
   else console.log("[GADU-WA-DOC] documento enviado OK:", filename);
   return res.ok;
+}
+
+/* Genera un .xlsx con los gastos del usuario (Fecha, Monto, Categoría, Concepto, Obra) */
+function exportExpensesXlsx(data: Record<string, any>): Uint8Array {
+  const works = data.works || [];
+  const workName = (id: string | null | undefined) => {
+    if (!id) return "";
+    const w = works.find((x: Record<string, any>) => String(x.id) === String(id));
+    return w ? String(w.name || w.nombre || "") : "";
+  };
+  const rows = (data.expenses || []).map((x: Record<string, any>) => ({
+    Fecha: String(x.date || x.fecha || ""),
+    Monto: Number(x.amount) || 0,
+    "Categoría": String(x.category || x.categoria || ""),
+    Concepto: String(x.description || x.name || "").slice(0, 60),
+    Obra: workName(x.workId),
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Gastos");
+  return new Uint8Array(XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer);
 }
 
 serve(async (req) => {
@@ -1315,6 +1337,28 @@ async function processMessage(body: unknown) {
       const label = contactType === "empleado" ? "Empleado" : (contactType === "socio" ? "Socio" : "Cliente");
       fireAndForget(sendWhatsApp(inc.from, "✅ Contacto guardado correctamente: " + label + " '" + name + "'."));
       return json({ ok: true, from: inc.from, reply: "contacto guardado" });
+    }
+
+    /* [GADU-WA-EXPORT] Exportar gastos a Excel (comando "excel" / "exportar gastos") */
+    if (/\b(excel|planilla|xlsx)\b/i.test(inc.text) || /exportar\s+(gastos|movimientos|todo|mis\s+datos)/i.test(inc.text)) {
+      console.log("[GADU-WA-EXPORT] pedido de exportación:", inc.text);
+      try {
+        const xlsxBytes = exportExpensesXlsx(data);
+        const ok = await sendWhatsAppDocument(
+          inc.from,
+          xlsxBytes,
+          "gastos-gadu.xlsx",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "Gastos GADU",
+        );
+        if (!ok) {
+          fireAndForget(sendWhatsApp(inc.from, "🤖 No pude generar el archivo. Probá de nuevo en unos minutos."));
+        }
+      } catch (e) {
+        console.error("[GADU-WA-EXPORT] error generando excel:", e);
+        fireAndForget(sendWhatsApp(inc.from, "🤖 No pude generar el archivo. Probá de nuevo en unos minutos."));
+      }
+      return json({ ok: true, from: inc.from, reply: "excel" });
     }
 
     if (advIntent && !advIntent.nombre && advIntent.monto <= 0) {
