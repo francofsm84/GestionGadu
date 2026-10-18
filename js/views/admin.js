@@ -332,7 +332,7 @@
       subtitle: phone,
       size: 'wide',
       body:
-        '<div class="card-inset" style="margin-bottom:10px">' +
+        '<div class="card-inset client-card" style="margin-bottom:10px">' +
         '<div class="split-row"><div class="split-row-main"><strong>' + UI.escapeHtml(profile ? ((profile.nombre || '') + ' ' + (profile.apellido || '')).trim() || profile.email || 'Cliente' : 'Cliente') + '</strong>' +
         '<span class="muted small">' + UI.escapeHtml(profile ? (profile.email || '') : '') + '</span></div>' +
         '<div class="split-row-end">' + UI.chip(statusLabel, statusTone) + '</div></div>' +

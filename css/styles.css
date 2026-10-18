@@ -787,6 +787,9 @@ canvas.chart { min-width: 0; max-width: 100%; }
   .ticket-row .split-row-end { flex-wrap: wrap; gap: 8px; }
   .ticket-row .split-row-end .btn { flex: 1 1 100%; }
   .ticket-row .split-row-main { overflow-wrap: break-word; word-break: break-all; }
+  /* Ficha del cliente en el modal de chat: apilar nombre y chip de estado */
+  .client-card .split-row { flex-direction: column; align-items: stretch; gap: 6px; }
+  .client-card .split-row-end { flex-wrap: wrap; }
 }
 @media (max-width: 640px) {
   /* Herramientas y Máquinas: tarjeta ajustada al ancho del celular */
