@@ -169,6 +169,52 @@ async function sendWhatsAppButtons(
   return res.ok;
 }
 
+/* Envía un mensaje interactivo de tipo "list" (hasta 10 filas) para cuando
+   hay más de 3 obras. Cada fila usa el mismo id "assign_work:<ID>" que los botones. */
+async function sendWhatsAppList(
+  to: string,
+  text: string,
+  works: Array<{ id: string; title: string }>,
+): Promise<boolean> {
+  const token = Deno.env.get("WHATSAPP_TOKEN") || "";
+  const phoneId = Deno.env.get("WHATSAPP_PHONE_ID") || "";
+  const apiVersion = Deno.env.get("WHATSAPP_API_VERSION") || "v21.0";
+  if (!token || !phoneId) {
+    console.warn("[GADU-WA-LIST] sin WHATSAPP_TOKEN/WHATSAPP_PHONE_ID");
+    return false;
+  }
+  const body = {
+    messaging_product: "whatsapp",
+    to: toMetaPhone(to),
+    type: "interactive",
+    interactive: {
+      type: "list",
+      body: { text },
+      action: {
+        button: "Asignar Obra",
+        sections: [{
+          title: "Obras",
+          rows: works.slice(0, 10).map(w => ({
+            id: w.id,
+            title: w.title.slice(0, 24),
+            description: "Asignar gasto",
+          })),
+        }],
+      },
+    },
+  };
+  console.log("[GADU-WA-LIST] payload:", JSON.stringify(body));
+  const res = await fetch(`https://graph.facebook.com/${apiVersion}/${phoneId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  const respText = await res.text().catch(() => "");
+  if (!res.ok) console.error("[GADU-WA-LIST] Meta falló:", res.status, respText);
+  else console.log("[GADU-WA-LIST] Meta OK:", res.status);
+  return res.ok;
+}
+
 /* Busca el user_id por teléfono (variantes con/sin 9, con/sin +) */
 async function findUserId(from: string): Promise<string | null> {
   const fromCandidates = [...new Set([from, normalizePhone(from), "+" + normalizePhone(from)])];
@@ -220,8 +266,13 @@ async function askForWork(phone: string, userId: string, data: Record<string, an
   }
 
   if (activeWorks.length > 3) {
+    const works = activeWorks.map((w: any) => ({
+      id: "assign_work:" + String(w.id),
+      title: String(w.nombre || w.name || "Obra"),
+    }));
+    works.push({ id: "assign_general", title: "Gasto General" });
     await upsertSession(phone, userId, "WAITING_WORK", {});
-    await sendWhatsApp(phone, "Tenés varias obras activas. Escribime el nombre de la obra para asignarlo.");
+    await sendWhatsAppList(phone, "¿A qué obra asignamos el gasto?", works);
     return;
   }
 
@@ -321,7 +372,7 @@ function detectInteractive(body: unknown): { from: string; buttonId: string } | 
     const p = body as Record<string, any>;
     const msg = p?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     if (!msg || msg.type !== "interactive") return null;
-    const buttonId = String(msg.interactive?.button_reply?.id || "");
+    const buttonId = String(msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id || "");
     const from = String(msg.from || p?.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.wa_id || "");
     if (!buttonId || !from) return null;
     return { from: String(from).replace(/\D/g, ""), buttonId };

@@ -66,6 +66,50 @@ async function sendWhatsAppButtons(
   return res.ok;
 }
 
+/* Mensaje interactivo de tipo "list" (hasta 10 filas) para más de 3 obras */
+async function sendWhatsAppList(
+  to: string,
+  text: string,
+  works: Array<{ id: string; title: string }>,
+): Promise<boolean> {
+  const token = Deno.env.get("WHATSAPP_TOKEN") || "";
+  const phoneId = Deno.env.get("WHATSAPP_PHONE_ID") || "";
+  if (!token || !phoneId) {
+    console.warn("[GADU-WA-CRON] sin WHATSAPP_TOKEN/WHATSAPP_PHONE_ID");
+    return false;
+  }
+  const body = {
+    messaging_product: "whatsapp",
+    to: toMetaPhone(to),
+    type: "interactive",
+    interactive: {
+      type: "list",
+      body: { text },
+      action: {
+        button: "Asignar Obra",
+        sections: [{
+          title: "Obras",
+          rows: works.slice(0, 10).map(w => ({
+            id: w.id,
+            title: w.title.slice(0, 24),
+            description: "Asignar gasto",
+          })),
+        }],
+      },
+    },
+  };
+  console.log("[GADU-WA-CRON] sendWhatsAppList payload:", JSON.stringify(body));
+  const res = await fetch(`https://graph.facebook.com/${API_VERSION}/${phoneId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  const respText = await res.text().catch(() => "");
+  if (!res.ok) console.error("[GADU-WA-CRON] Meta falló:", res.status, respText);
+  else console.log("[GADU-WA-CRON] Meta OK:", res.status, respText);
+  return res.ok;
+}
+
 /* Texto del recordatorio (singular o plural) */
 function buildText(expenses: Array<{ amount?: unknown; category?: unknown }>): string {
   const total = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
@@ -130,18 +174,22 @@ serve(async (req) => {
         continue;
       }
 
-      /* 4) Obras activas (para los botones) */
+      /* 4) Obras activas → botones (≤3) o lista interactiva (>3) */
       const activeWorks = (row.data?.works || []).filter((w: Record<string, any>) => w.status === "activa");
-      const buttons: Array<{ id: string; title: string }> = [
-        ...activeWorks.slice(0, 2).map((w: Record<string, any>) => ({
-          id: "assign_work:" + String(w.id),
-          title: String(w.nombre || w.name || "Obra").slice(0, 20),
-        })),
-        { id: "assign_general", title: "Gasto General" },
-      ];
+      const works: Array<{ id: string; title: string }> = activeWorks.map((w: Record<string, any>) => ({
+        id: "assign_work:" + String(w.id),
+        title: String(w.nombre || w.name || "Obra").slice(0, 24),
+      }));
+      works.push({ id: "assign_general", title: "Gasto General" });
 
-      /* 5) Enviar mensaje interactivo */
-      const ok = await sendWhatsAppButtons(phone, buildText(expenses), buttons);
+      /* 5) Enviar mensaje interactivo (botones si ≤3, lista si >3) */
+      let ok = false;
+      if (activeWorks.length <= 3) {
+        const buttons = works.map(w => ({ id: w.id, title: w.title.slice(0, 20) }));
+        ok = await sendWhatsAppButtons(phone, buildText(expenses), buttons);
+      } else {
+        ok = await sendWhatsAppList(phone, buildText(expenses), works);
+      }
       if (ok) processed++;
       console.log("[GADU-WA-CRON] usuario", row.user_id, "→", expenses.length, "gasto(s) pendiente(s), enviado:", ok);
     }
