@@ -264,6 +264,22 @@
     let tickets = [];
     try { tickets = await G.api('GET', '/support_tickets?select=*&order=created_at.desc'); } catch (e) {}
 
+    /* Datos del usuario asociado (nombre + foto) para mostrar en la tarjeta */
+    const profMap = {};
+    try {
+      const uids = [...new Set(tickets.map(t => t.user_id).filter(Boolean))];
+      if (uids.length) {
+        const profs = await G.api('GET', '/profiles?select=user_id,nombre,apellido,email,empresa_constructora,empresa,avatar_url,photo,foto&user_id=in.(' + uids.join(',') + ')');
+        (profs || []).forEach(p => { profMap[p.user_id] = p; });
+      }
+    } catch (e) {}
+    const profOf = t => {
+      const p = t.user_id ? profMap[t.user_id] : null;
+      if (!p) return { name: '', photo: null };
+      const name = String((p.nombre || '') + ' ' + (p.apellido || '')).trim() || p.empresa_constructora || p.empresa || '';
+      return { name, photo: p.avatar_url || p.photo || p.foto || null };
+    };
+
     const filter = soporteFilter || (soporteFilter = { tab: 'open', q: '' });
     const hasReply = t => Array.isArray(t.messages) && t.messages.some(m => m.role === 'admin');
     const open = tickets.filter(t => t.status === 'open' && !hasReply(t));
@@ -291,9 +307,12 @@
       '<div class="card" style="margin-top:10px">' +
       '<div class="card-head"><div><h3>Tickets de soporte</h3><p class="muted">' + filtered.length + ' en esta vista</p></div></div>' +
       '<div class="stack">' +
-      (filtered.map(t =>
-        '<div class="card-inset ticket-row" style="margin-top:10px">' +
-        '<div class="split-row"><div class="split-row-main"><strong>' + UI.escapeHtml(t.phone || '—') + '</strong>' +
+      (filtered.map(t => {
+        const prof = profOf(t);
+        return '<div class="card-inset ticket-row" style="margin-top:10px">' +
+        '<div class="split-row"><div class="split-row-main">' +
+        '<div style="display:flex;align-items:center;gap:9px">' + UI.avatar(prof.name || (t.phone || 'C'), 32, prof.photo) +
+        '<div><strong>' + UI.escapeHtml(t.phone || '—') + '</strong>' + (prof.name ? '<br><span class="muted small">' + UI.escapeHtml(prof.name) + '</span>' : '') + '</div></div>' +
         '<span class="muted small">' + (t.created_at ? UI.fmtDate(t.created_at) : '—') + (hasReply(t) && t.status !== 'closed' ? ' ' + UI.chip('En proceso', 'info') : '') + '</span></div>' +
         '<div class="split-row-end">' +
         '<button class="btn btn-soft btn-sm" data-ticket="' + t.id + '" data-reply="' + UI.escapeHtml(t.phone || '') + '" data-msg="' + UI.escapeHtml(t.message || '') + '" data-user="' + (t.user_id || '') + '">' + UI.icon('whatsapp', 14) + ' Responder</button>' +
@@ -301,7 +320,8 @@
         (t.status !== 'closed' ? '<button class="btn btn-soft btn-sm" data-close-ticket="' + t.id + '">' + UI.icon('check', 14) + ' Resolver</button>' : '') +
         '</div></div>' +
         '<p class="muted" style="margin:6px 0 0">' + UI.escapeHtml(t.message || '—') + '</p>' +
-        '</div>').join('') || '<p class="form-hint">No hay tickets en esta vista.</p>') +
+        '</div>';
+      }).join('') || '<p class="form-hint">No hay tickets en esta vista.</p>') +
       '</div></div>';
 
     body.querySelectorAll('[data-stab]').forEach(b => b.addEventListener('click', () => {
