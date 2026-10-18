@@ -20,6 +20,33 @@ function toMetaPhone(p: unknown): string {
   return d;
 }
 
+/* Dispara una notificación push (fire-and-forget; nunca bloquea ni tira) */
+function firePush(userId: string, title: string, message: string, url: string) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const serviceSecret = Deno.env.get("SERVICE_SECRET") || "";
+  const doIt = async () => {
+    try {
+      const res = await fetch(supabaseUrl + "/functions/v1/send-push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-service-secret": serviceSecret },
+        body: JSON.stringify({ user_id: userId, title, message, url }),
+      });
+      if (!res.ok) console.warn("[GADU-WA-PUSH] send-push respondió:", res.status);
+    } catch (e) {
+      console.warn("[GADU-WA-PUSH] error:", e);
+    }
+  };
+  try {
+    // deno-lint-ignore no-undef
+    if (typeof EdgeRuntime !== "undefined" && typeof EdgeRuntime.waitUntil === "function") {
+      // deno-lint-ignore no-undef
+      EdgeRuntime.waitUntil(doIt());
+      return;
+    }
+  } catch (_e) {}
+  doIt().catch(() => {});
+}
+
 /* ¿El gasto es de las últimas 24hs? (date viene como "YYYY-MM-DD") */
 function isRecent24h(dateStr: unknown): boolean {
   const now = new Date();
@@ -190,7 +217,16 @@ serve(async (req) => {
       } else {
         ok = await sendWhatsAppList(phone, buildText(expenses), works);
       }
-      if (ok) processed++;
+      if (ok) {
+        processed++;
+        /* Notificación push: avisar en el celular además del WhatsApp */
+        firePush(
+          row.user_id,
+          "GADU · Gastos pendientes",
+          "Tenés " + expenses.length + " gasto" + (expenses.length !== 1 ? "s" : "") + " sin asignar de hoy. Asignalos para mantener tus cuentas al día.",
+          "/#/bandeja",
+        );
+      }
       console.log("[GADU-WA-CRON] usuario", row.user_id, "→", expenses.length, "gasto(s) pendiente(s), enviado:", ok);
     }
 

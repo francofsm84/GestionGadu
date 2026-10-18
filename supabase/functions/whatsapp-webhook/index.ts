@@ -77,6 +77,25 @@ function supabaseUrl() { return Deno.env.get("SUPABASE_URL") || ""; }
 function serviceKey() { return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""; }
 function anonKey() { return Deno.env.get("SUPABASE_ANON_KEY") || ""; }
 
+/* Dispara una notificación push (fire-and-forget; nunca bloquea ni tira) */
+function firePush(userId: string, title: string, message: string, url: string) {
+  fireAndForget((async () => {
+    try {
+      const res = await fetch(supabaseUrl() + "/functions/v1/send-push", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-service-secret": Deno.env.get("SERVICE_SECRET") || "",
+        },
+        body: JSON.stringify({ user_id: userId, title, message, url }),
+      });
+      if (!res.ok) console.warn("[GADU-WA-PUSH] send-push respondió:", res.status);
+    } catch (e) {
+      console.warn("[GADU-WA-PUSH] error:", e);
+    }
+  })());
+}
+
 async function rest(path: string, opts: Record<string, unknown> = {}) {
   const sk = serviceKey();
   const headers = {
@@ -1035,10 +1054,16 @@ async function processMessage(body: unknown) {
           return json({ ok: false, error: "no se pudo guardar el movimiento" });
         }
         let reply = (aiReply ? aiReply + "\n\n" : "") + "✅ " + res.label;
-        /* Deep link: enlazar al gasto recién creado para abrirlo resaltado en la app */
+        /* Deep link + notificación push: enlazar al gasto recién creado */
         if (action.modulo === "gasto") {
-          const gastoId = (data.expenses && data.expenses[0]) ? String(data.expenses[0].id || "") : "";
-          if (gastoId) reply += "\n\n👉 Ver en GADU: https://gestiongadu.vercel.app/#/gastos?id=" + gastoId;
+          const gasto = (data.expenses && data.expenses[0]) || null;
+          if (gasto) {
+            const gastoId = String(gasto.id || "");
+            const monto = Number(gasto.amount) || 0;
+            const cat = String(gasto.category || "gasto");
+            if (gastoId) reply += "\n\n👉 Ver en GADU: https://gestiongadu.vercel.app/#/gastos?id=" + gastoId;
+            firePush(row.user_id, "GADU · Gasto registrado", "Se guardó un gasto de $" + monto + " en " + cat + ". Tocá para verlo.", "/#/gastos?id=" + gastoId);
+          }
         }
         fireAndForget(sendWhatsApp(inc.from, reply));
         /* Si quedó SIN obra (gasto en bandeja o adelanto de cliente), preguntar a qué obra */
