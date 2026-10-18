@@ -973,7 +973,7 @@ async function processMessage(body: unknown) {
       const c = (action.campos || {}) as Record<string, unknown>;
       const fecha = resolveFecha(String(c.fecha || "hoy"));
       const employees = Array.isArray(c.employees) ? c.employees : [];
-      const registrados: Array<{ nombre: string; horas: number }> = [];
+      const registrados: Array<{ nombre: string; horas: number; workLabel: string }> = [];
       const noEncontrados: string[] = [];
       for (const e of employees) {
         const nombre = String((e as any).nombre || "").trim();
@@ -983,11 +983,19 @@ async function processMessage(body: unknown) {
           flatStr(String((x.firstName || "") + " " + (x.lastName || "")).trim()).includes(flatStr(nombre))
         );
         if (!emp) { noEncontrados.push(nombre); continue; }
+        /* Resolver la obra (work) → workId; si no se encuentra o no se dijo, null */
+        const workName = String((e as any).work || "").trim();
+        let workId: string | null = null;
+        let workLabel = "";
+        if (workName) {
+          const w = (data.works || []).find((x: any) => flatStr(String(x.nombre || x.name || "")).includes(flatStr(workName)));
+          if (w) { workId = String(w.id || ""); workLabel = String(w.nombre || w.name || workName); }
+        }
         (data.attendance || (data.attendance = [])).push({
           id: crypto.randomUUID(), employeeId: String(emp.id || ""), date: fecha,
-          status: "presente", hours: [{ workId: null, hours }], notes: "",
+          status: "presente", hours: [{ workId, hours }], notes: "",
         });
-        registrados.push({ nombre: String((emp.firstName || "") + " " + (emp.lastName || "")).trim(), horas });
+        registrados.push({ nombre: String((emp.firstName || "") + " " + (emp.lastName || "")).trim(), horas, workLabel });
       }
       const up = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
         method: "PATCH",
@@ -995,7 +1003,7 @@ async function processMessage(body: unknown) {
         body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
       });
       if (!up.ok) console.error("[GADU-WA-ATT] falló PATCH app_data:", up.status);
-      const partes = registrados.map(r => r.nombre + " (" + r.horas + "hs)");
+      const partes = registrados.map(r => r.nombre + " (" + r.horas + "hs" + (r.workLabel ? " en " + r.workLabel : " sin obra asignada") + ")");
       let reply = "✅ Asistencia registrada: " + (partes.join(", ") || "nadie") + ".";
       if (noEncontrados.length) reply += " (No encontré a " + noEncontrados.join(", ") + " en tu lista de empleados).";
       fireAndForget(sendWhatsApp(inc.from, reply));
