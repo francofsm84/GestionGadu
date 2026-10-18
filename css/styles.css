@@ -919,9 +919,10 @@ body.no-session .app { display: none; }
 .ai-msg { max-width: 88%; padding: 9px 12px; border-radius: 12px; font-size: 13.5px; line-height: 1.45; }
 .ai-bot { align-self: flex-start; background: var(--surface-2); color: var(--text); border-bottom-left-radius: 4px; }
 .ai-user { align-self: flex-end; background: var(--primary); color: var(--on-primary); border-bottom-right-radius: 4px; }
-.ai-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ai-actions { display: flex; flex-wrap: nowrap; gap: 6px; margin-top: 8px; overflow-x: auto; white-space: nowrap; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.ai-actions::-webkit-scrollbar { display: none; }
 /* Chips de opciones del chat: táctiles, sin doble-tap ni resaltado fantasma */
-.ai-actions .btn { touch-action: manipulation; -webkit-tap-highlight-color: transparent; min-height: 38px; }
+.ai-actions .btn { flex: 0 0 auto; white-space: nowrap; touch-action: manipulation; -webkit-tap-highlight-color: transparent; min-height: 38px; }
 /* Tarjeta de éxito con tilde verde (confirmación de carga completada) */
 .ai-success {
   display: flex; gap: 10px; align-items: center;

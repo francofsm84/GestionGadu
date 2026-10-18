@@ -898,6 +898,29 @@
 
   function firePill(k) {
     resetFlows();   // cambio de flujo → limpiar estados anteriores colgados
+    /* Pills de contexto de obra (URL #/obra/<id>) */
+    if (k.indexOf('__adv_') === 0) {
+      const wid = k.slice(6);
+      const w = (G.store.data.works || []).find(x => x.id === wid);
+      if (w) { try { G.actions.expense({ type: 'obra', workId: wid, expenseKind: 'adelanto' }); } catch (e) {} }
+      setOpen(false);
+      return;
+    }
+    if (k.indexOf('__exp_') === 0) {
+      const wid = k.slice(6);
+      const w = (G.store.data.works || []).find(x => x.id === wid);
+      if (w) { try { G.actions.expense({ type: 'obra', workId: wid }); } catch (e) {} }
+      setOpen(false);
+      return;
+    }
+    if (k.indexOf('__who_') === 0) {
+      const wid = k.slice(6);
+      const w = (G.store.data.works || []).find(x => x.id === wid);
+      const name = w ? (w.name || w.nombre) : 'la obra';
+      input.value = '¿Quién trabajó en ' + name + ' hoy?';
+      send();
+      return;
+    }
     if (k === 'contabilidad') {
       const pend = bubble('', 'bot');
       appendLog(pend);
@@ -934,6 +957,17 @@
     if (fn) { fn(); setOpen(false); }
   }
 
+  /* Detecta el contexto de obra desde la URL: #/obra/<id> */
+  function currentWorkContext() {
+    try {
+      const m = String(location.hash || '').match(/^#\/obra\/([^/]+)/);
+      if (!m) return null;
+      const id = decodeURIComponent(m[1]);
+      const w = (G.store.data.works || []).find(x => x.id === id);
+      return w ? { id, name: w.name || w.nombre || 'Obra' } : null;
+    } catch (e) { return null; }
+  }
+
   function addGreeting() {
     const pillsAdmin = [
       { k: 'admin-metrics', e: '📊', l: 'Métricas MRR/ARR' },
@@ -943,9 +977,9 @@
     ];
     const pillsUser = [
       { k: 'new-obra', e: '🏗️', l: 'Nueva obra' },
-      { k: 'new-contacto', e: '👤', l: 'Crear agenda' },
+      { k: 'new-contacto', e: '👤', l: 'Nuevo compromiso' },
       { k: 'pago', e: '💸', l: 'Pago / Adelanto' },
-      { k: 'contabilidad', e: '💰', l: 'Contabilidad' },
+      { k: 'contabilidad', e: '💰', l: 'Ver balances' },
       { k: 'hoy', e: '👷', l: '¿Quién trabajó hoy?' },
       { k: 'new-presupuesto', e: '📄', l: 'Nuevo presupuesto' },
       { k: 'herramientas', e: '🛠️', l: 'Herramientas y Máquinas' },
@@ -954,10 +988,21 @@
     builtMode = admin ? 'admin' : 'usuario';
     const sub = document.getElementById('aiSub');
     if (sub) sub.textContent = admin ? 'COO Virtual · gestión del SaaS' : 'Capataz Digital · te guío paso a paso';
-    const pills = admin ? pillsAdmin : pillsUser;
+
+    /* Contexto de obra: botones dinámicos específicos de esa obra */
+    const ctxWork = admin ? null : currentWorkContext();
+    const pills = admin ? pillsAdmin : (ctxWork ? [
+      { k: '__adv_' + ctxWork.id, e: '💸', l: 'Adelanto a empleado (' + ctxWork.name + ')' },
+      { k: '__exp_' + ctxWork.id, e: '💰', l: 'Cargar gasto en ' + ctxWork.name },
+      { k: '__who_' + ctxWork.id, e: '👷', l: '¿Quién trabajó en ' + ctxWork.name + ' hoy?' },
+    ] : pillsUser);
+
     const saludo = admin
       ? '¡Hola Super Admin 👑! Soy tu COO Virtual. Consultame métricas o gestiona el SaaS.'
-      : '¡Hola! 👋 Soy tu asistente GADU. Tocá una acción rápida o preguntame lo que necesites.';
+      : (ctxWork
+        ? '¡Hola! 👋 Estás en la obra <b>' + esc(ctxWork.name) + '</b>. Tocá una acción rápida de esta obra.'
+        : '¡Hola! 👋 Soy tu asistente GADU. Tocá una acción rápida o preguntame lo que necesites.');
+
     const bot = bubble(
       saludo + '<br>' +
       '<div class="ai-actions">' + pills.map(p => '<button class="btn btn-soft btn-sm" data-act="' + p.k + '">' + p.e + ' ' + p.l + '</button>').join('') + '</div>',
