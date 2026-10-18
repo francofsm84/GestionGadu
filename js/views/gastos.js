@@ -194,7 +194,7 @@
               UI.chip('Empleado', 'info') + (x.expenseKind === 'adelanto' ? ' ' + UI.chip('Adelanto', 'warning', 'zap') : '')
             : UI.escapeHtml(prov ? prov.name : '—')) + '</td>' +
           '<td>' + UI.escapeHtml(x.description) + '</td>' +
-          '<td class="muted">' + UI.escapeHtml(x.invoiceNumber || '—') + '</td>' +
+          '<td class="muted">' + (x.invoiceNumber ? UI.escapeHtml(x.invoiceNumber) : '—') + (x.receiptUrl ? ' <button class="icon-btn sm" data-ticket="' + UI.escapeHtml(x.receiptUrl) + '" title="Ver ticket">' + UI.icon('camera', 14) + '</button>' : '') + '</td>' +
           '<td class="muted">' + UI.escapeHtml(x.paymentMethod || '—') + '</td>' +
           '<td class="num neg"><b>−' + UI.fmtMoney(x.amount) + '</b></td>' +
           '<td><div class="row-actions">' +
@@ -213,6 +213,10 @@
     UI.on(wrap, '[data-edit]', 'click', e => {
       const id = e.target.closest('[data-edit]').dataset.edit;
       openExpenseModal({ expense: S.data.expenses.find(x => x.id === id) });
+    });
+    UI.on(wrap, '[data-ticket]', 'click', e => {
+      const url = e.target.closest('[data-ticket]').dataset.ticket;
+      openTicketModal(url);
     });
     UI.on(wrap, '[data-del]', 'click', async e => {
       const id = e.target.closest('[data-del]').dataset.del;
@@ -236,6 +240,58 @@
     });
     UI.csv('gadu-gastos.csv', rows);
     UI.toast('CSV de gastos exportado');
+  }
+
+  /* Compresión de imagen en cliente (canvas) antes de subir */
+  function compressImage(file, maxDim, quality) {
+    maxDim = maxDim || 1200; quality = quality || 0.8;
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(b => (b ? resolve(b) : reject(new Error('No se pudo comprimir'))), 'image/jpeg', quality);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Imagen inválida')); };
+      img.src = url;
+    });
+  }
+
+  /* Sube el ticket a Supabase Storage y devuelve la URL pública */
+  async function uploadTicket(file) {
+    const sess = G.auth && G.auth.getSession ? G.auth.getSession() : null;
+    const uid = (sess && sess.userId) || 'anon';
+    const blob = await compressImage(file);
+    const path = uid + '/' + Date.now() + '.jpg';
+    const res = await fetch(G.auth.SUPABASE_URL + '/storage/v1/object/gadu_tickets/' + path, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + ((sess && sess.accessToken) || ''),
+        'apikey': G.auth.SUPABASE_ANON_KEY,
+        'Content-Type': 'image/jpeg',
+        'x-upsert': 'false',
+      },
+      body: blob,
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return G.auth.SUPABASE_URL + '/storage/v1/object/public/gadu_tickets/' + path;
+  }
+
+  /* Modal con la foto del ticket en grande */
+  function openTicketModal(url) {
+    const m = UI.openModal({
+      title: 'Ticket / comprobante',
+      size: 'wide',
+      body: '<div style="text-align:center"><img src="' + UI.escapeHtml(url) + '" style="max-width:100%;max-height:70vh;border-radius:10px" alt="Ticket"></div>',
+      footer: '<a class="btn btn-soft" href="' + UI.escapeHtml(url) + '" target="_blank" rel="noopener">' + UI.icon('image', 14) + 'Abrir en pestaña</a><button class="btn btn-ghost" data-cancel>Cerrar</button>',
+    });
+    m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
   }
 
   function openExpenseModal(opts) {
@@ -284,6 +340,10 @@
         '<div class="field"><label>Método de pago</label><select class="select" id="fMethod">' +
         methodOpts +
         '</select></div>' +
+        '<div class="field span-2"><label>Foto del ticket (opcional)</label>' +
+        '<input type="file" id="fTicket" accept="image/*" capture="environment" class="input">' +
+        (exp && exp.receiptUrl ? '<div style="margin-top:6px"><a href="' + UI.escapeHtml(exp.receiptUrl) + '" target="_blank" class="link-btn">' + UI.icon('camera', 13) + ' Ver ticket actual</a></div>' : '') +
+        '<span class="form-hint">Se sube al guardar. Podés sacarle una foto al comprobante.</span></div>' +
         '</div>',
       footer: '<button class="btn btn-ghost" data-cancel>Cancelar</button><button class="btn btn-primary" data-save>' + (isEdit ? 'Guardar cambios' : 'Cargar gasto') + '</button>',
     });
@@ -310,7 +370,7 @@
       const target = type === 'obra' ? 'Mano de obra' : 'Sueldos';
       if (cats.includes(target)) fCatEl.value = target;
     }
-    m.panel.querySelector('[data-save]').addEventListener('click', () => {
+    m.panel.querySelector('[data-save]').addEventListener('click', async () => {
       const amount = UI.readNum(m.panel.querySelector('#fAmount'));
       const desc = m.panel.querySelector('#fDesc').value.trim();
       let workId = null;
@@ -340,6 +400,25 @@
         invoiceNumber: m.panel.querySelector('#fFact').value.trim(),
         paymentMethod: m.panel.querySelector('#fMethod').value,
       };
+      /* Foto del ticket: subir a Storage y guardar la URL pública */
+      const ticketInput = m.panel.querySelector('#fTicket');
+      const file = ticketInput && ticketInput.files ? ticketInput.files[0] : null;
+      if (file) {
+        const saveBtn = m.panel.querySelector('[data-save]');
+        const original = saveBtn.textContent;
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Subiendo foto…';
+        try {
+          payload.receiptUrl = await uploadTicket(file);
+        } catch (e) {
+          UI.toast('No se pudo subir la foto: ' + ((e && e.message) || e), 'error');
+          saveBtn.disabled = false;
+          saveBtn.textContent = original;
+          return;
+        }
+        saveBtn.disabled = false;
+        saveBtn.textContent = original;
+      }
       if (isEdit) {
         S.update('expenses', exp.id, payload);
         UI.toast('Gasto actualizado');
