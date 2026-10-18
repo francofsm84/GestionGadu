@@ -31,6 +31,39 @@
     return '<div class="split-row"><span class="muted">' + label + '</span><b class="' + (cls || '') + (xl ? ' xl' : '') + '">' + value + '</b></div>';
   }
 
+  /* Comparte la obra con el cliente mediante un enlace público (token) */
+  function shareWithClient(w) {
+    if (!w.publicToken) {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      let t = '';
+      for (let i = 0; i < 20; i++) t += chars[Math.floor(Math.random() * chars.length)];
+      w.publicToken = t;
+      S.update('works', w.id, { publicToken: t });
+    }
+    const link = 'https://gestiongadu.vercel.app/#/portal/' + w.publicToken;
+    const m = UI.openModal({
+      title: 'Compartir con el cliente',
+      subtitle: 'Este enlace muestra el avance de la obra sin datos sensibles (costos, márgenes ni empleados).',
+      body:
+        '<div class="card-inset" style="margin:0">' +
+        '<label class="muted small">Enlace público</label>' +
+        '<input class="input" id="shareLink" readonly value="' + UI.escapeHtml(link) + '" style="margin-top:6px">' +
+        '</div>' +
+        '<p class="form-hint" style="margin-top:10px">Cualquiera con este enlace puede ver el avance; no necesita iniciar sesión.</p>',
+      footer:
+        '<button class="btn btn-ghost" data-cancel>Cerrar</button>' +
+        '<button class="btn btn-soft" data-copy>' + UI.icon('copy', 14) + 'Copiar enlace</button>' +
+        '<a class="btn btn-primary" href="https://wa.me/?text=' + encodeURIComponent('Hola! Mirá el avance de tu obra: ' + link) + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 14) + 'Enviar por WhatsApp</a>',
+    });
+    m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+    m.panel.querySelector('[data-copy]').addEventListener('click', async () => {
+      const inp = m.panel.querySelector('#shareLink');
+      try { await navigator.clipboard.writeText(inp.value); }
+      catch (e) { inp.select(); try { document.execCommand('copy'); } catch (e2) {} }
+      UI.toast('✅ Enlace copiado');
+    });
+  }
+
   /* Genera un reporte ejecutivo en PDF (exclusivo Plan PRO/Empresa) */
   function exportPDF(ctx) {
     const plan = (G.plan && G.plan.currentPlan) ? G.plan.currentPlan() : { id: 'free' };
@@ -122,6 +155,7 @@
       S.WORK_STATUS.map(s => '<option value="' + s + '"' + (w.status === s ? ' selected' : '') + '>' + (s === 'activa' ? 'Activa' : s === 'pausada' ? 'Pausada' : 'Finalizada') + '</option>').join('') +
       '</select>' +
       '<button class="btn btn-soft" id="btnPdf">' + UI.icon('file-text', 15) + 'Exportar PDF</button>' +
+      '<button class="btn btn-soft" id="btnShare">' + UI.icon('whatsapp', 15) + 'Compartir con el Cliente</button>' +
       '<button class="btn btn-soft" id="btnEdit">' + UI.icon('edit', 15) + 'Editar</button>' +
       '<button class="btn btn-soft-danger" id="btnDel" title="Eliminar obra">' + UI.icon('trash', 15) + '</button>' +
       '</div></div>' +
@@ -189,6 +223,7 @@
 
     view.querySelector('#btnEdit').addEventListener('click', () => G.actions.work(w));
     view.querySelector('#btnPdf').addEventListener('click', () => exportPDF(ctx));
+    view.querySelector('#btnShare').addEventListener('click', () => shareWithClient(w));
     view.querySelector('#btnDel').addEventListener('click', async () => {
       const ok = await UI.confirm({
         title: 'Eliminar obra',

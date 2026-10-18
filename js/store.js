@@ -23,6 +23,12 @@
   const daysAgo = n => { const d = new Date(); d.setDate(d.getDate() - n); return toISO(d); };
   const daysAhead = n => { const d = new Date(); d.setDate(d.getDate() + n); return toISO(d); };
   const uid = () => 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const publicToken = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let out = '';
+    for (let i = 0; i < 20; i++) out += chars[Math.floor(Math.random() * chars.length)];
+    return out;
+  };
   const parseISO = s => { const p = String(s || '').split('-'); return new Date(+p[0], (+p[1] || 1) - 1, +p[2] || 1); };
   const monthLabel = iso => {
     const d = parseISO(iso);
@@ -579,6 +585,7 @@
      ------------------------------------------------------------ */
   function add(coll, obj) {
     obj.id = obj.id || uid();
+    if (coll === 'works' && !obj.publicToken) obj.publicToken = publicToken();
     if (coll === 'attendance') return addAttendance(obj);   // anti-duplicados por empleado+fecha
     data[coll].unshift(obj); save(); return obj;
   }
