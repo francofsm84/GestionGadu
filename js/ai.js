@@ -977,12 +977,13 @@
     ];
     const pillsUser = [
       { k: 'new-obra', e: '🏗️', l: 'Nueva obra' },
-      { k: 'new-contacto', e: '👤', l: 'Nuevo compromiso' },
-      { k: 'pago', e: '💸', l: 'Pago / Adelanto' },
-      { k: 'contabilidad', e: '💰', l: 'Ver balances' },
+      { k: 'new-gasto', e: '💸', l: 'Cargar gasto' },
+      { k: 'pago', e: '💳', l: 'Pago / Adelanto' },
+      { k: 'new-presupuesto', e: '📄', l: 'Presupuesto' },
+      { k: 'contabilidad', e: '💰', l: 'Consultar saldo' },
+      { k: 'new-contacto', e: '👤', l: 'Nuevo contacto' },
       { k: 'hoy', e: '👷', l: '¿Quién trabajó hoy?' },
-      { k: 'new-presupuesto', e: '📄', l: 'Nuevo presupuesto' },
-      { k: 'herramientas', e: '🛠️', l: 'Herramientas y Máquinas' },
+      { k: 'herramientas', e: '🛠️', l: 'Herramientas' },
     ];
     const admin = isAdminMode();
     builtMode = admin ? 'admin' : 'usuario';
@@ -1012,7 +1013,7 @@
 
     const bot = bubble(
       saludo + '<br>' +
-      '<div class="ai-actions">' + pills.map(p => '<button class="btn btn-soft btn-sm" data-act="' + p.k + '">' + p.e + ' ' + p.l + '</button>').join('') + waPill + '</div>' +
+      '<div class="ai-grid">' + pills.map(p => '<button class="btn btn-soft btn-sm" data-act="' + p.k + '">' + p.e + ' ' + p.l + '</button>').join('') + waPill + '</div>' +
       waTip,
       'bot');
     appendLog(bot);
@@ -1030,7 +1031,7 @@
     const bot = bubble(
       '¡Hola! 👋 Bienvenido a GADU. Soy tu ayudante de obra.<br>' +
       'Tocá un botón o escribime qué querés cargar, por ejemplo: <b>"Quiero cargar un empleado"</b>.<br>' +
-      '<div class="ai-actions">' + pills.map(p => '<button class="btn btn-soft btn-sm" data-act="' + p.k + '">' + p.e + ' ' + p.l + '</button>').join('') + '</div>',
+      '<div class="ai-grid">' + pills.map(p => '<button class="btn btn-soft btn-sm" data-act="' + p.k + '">' + p.e + ' ' + p.l + '</button>').join('') + '</div>',
       'bot');
     appendLog(bot);
     log.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => firePill(b.dataset.act)));
