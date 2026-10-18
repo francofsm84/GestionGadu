@@ -352,6 +352,34 @@ async function appendSupportMessage(phone: string, text: string): Promise<void> 
   }
 }
 
+/* Número personal del administrador (Franco) que recibe la alerta de nuevos tickets */
+const ADMIN_WHATSAPP = Deno.env.get("ADMIN_WHATSAPP") || "5493547469000";
+
+/* Avisa al administrador por WhatsApp cuando se crea un nuevo ticket de soporte */
+async function notifyAdminNewTicket(phone: string): Promise<void> {
+  try {
+    const token = Deno.env.get("WHATSAPP_TOKEN") || "";
+    const phoneId = Deno.env.get("WHATSAPP_PHONE_ID") || "";
+    const apiVersion = Deno.env.get("WHATSAPP_API_VERSION") || "v21.0";
+    if (!token || !phoneId) return;
+    const body = {
+      messaging_product: "whatsapp",
+      to: ADMIN_WHATSAPP,
+      type: "text",
+      text: { body: "🔔 Nueva solicitud de soporte de " + phone + ". Revisá el panel para responder." },
+    };
+    const res = await fetchWithTimeout(`https://graph.facebook.com/${apiVersion}/${phoneId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) console.warn("[GADU-WA-SUPPORT] no se pudo avisar al admin:", res.status);
+    else console.log("[GADU-WA-SUPPORT] admin notificado por ticket de", phone);
+  } catch (e) {
+    console.warn("[GADU-WA-SUPPORT] error avisando al admin:", e);
+  }
+}
+
 /* Al pedir obra: SELECT obras activas (LIMIT 3) y envía botones */
 async function askForWork(phone: string, userId: string, data: Record<string, any>) {
   const activeWorks = (data.works || []).filter((w: any) => w.status === "activa");
@@ -728,6 +756,7 @@ async function handleButtonReply(from: string, buttonId: string) {
           body: JSON.stringify({ user_id: userId, phone: from, message: "Solicitud de soporte desde WhatsApp", status: "open" }),
         });
       } catch (e) {}
+      fireAndForget(notifyAdminNewTicket(from));   // avisar al admin por WhatsApp
       fireAndForget(sendWhatsApp(from, "✅ Tu pedido fue enviado. Un asesor de GADU te contactará por este medio a la brevedad."));
       await deleteSession(normalizePhone(from));
       return;
@@ -759,6 +788,7 @@ async function handleButtonReply(from: string, buttonId: string) {
     } catch (e) {
       console.error("[GADU-WA-SUPPORT] falló insertar ticket:", e);
     }
+    fireAndForget(notifyAdminNewTicket(from));   // avisar al admin por WhatsApp
     fireAndForget(sendWhatsApp(from, "✅ Tu pedido fue enviado. Un asesor de GADU te contactará por este medio a la brevedad."));
     await deleteSession(normalizePhone(from));
     return;
