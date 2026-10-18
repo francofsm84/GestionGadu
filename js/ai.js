@@ -1007,7 +1007,7 @@
     /* Acceso directo a WhatsApp (solo para usuarios, no para el COO admin).
        Se renderiza DENTRO de la fila deslizable, como un pill destacado. */
     const waPill = admin ? '' :
-      '<a class="ai-wa-pill" href="' + waLink(G.BOT_PHONE_NUMBER || '15556643689', 'Hola GADU, quiero cargar datos por acá') + '" target="_blank" rel="noopener">📲 Usar WhatsApp</a>';
+      '<a class="ai-wa-pill" href="' + waLink(G.BOT_PHONE_NUMBER || '5493547665984', 'Hola GADU, quiero cargar datos por acá') + '" target="_blank" rel="noopener">📲 Usar WhatsApp</a>';
     const waTip = admin ? '' :
       '<div class="ai-tip">💡 Tip: También podés usar nuestro bot de WhatsApp para dictar audios y sacar fotos.</div>';
 

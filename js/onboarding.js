@@ -18,7 +18,7 @@
 
   /* Número de destino del bot de GADU para la vinculación por WhatsApp.
      Centralizado en G.BOT_PHONE_NUMBER (definido en js/app.js). */
-  const BOT_WHATSAPP_NUMBER = G.BOT_PHONE_NUMBER || '15556643689';
+  const BOT_WHATSAPP_NUMBER = G.BOT_PHONE_NUMBER || '5493547665984';
 
   /* Prefijos de país más comunes (Argentina +54 por defecto) */
   const COUNTRY_CODES = [
