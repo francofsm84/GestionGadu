@@ -291,6 +291,7 @@
 
   async function tabLicencias(body) {
     const planes = G.plan.planes || [];
+    const planesPagos = planes.filter(p => ['pyme', 'pro', 'empresa'].includes(p.id));
     let codes = [];
     try { codes = await G.api('GET', '/license_codes?select=*&order=created_at.desc'); } catch (e) {}
 
@@ -299,24 +300,36 @@
       '<div class="card-head"><div><h3>Generar código de licencia</h3><p class="muted">Códigos prepagos de un solo uso para activar planes.</p></div></div>' +
       '<div class="grid-form">' +
       '<div class="field"><label>Plan</label><select class="select" id="lcPlan">' +
-      planes.map(p => '<option value="' + p.id + '">' + p.nombre + '</option>').join('') +
+      planesPagos.map(p => '<option value="' + p.id + '">' + p.nombre + '</option>').join('') +
       '</select></div>' +
-      '<div class="field"><label>Días de duración</label><input class="input" type="number" id="lcDays" value="90" min="1"></div>' +
+      '<div class="field"><label>Días de duración</label><input class="input" type="number" id="lcDays" value="90" min="1" readonly></div>' +
       '<div class="field"><label>&nbsp;</label><button class="btn btn-primary" id="lcGen">' + UI.icon('plus', 16) + 'Generar Código</button></div>' +
       '</div></div>' +
       '<div class="card"><div class="card-head"><div><h3>Códigos generados</h3><p class="muted">' + codes.length + ' códigos</p></div></div>' +
       '<div class="table-wrap"><table class="data-table">' +
-      '<thead><tr><th>Código</th><th>Plan</th><th>Días</th><th>Estado</th><th>Usado por</th><th>Fecha de uso</th></tr></thead>' +
-      '<tbody>' + (codes.map(c =>
-        '<tr>' +
+      '<thead><tr><th>Código</th><th>Plan</th><th>Días</th><th>Estado</th><th>Usado por</th><th>Fecha de uso</th><th></th></tr></thead>' +
+      '<tbody>' + (codes.map(c => {
+        const planName = (planes.find(p => p.id === c.plan_id) || {}).nombre || c.plan_id;
+        const msg = '¡Hola! Acá tenés tu código de acceso para GADU. Plan ' + planName + ' por ' + c.duration_days + ' días. Tu código es: ' + c.code + '. Ingresalo en https://gestiongadu.vercel.app/#/planes para activarlo.';
+        const waLink = 'https://wa.me/?text=' + encodeURIComponent(msg);
+        return '<tr>' +
         '<td><code>' + UI.escapeHtml(c.code) + '</code></td>' +
-        '<td>' + UI.escapeHtml((planes.find(p => p.id === c.plan_id) || {}).nombre || c.plan_id) + '</td>' +
+        '<td>' + UI.escapeHtml(planName) + '</td>' +
         '<td>' + c.duration_days + '</td>' +
         '<td>' + (c.is_used ? UI.chip('Usado', 'danger') : UI.chip('Disponible', 'success')) + '</td>' +
         '<td class="muted small">' + (c.used_by_user_id ? UI.escapeHtml(String(c.used_by_user_id).slice(0, 8)) + '…' : '—') + '</td>' +
         '<td class="muted small">' + (c.used_at ? UI.fmtDate(c.used_at) : '—') + '</td>' +
-        '</tr>').join('') || '<tr><td colspan="6">' + UI.emptyState('inbox', 'Sin códigos', 'Generá el primero desde el formulario de arriba.') + '</td></tr>') +
+        '<td>' + (!c.is_used ? '<a class="btn btn-soft-success btn-sm" href="' + waLink + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 14) + ' Enviar</a>' : '') + '</td>' +
+        '</tr>';
+      }).join('') || '<tr><td colspan="7">' + UI.emptyState('inbox', 'Sin códigos', 'Generá el primero desde el formulario de arriba.') + '</td></tr>') +
       '</tbody></table></div></div>';
+
+    /* Autocompletar días (90) según el plan elegido */
+    const lcPlan = body.querySelector('#lcPlan');
+    const lcDays = body.querySelector('#lcDays');
+    const autoDays = () => { lcDays.value = '90'; };
+    lcPlan.addEventListener('change', autoDays);
+    autoDays();
 
     body.querySelector('#lcGen').addEventListener('click', async () => {
       const plan_id = body.querySelector('#lcPlan').value;
