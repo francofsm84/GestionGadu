@@ -218,19 +218,22 @@
     try {
       const S = G.store;
       if (!S) return;
-      /* 1) Admin → nunca interrumpir */
-      if (G.plan && G.plan.isAdmin && G.plan.isAdmin()) return;
+      const forceDone = () => {
+        if (S.data && S.data.settings) S.data.settings.onboardingDone = true;
+        try { S.save(); } catch (e) {}
+      };
+      /* 1) Admin → forzar bandera y nunca interrumpir */
+      if (G.plan && G.plan.isAdmin && G.plan.isAdmin()) { forceDone(); return; }
       /* 2) Bandera completada (memoria + localStorage, síncrono) */
       if (S.hasOnboarded && S.hasOnboarded()) return;
       if (!S.data || !S.data.settings) return;
-      /* 3) Si el WhatsApp ya está vinculado, marcar como completado y NO volver */
+      /* 3) Perfil válido / WhatsApp vinculado / datos existentes → forzar true */
       const wa = S.data.settings.profile && S.data.settings.profile.whatsapp;
-      if (wa && wa.linked) {
-        S.data.settings.onboardingDone = true;
-        try { S.save(); } catch (e) {}
+      const prof = S.data.settings.profile || {};
+      if ((wa && wa.linked) || prof.nombre || prof.apellido || prof.apodo || (S.hasLocalData && S.hasLocalData())) {
+        forceDone();
         return;
       }
-      if (S.hasLocalData && S.hasLocalData()) return;   // jamás interrumpir a quien ya tiene datos
       open();
     } catch (e) { /* nunca bloquear el dashboard */ }
   }
