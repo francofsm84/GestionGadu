@@ -30,6 +30,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
 import {
   matchVerificationCode,
+  matchLicenseCode,
   normalizePhone,
   phoneMatches,
   buildContext,
@@ -756,6 +757,32 @@ async function processMessage(body: unknown) {
     if (!supabaseUrl() || !serviceKey()) {
       console.error("[whatsapp-webhook] falta SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
       return;
+    }
+
+    /* 0) Código de licencia "GADU-XXXXXX": validar contra license_codes y
+       guiar al usuario a canjearlo en la app (NO lo activa acá). */
+    const licenseCode = matchLicenseCode(inc.text);
+    if (licenseCode) {
+      console.log("[whatsapp-webhook] código de licencia detectado:", licenseCode);
+      const q = "code=eq." + encodeURIComponent(licenseCode) + "&select=id,code,plan_id,duration_days,is_used";
+      const r = await rest("license_codes?" + q + "&limit=1");
+      const rows = await r.json().catch(() => []);
+      if (!r.ok || !Array.isArray(rows) || !rows.length) {
+        console.warn("[whatsapp-webhook] licencia no encontrada:", licenseCode);
+        fireAndForget(sendWhatsApp(inc.from, "🤖 El código " + licenseCode + " no existe. Verificalo o pedilo de nuevo."));
+        return json({ ok: false, error: "licencia no encontrada" });
+      }
+      const lic = rows[0];
+      if (lic.is_used) {
+        console.warn("[whatsapp-webhook] licencia ya usada:", licenseCode);
+        fireAndForget(sendWhatsApp(inc.from, "🤖 El código " + licenseCode + " ya fue utilizado."));
+        return json({ ok: false, error: "licencia ya usada" });
+      }
+      console.log("[whatsapp-webhook] licencia válida:", licenseCode, "· plan:", lic.plan_id, "·", lic.duration_days, "días");
+      const reply = "✅ El código " + licenseCode + " es válido (plan " + String(lic.plan_id).toUpperCase() + " por " + lic.duration_days + " días).\n" +
+        "Para activarlo, abrí la app: *Planes y Suscripción → Canjear código*.";
+      fireAndForget(sendWhatsApp(inc.from, reply));
+      return json({ ok: true, from: inc.from, reply });
     }
 
     /* 1) Vinculación: código alfanumérico (mayúsculas, sin espacios).

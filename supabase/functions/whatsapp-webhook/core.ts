@@ -77,6 +77,17 @@ export function matchVerificationCode(text: string): string | null {
   return m ? m[1].toUpperCase() : null;
 }
 
+/* Detecta un código de licencia con formato "GADU-XXXXXX" (6 alfanuméricos).
+   Tolera mayúsculas/minúsculas, espacios y guiones. Devuelve SIEMPRE en MAYÚSCULAS. */
+export function matchLicenseCode(text: string): string | null {
+  const flatText = String(text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const m = flatText.match(/\bgadu[- ]?([a-z0-9]{6})\b/i);
+  return m ? "GADU-" + m[1].toUpperCase() : null;
+}
+
 export function normalizePhone(p: unknown): string {
   let d = rawDigits(p);
   /* Argentina (54): canonicaliza al formato SIN el "9" de móvil.
