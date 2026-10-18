@@ -900,7 +900,7 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
     }
 
-    /* Presupuesto PDF (CREATE_BUDGET): generar + subir + enviar documento */
+    /* Presupuesto PDF (CREATE_BUDGET): guardar en data.budgets + generar + enviar documento */
     if (action && action.modulo === "presupuesto_pdf") {
       const c = (action.campos || {}) as Record<string, unknown>;
       const cliente = String(c.cliente || "Cliente");
@@ -912,10 +912,42 @@ async function processMessage(body: unknown) {
         return json({ ok: true, from: inc.from, reply: "" });
       }
       try {
+        const hoy = new Date().toISOString().slice(0, 10);
+        const subtotal = items.reduce((s, i) => s + (i.cantidad * i.precio), 0);
+        const discount = Number(c.discount || c.descuento || 0);
+        const tax = Number(c.tax || c.iva || 0);
+        const total = Math.max(0, subtotal - discount + tax);
+
+        /* Resolver clientId (buscar en el directorio por nombre) */
+        let clientId: string | null = null;
+        const cli = (data.contacts || []).find((x: any) => String(x.name || "").toLowerCase().includes(cliente.toLowerCase()));
+        if (cli) clientId = String(cli.id || "");
+
+        const year = new Date().getFullYear();
+        const code = "PR-" + year + "-" + String((data.budgets || []).length + 1).padStart(3, "0");
+        const budget = {
+          id: crypto.randomUUID(), code, clientId, workId: null,
+          name: "Presupuesto " + cliente, date: hoy, validUntil: "",
+          status: "borrador",
+          items: items.map(i => ({ desc: i.descripcion, unit: "", qty: i.cantidad, price: i.precio })),
+          discount, subtotal, total, tax, notes: "",
+        };
+        (data.budgets || (data.budgets = [])).unshift(budget);
+
+        /* Sincronizar con la nube (Realtime lo ve aparecer al instante) */
+        const up = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+        });
+        if (!up.ok) console.error("[GADU-WA-BUDGET] falló PATCH app_data:", up.status);
+
         const pdf = await generateBudgetPDF({ cliente, items });
         const filename = "Presupuesto_" + String(cliente || "gadu").replace(/[^a-z0-9áéíóúñ ]/gi, "").replace(/\s+/g, "_") + ".pdf";
         const ok = await sendWhatsAppDocument(inc.from, pdf, filename);
-        const reply = ok ? "✅ Acá tenés el presupuesto para " + cliente + "." : "❌ No pude enviar el PDF. Probá de nuevo.";
+        const reply = ok
+          ? "✅ Presupuesto para " + cliente + " guardado y adjuntado. Podés verlo en la sección 'Presupuestos' de la app."
+          : "✅ Presupuesto para " + cliente + " guardado. (No pude adjuntar el PDF, probá de nuevo.)";
         fireAndForget(sendWhatsApp(inc.from, reply));
         return json({ ok: true, from: inc.from, reply });
       } catch (e) {

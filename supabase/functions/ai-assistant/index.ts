@@ -77,6 +77,7 @@ TOLERANCIA Y ADELANTOS (crítico):
 PRESUPUESTO PDF (CREATE_BUDGET):
 - Si el usuario pide un PRESUPUESTO para un cliente (ej. "Presupuesto para Juan Perez: 20m2 de cerámica, 3 bolsas de pegamento"), llamá "abrir_formulario" con modulo="presupuesto_pdf" y campos={"cliente": "<nombre del cliente>", "items": [{"descripcion":"...","cantidad":<n>,"precio":<n>}, ...]}.
 - "items" = array de ítems. Cada ítem con "descripcion" (texto), "cantidad" (número) y "precio" (precio unitario; si el usuario NO lo dice, poné 0).
+- Si el usuario menciona "IVA" o "descuento", agregá los campos "tax" (monto del IVA) y "discount" (monto del descuento) al objeto "campos".
 - Si falta el nombre del cliente o no hay ítems, preguntá en lugar de llamar la herramienta.
 
 - Si el CONTEXTO muestra UNA sola obra activa y el usuario pide cargar un gasto/ingreso/adelanto SIN especificar obra, NO preguntes: llamá "abrir_formulario" con el campo "obra" vacío (la app la asigna sola automáticamente).
@@ -146,6 +147,8 @@ function tools() {
                   },
                 },
               },
+              tax: { type: "NUMBER", description: "Monto de IVA (solo si se menciona)" },
+              discount: { type: "NUMBER", description: "Monto de descuento (solo si se menciona)" },
             },
           },
         },
@@ -197,6 +200,8 @@ function toolsOpenAI() {
                   },
                 },
               },
+              tax: { type: "number", description: "Monto de IVA (solo si se menciona)" },
+              discount: { type: "number", description: "Monto de descuento (solo si se menciona)" },
             },
           },
         },
