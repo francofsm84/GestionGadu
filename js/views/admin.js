@@ -264,20 +264,31 @@
     let tickets = [];
     try { tickets = await G.api('GET', '/support_tickets?select=*&order=created_at.desc'); } catch (e) {}
 
-    /* Datos del usuario asociado (nombre + foto) para mostrar en la tarjeta */
+    /* Datos del usuario asociado (nombre + foto) para mostrar en la tarjeta.
+       La foto se prioriza desde app_data.settings.profile.photo (nube). */
     const profMap = {};
     try {
       const uids = [...new Set(tickets.map(t => t.user_id).filter(Boolean))];
       if (uids.length) {
         const profs = await G.api('GET', '/profiles?select=user_id,nombre,apellido,email,empresa_constructora,empresa,avatar_url,photo,foto&user_id=in.(' + uids.join(',') + ')');
         (profs || []).forEach(p => { profMap[p.user_id] = p; });
+        const appRows = await G.api('GET', '/app_data?select=user_id,data&user_id=in.(' + uids.join(',') + ')');
+        (appRows || []).forEach(r => {
+          const d = r.data || {};
+          const photoCloud = d.settings && d.settings.profile && d.settings.profile.photo;
+          if (photoCloud) {
+            const cur = profMap[r.user_id] || {};
+            cur._appPhoto = photoCloud;
+            profMap[r.user_id] = cur;
+          }
+        });
       }
     } catch (e) {}
     const profOf = t => {
       const p = t.user_id ? profMap[t.user_id] : null;
       if (!p) return { name: '', photo: null };
       const name = String((p.nombre || '') + ' ' + (p.apellido || '')).trim() || p.empresa_constructora || p.empresa || '';
-      return { name, photo: p.avatar_url || p.photo || p.foto || null };
+      return { name, photo: p._appPhoto || p.avatar_url || p.photo || p.foto || null };
     };
 
     const filter = soporteFilter || (soporteFilter = { tab: 'open', q: '' });
