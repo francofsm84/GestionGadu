@@ -105,6 +105,23 @@
     return count >= limit;
   }
 
+  /* Límites de referencia por plan (fallback documentado; el valor real lo manda
+     la columna `limite_*` de la tabla `planes`). */
+  const LIMITS = {
+    free: { obras: 1, empleados: 2 },
+    pyme: { obras: 5, empleados: 10 },
+    pro: { obras: Infinity, empleados: Infinity },
+    empresa: { obras: Infinity, empleados: Infinity },
+    trial: { obras: Infinity, empleados: Infinity },
+  };
+
+  /* Verificación PURA (sin side effects): ¿puede crear este tipo?
+     Acepta 'works'/'employees' (colecciones) o 'obras'/'empleados'. */
+  function canCreate(type) {
+    const kind = type === 'works' ? 'obras' : (type === 'employees' ? 'empleados' : type);
+    return !wouldExceed(kind);
+  }
+
   /* Devuelve true si puede crear; false si alcanzó el límite (y muestra aviso + modal) */
   function checkLimit(kind) {
     if (!wouldExceed(kind)) return true;
@@ -181,7 +198,7 @@
 
   G.api = api;
   G.plan = {
-    ROLES, load, isAdmin, currentPlan, worksActive, employeesCount, limitFor, wouldExceed, checkLimit, log, trialDaysLeft, needsOnboarding, isLocked,
+    ROLES, load, isAdmin, currentPlan, worksActive, employeesCount, limitFor, wouldExceed, canCreate, checkLimit, LIMITS, log, trialDaysLeft, needsOnboarding, isLocked,
     validarCodigo, canjearCodigo, diasRestantes, fechaVencimiento,
     get profile() { return profile; },
     get planes() { return planes; },
