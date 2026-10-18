@@ -31,6 +31,57 @@
     return '<div class="split-row"><span class="muted">' + label + '</span><b class="' + (cls || '') + (xl ? ' xl' : '') + '">' + value + '</b></div>';
   }
 
+  /* Compresión de imagen en cliente (canvas) */
+  function compressImage(file, maxDim, quality) {
+    maxDim = maxDim || 1200; quality = quality || 0.8;
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(b => (b ? resolve(b) : reject(new Error('No se pudo comprimir'))), 'image/jpeg', quality);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Imagen inválida')); };
+      img.src = url;
+    });
+  }
+
+  /* Sube una foto de obra a Supabase Storage y devuelve la URL pública */
+  async function uploadWorkPhoto(file, workId) {
+    const sess = G.auth && G.auth.getSession ? G.auth.getSession() : null;
+    const uid = (sess && sess.userId) || 'anon';
+    const blob = await compressImage(file);
+    const path = uid + '/works/' + workId + '/' + Date.now() + '.jpg';
+    const res = await fetch(G.auth.SUPABASE_URL + '/storage/v1/object/gadu_tickets/' + path, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + ((sess && sess.accessToken) || ''),
+        'apikey': G.auth.SUPABASE_ANON_KEY,
+        'Content-Type': 'image/jpeg',
+        'x-upsert': 'false',
+      },
+      body: blob,
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return G.auth.SUPABASE_URL + '/storage/v1/object/public/gadu_tickets/' + path;
+  }
+
+  function openFotoModal(url) {
+    const m = UI.openModal({
+      title: 'Foto de avance',
+      size: 'wide',
+      body: '<div style="text-align:center"><img src="' + UI.escapeHtml(url) + '" style="max-width:100%;max-height:70vh;border-radius:10px" alt="Foto"></div>',
+      footer: '<button class="btn btn-ghost" data-cancel>Cerrar</button>',
+    });
+    m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+  }
+
   /* Comparte la obra con el cliente mediante un enlace público (token) */
   function shareWithClient(w) {
     if (!w.publicToken) {
@@ -197,6 +248,18 @@
       '</section>' +
 
       '<section class="card">' +
+      '<div class="card-head"><h3>Galería de Avance</h3></div>' +
+      '<input type="file" id="fotosInput" accept="image/*" multiple hidden>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">' +
+      '<button class="btn btn-soft" id="btnFotos">' + UI.icon('camera', 15) + ' Subir Fotos</button>' +
+      '</div>' +
+      '<div id="fotosGrid" class="portal-photos">' +
+      (w.photos && w.photos.length
+        ? w.photos.map(p => '<img src="' + UI.escapeHtml(p) + '" alt="Foto de avance" style="cursor:pointer" data-foto="' + UI.escapeHtml(p) + '">').join('')
+        : '<p class="form-hint">Sin fotos de avance todavía.</p>') +
+      '</div></section>' +
+
+      '<section class="card">' +
       '<div class="tabs">' +
       '<button class="tab ' + (state.tab === 'ingresos' ? 'active' : '') + '" data-tab="ingresos">Ingresos (' + incomes.length + ')</button>' +
       '<button class="tab ' + (state.tab === 'gastos' ? 'active' : '') + '" data-tab="gastos">Gastos directos (' + costs.length + ')</button>' +
@@ -224,6 +287,35 @@
     view.querySelector('#btnEdit').addEventListener('click', () => G.actions.work(w));
     view.querySelector('#btnPdf').addEventListener('click', () => exportPDF(ctx));
     view.querySelector('#btnShare').addEventListener('click', () => shareWithClient(w));
+
+    /* Galería de fotos de avance */
+    const fotosInput = view.querySelector('#fotosInput');
+    const btnFotos = view.querySelector('#btnFotos');
+    if (btnFotos && fotosInput) {
+      btnFotos.addEventListener('click', () => fotosInput.click());
+      fotosInput.addEventListener('change', async () => {
+        const files = Array.from(fotosInput.files || []);
+        if (!files.length) return;
+        const original = btnFotos.textContent;
+        btnFotos.disabled = true;
+        const photos = Array.isArray(w.photos) ? w.photos.slice() : [];
+        try {
+          for (const f of files) {
+            btnFotos.textContent = 'Subiendo…';
+            const url = await uploadWorkPhoto(f, w.id);
+            photos.push(url);
+          }
+          S.update('works', w.id, { photos });
+          UI.toast('✅ ' + files.length + ' foto' + (files.length !== 1 ? 's' : '') + ' subida' + (files.length !== 1 ? 's' : ''));
+          render(view, { id: w.id });
+        } catch (e) {
+          UI.toast('❌ No se pudo subir: ' + ((e && e.message) || e), 'error');
+          btnFotos.disabled = false;
+          btnFotos.textContent = original;
+        }
+      });
+    }
+    view.querySelectorAll('[data-foto]').forEach(img => img.addEventListener('click', () => openFotoModal(img.dataset.foto)));
     view.querySelector('#btnDel').addEventListener('click', async () => {
       const ok = await UI.confirm({
         title: 'Eliminar obra',

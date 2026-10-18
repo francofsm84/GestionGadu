@@ -990,5 +990,6 @@ body.no-session .app { display: none; }
 .portal-bar-fill--info { background: linear-gradient(90deg, #2563eb, #3b82f6); }
 .portal-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin: 20px 0; }
 .portal-photos img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 12px; }
+.portal-no-photos { text-align: center; color: #94a3b8; font-size: 13px; padding: 14px 0; }
 .portal-foot { text-align: center; color: #94a3b8; font-size: 12px; margin: 20px 0 0; }
 .portal-empty { text-align: center; color: #64748b; padding: 40px; font-size: 15px; }

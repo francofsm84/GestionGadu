@@ -42,7 +42,9 @@
           '<div class="portal-bar-label"><span>Avance de Cobro</span><b>' + billing + '%</b></div>' +
           '<div class="portal-bar"><div class="portal-bar-fill portal-bar-fill--info" style="width:' + billing + '%"></div></div>' +
         '</div>' +
-        (photos.length ? '<div class="portal-photos">' + photos.map(p => '<img src="' + UI.escapeHtml(p) + '" alt="Foto de la obra">').join('') + '</div>' : '') +
+        (photos.length
+          ? '<div class="portal-photos">' + photos.map(p => '<img src="' + UI.escapeHtml(p) + '" alt="Foto de la obra">').join('') + '</div>'
+          : '<p class="portal-no-photos">El contratista aún no ha subido fotos de avance.</p>') +
         '<p class="portal-foot">Datos actualizados automáticamente · Generado por GADU</p>' +
       '</div></div>';
   }
