@@ -92,7 +92,11 @@
         '<button type="button" class="btn btn-soft btn-sm" id="obGen" style="flex:none">' + UI.icon('zap', 14) + 'Generar código</button>' +
         '</div></div>' +
         '</div>' +
-        '<a class="btn btn-soft-success btn-sm" id="obWaLink" target="_blank" rel="noopener" style="margin-top:10px;display:none">' + UI.icon('whatsapp', 15) + 'Abrir WhatsApp y vincular</a>' +
+        '<div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+          '<a class="btn btn-soft-success btn-sm" id="obWaLink" target="_blank" rel="noopener" style="display:none">' + UI.icon('whatsapp', 15) + 'Abrir WhatsApp y vincular</a>' +
+          '<button type="button" class="btn btn-soft btn-sm" id="obCopy">' + UI.icon('copy', 15) + 'Copiar código</button>' +
+        '</div>' +
+        '<p class="muted small" style="margin-top:8px">Si tenés más de un WhatsApp, usá "Copiar código" y pegalo en el chat del bot desde la app que prefieras.</p>' +
         '</div>',
       footer:
         '<button class="btn btn-ghost" data-cancel id="obSkip">Saltar por ahora</button>' +
@@ -148,6 +152,36 @@
     m.panel.querySelector('#obPrefix').addEventListener('change', e => { prefix = e.target.value; syncPhone(); });
     m.panel.querySelector('#obPhone').addEventListener('input', e => { local = e.target.value; syncPhone(); });
     updateLink();
+
+    /* Copiar el código al portapapeles (con fallback para navegadores viejos) */
+    const copyFallback = (text) => {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, text.length);
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        UI.toast('Mensaje copiado al portapapeles');
+      } catch (e) {
+        try { UI.toast('No se pudo copiar. Copiá el código a mano.', 'error'); } catch (e2) {}
+      }
+    };
+    m.panel.querySelector('#obCopy').addEventListener('click', () => {
+      const text = 'GADU · Vincular WhatsApp · Código: ' + code;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(
+          () => UI.toast('Mensaje copiado al portapapeles'),
+          () => copyFallback(text),
+        );
+      } else {
+        copyFallback(text);
+      }
+    });
 
     m.panel.querySelector('[data-cancel]').addEventListener('click', () => {
       try {
