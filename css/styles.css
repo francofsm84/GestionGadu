@@ -940,9 +940,9 @@ body.no-session .app { display: none; }
 /* Chips de opciones del chat: táctiles, sin doble-tap ni resaltado fantasma */
 .ai-actions .btn { flex: 0 0 auto; white-space: nowrap; touch-action: manipulation; -webkit-tap-highlight-color: transparent; min-height: 34px; max-height: 40px; }
 /* Rejilla responsive de acciones rápidas del saludo (Asistente GADU) */
-.ai-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; margin-top: 8px; }
-.ai-grid .btn { min-height: 38px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ai-grid .ai-wa-pill { justify-self: start; }
+.ai-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px; margin-top: 8px; }
+.ai-grid .btn { height: auto; min-height: 44px; white-space: normal; word-break: break-word; line-height: 1.2; text-align: center; padding: 9px 10px; }
+.ai-grid .ai-wa-pill { justify-self: start; height: auto; white-space: normal; }
 .ai-tip { font-size: 12px; color: var(--muted); margin-top: 8px; }
 .ai-wa-pill { flex: 0 0 auto; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; background: #25d366; color: #fff !important; border-radius: 999px; font-weight: 700; font-size: 12.5px; text-decoration: none; }
 /* Tarjeta de éxito con tilde verde (confirmación de carga completada) */
