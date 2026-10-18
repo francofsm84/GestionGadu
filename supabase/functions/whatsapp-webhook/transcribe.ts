@@ -62,7 +62,13 @@ async function downloadMedia(url: string): Promise<{ buffer: ArrayBuffer; mimeTy
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    let res = await fetch(url, { signal: controller.signal });
+    /* Si la URL no viene firmada (401/403), reintentar con el token de WhatsApp */
+    if (res.status === 401 || res.status === 403) {
+      const token = Deno.env.get("WHATSAPP_TOKEN") || "";
+      console.warn("[GADU-WA-MEDIA] descarga 401/403 → reintentando con Authorization");
+      res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: controller.signal });
+    }
     if (!res.ok) {
       console.error("[GADU-WA-AUDIO] downloadMedia HTTP", res.status, url.slice(0, 120));
       throw new Error("downloadMedia HTTP " + res.status);
@@ -141,7 +147,10 @@ async function groqTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<st
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
     const form = new FormData();
-    form.append("file", new Blob([buffer], { type: norm }), "audio.ogg");
+    /* Extensión derivada del MIME real (mp4/m4a/wav/ogg) para que Groq
+       infiera el formato correcto. WhatsApp manda opus en ogg o AAC en mp4. */
+    const ext = norm.includes("mp4") ? "mp4" : (norm.includes("m4a") ? "m4a" : (norm.includes("wav") ? "wav" : "ogg"));
+    form.append("file", new Blob([buffer], { type: norm }), "audio." + ext);
     form.append("model", "whisper-large-v3-turbo");
     const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
       method: "POST",
@@ -286,6 +295,11 @@ async function groqAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption: 
   }
   const norm = normalizeImageMime(mimeType);
   console.log("[GADU-WA-GROQ] analizar imagen:", buffer.byteLength, "bytes · mime:", norm, "· model: meta-llama/llama-4-scout-17b-16e-instruct");
+  /* Groq: las imágenes mayores a ~20MB se rechazan con 400 → cortamos antes */
+  if (buffer.byteLength > 20 * 1024 * 1024) {
+    console.warn("[GADU-WA-GROQ] imagen excede 20MB:", buffer.byteLength, "bytes → no se envía a Groq");
+    return "";
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
