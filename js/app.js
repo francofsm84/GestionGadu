@@ -791,7 +791,7 @@
 
   /* ---------- Mejora de plan (límite alcanzado) ---------- */
   function openUpgrade() {
-    const planes = G.plan.planes || [];
+    const planes = (G.plan.planes || []).filter(p => p.id !== 'free_basico');
     const m = UI.openModal({
       title: 'Límite de tu plan alcanzado',
       subtitle: 'Tu plan actual no permite seguir agregando. Mejorá a Pro o Empresa para continuar.',
@@ -801,7 +801,7 @@
           '<div class="split-row">' +
           '<div class="split-row-main"><strong>' + UI.escapeHtml(p.nombre) + '</strong>' +
           '<span class="muted small">' + (p.limite_obras_activas >= 999 ? 'Obras ilimitadas' : p.limite_obras_activas + ' obras activas') + ' · ' + (p.limite_empleados >= 999 ? 'empleados ilimitados' : p.limite_empleados + ' empleados') + '</span></div>' +
-          '<div class="split-row-end"><b>' + (Number(p.precio_mensual) > 0 ? UI.fmtMoney(Number(p.precio_mensual)) + '/mes' : 'Gratis') + '</b></div>' +
+          '<div class="split-row-end"><b>' + (Number(p.precio_mensual) > 0 ? UI.fmtMoney(Number(p.precio_mensual)) + '/90 días' : 'Gratis') + '</b></div>' +
           '</div>').join('') || '<p class="form-hint">No hay planes disponibles.</p>') +
         '</div>',
       footer: '<button class="btn btn-ghost" data-cancel>Ahora no</button><a class="btn btn-soft" href="#/planes">Ver planes</a><a class="btn btn-primary" href="https://wa.me/5493547469000?text=' + encodeURIComponent('Hola! Quiero mejorar mi plan de GADU.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 15) + 'Mejorar por WhatsApp</a>',
@@ -816,7 +816,8 @@
     const prof = G.plan.profile || {};
     const st = prof.subscription_status || 'trialing';
     const days = G.plan.trialDaysLeft();
-    const planes = G.plan.planes || [];
+    const planes = (G.plan.planes || []).filter(p => p.id !== 'free_basico');
+    const TITLES = { free: 'Trial (45 días)', pyme: 'PYME (90 días)', pro: 'PRO (90 días)', empresa: 'Empresa (90 días)' };
     const stLabel = st === 'active' ? 'Activo' : (st === 'trialing' ? 'En prueba' : (st === 'expired' ? 'Vencida' : st));
     const stTone = st === 'active' ? 'success' : (st === 'trialing' ? 'info' : 'danger');
     const m = UI.openModal({
@@ -835,8 +836,8 @@
         '<div class="plans-grid">' +
         planes.map(pl =>
           '<div class="card plan-card' + (pl.id === p.id ? ' plan-card-actual' : '') + '">' +
-          '<strong>' + UI.escapeHtml(pl.nombre) + '</strong>' +
-          '<div class="plan-price">' + (Number(pl.precio_mensual) > 0 ? '$' + UI.fmtNum(Number(pl.precio_mensual)) + '<span class="muted small">/mes</span>' : 'Gratis') + '</div>' +
+          '<strong>' + UI.escapeHtml(TITLES[pl.id] || pl.nombre) + '</strong>' +
+          '<div class="plan-price">' + (Number(pl.precio_mensual) > 0 ? '$' + UI.fmtNum(Number(pl.precio_mensual)) + '<span class="muted small">/90 días</span>' : 'Gratis') + '</div>' +
           '<ul class="plan-feats">' +
           '<li>' + (pl.limite_obras_activas >= 999 ? 'Obras ilimitadas' : pl.limite_obras_activas + ' obras activas') + '</li>' +
           '<li>' + (pl.limite_empleados >= 999 ? 'Empleados ilimitados' : pl.limite_empleados + ' empleados') + '</li>' +
