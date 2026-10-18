@@ -119,6 +119,41 @@ npx supabase functions deploy ai-assistant --project-ref kalqvykomlfwxmsdaipf --
 
 ---
 
+## 🖼️ Actualizar la foto de perfil de WhatsApp
+
+Script local (Node) que sube una imagen vía **Resumable Upload API** de Meta y la aplica al perfil con `profile_picture_handle`.
+
+### Parámetros (variables de entorno)
+
+| Variable | Valor | Nota |
+|---|---|---|
+| `WHATSAPP_TOKEN` | `EAA…` | Token permanente (System User) |
+| `META_APP_ID` | `2128399724733078` | App ID de Meta |
+| `WHATSAPP_PHONE_ID` | `1473438079178247` | Phone Number ID del número **real** (+5493547665984) |
+| `IMAGE_URL` | `logo wpp gadu.png` | Ruta local de la imagen (fondo azul, 1000×1000) |
+
+### Comando (PowerShell)
+
+```powershell
+$env:WHATSAPP_TOKEN = "EAA..."
+$env:WHATSAPP_PHONE_ID = "1473438079178247"
+$env:META_APP_ID = "2128399724733078"
+$env:IMAGE_URL = "logo wpp gadu.png"   # ruta local por defecto
+node scripts/run-profile-update.mjs
+```
+
+> `IMAGE_URL` acepta una **URL pública** (`https://…`) o una **ruta local**. Por defecto apunta al activo `logo wpp gadu.png` (fondo azul). Para otro número, cambiá `WHATSAPP_PHONE_ID` (el Phone Number ID de 15 dígitos, no el número de teléfono).
+
+### Verificar
+
+```powershell
+Invoke-RestMethod -Uri "https://graph.facebook.com/v21.0/1473438079178247/whatsapp_business_profile?fields=profile_picture_url" -Headers @{ Authorization = "Bearer $env:WHATSAPP_TOKEN" }
+```
+
+Debería devolver un `profile_picture_url` apuntando a `pps.whatsapp.net`.
+
+---
+
 ## 🧰 Troubleshooting (Solución de problemas)
 
 ### 1. "El bot no responde por WhatsApp"
