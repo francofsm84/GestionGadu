@@ -318,18 +318,37 @@ async function deleteSession(phone: string) {
   await rest("whatsapp_sessions?phone_number=eq." + encodeURIComponent(phone), { method: "DELETE" });
 }
 
-/* ¿El usuario tiene un ticket de soporte ABIERTO? Mientras esté abierto,
-   el bot NO responde automáticamente (solo un humano lo atiende). */
-async function hasOpenSupport(phone: string): Promise<boolean> {
+/* ¿El usuario tiene un ticket de soporte ABIERTO? Devuelve el ticket (id + messages)
+   o null. Mientras esté abierto, el bot NO responde automáticamente. */
+async function getOpenSupportTicket(phone: string): Promise<{ id: number; messages: Array<{ role: string; text: string; at: string }> } | null> {
   try {
     const r = await rest(
-      "support_tickets?phone=eq." + encodeURIComponent(normalizePhone(phone)) + "&status=eq.open&limit=1",
+      "support_tickets?phone=eq." + encodeURIComponent(normalizePhone(phone)) + "&status=eq.open&select=id,messages&limit=1",
       { method: "GET" },
     );
-    const rows = (await r.json().catch(() => [])) as Array<{ id: unknown }>;
-    return Array.isArray(rows) && rows.length > 0;
+    const rows = (await r.json().catch(() => [])) as Array<{ id: number; messages?: unknown }>;
+    if (!Array.isArray(rows) || !rows.length) return null;
+    const messages = Array.isArray(rows[0].messages) ? rows[0].messages : [];
+    return { id: rows[0].id, messages };
   } catch (e) {
-    return false;
+    return null;
+  }
+}
+
+/* Registra un mensaje del usuario en el historial del ticket (para que el
+   admin lo vea en el chat). No responde: el bot queda en silencio. */
+async function appendSupportMessage(phone: string, text: string): Promise<void> {
+  try {
+    const ticket = await getOpenSupportTicket(phone);
+    if (!ticket) return;
+    const messages = ticket.messages.concat([{ role: "user", text, at: new Date().toISOString() }]);
+    await rest("support_tickets?id=eq." + ticket.id, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ messages }),
+    });
+  } catch (e) {
+    console.warn("[GADU-WA-SUPPORT] error registrando mensaje:", e);
   }
 }
 
@@ -666,7 +685,7 @@ async function handleButtonReply(from: string, buttonId: string) {
      los de "hablar con humano" (que re-confirman el ticket). */
   if (buttonId !== "action_humano" && buttonId !== "fallback_humano") {
     try {
-      if (await hasOpenSupport(from)) {
+      if (await getOpenSupportTicket(from)) {
         console.log("[GADU-WA-SUPPORT] ticket abierto, ignorando botón:", buttonId);
         return;
       }
@@ -836,8 +855,10 @@ async function processMessage(body: unknown) {
        teléfono, ignorar los mensajes entrantes. El bot no responde (ni menú ni
        fallback) hasta que el admin cierre el ticket en el panel. */
     try {
-      if (await hasOpenSupport(inc.from)) {
-        console.log("[GADU-WA-SUPPORT] ticket abierto para", inc.from, "→ ignorando mensaje");
+      const openTicket = await getOpenSupportTicket(inc.from);
+      if (openTicket) {
+        console.log("[GADU-WA-SUPPORT] ticket abierto para", inc.from, "→ registrando mensaje y sin responder");
+        await appendSupportMessage(inc.from, inc.text);
         return json({ ok: true, from: inc.from, ignored: true });
       }
     } catch (e) {

@@ -204,7 +204,7 @@
         '<div class="split-row"><div class="split-row-main"><strong>' + UI.escapeHtml(t.phone || '—') + '</strong>' +
         '<span class="muted small">' + (t.created_at ? UI.fmtDate(t.created_at) : '—') + '</span></div>' +
         '<div class="split-row-end">' +
-        '<button class="btn btn-soft btn-sm" data-reply="' + UI.escapeHtml(t.phone || '') + '" data-msg="' + UI.escapeHtml(t.message || '') + '">' + UI.icon('whatsapp', 14) + ' Responder</button>' +
+        '<button class="btn btn-soft btn-sm" data-ticket="' + t.id + '" data-reply="' + UI.escapeHtml(t.phone || '') + '" data-msg="' + UI.escapeHtml(t.message || '') + '">' + UI.icon('whatsapp', 14) + ' Responder</button>' +
         '<button class="btn btn-soft btn-sm" data-close-ticket="' + t.id + '">' + UI.icon('check', 14) + ' Resolver</button>' +
         '</div></div>' +
         '<p class="muted" style="margin:6px 0 0">' + UI.escapeHtml(t.message || '—') + '</p>' +
@@ -223,7 +223,7 @@
     }));
 
     body.querySelectorAll('[data-reply]').forEach(b => b.addEventListener('click', () => {
-      openSupportChat(b.dataset.reply, b.dataset.msg);
+      openSupportChat(b.dataset.ticket, b.dataset.reply, b.dataset.msg);
     }));
   }
 
@@ -247,9 +247,19 @@
     return res.json();
   }
 
-  /* Modal de chat para responder un ticket directamente por la API de Meta */
-  function openSupportChat(phone, message) {
-    const hist = [{ me: false, text: message || '(sin mensaje)' }];
+  /* Modal de chat para responder un ticket directamente por la API de Meta.
+     Carga el historial guardado en support_tickets.messages y lo persiste. */
+  async function openSupportChat(id, phone, message) {
+    let saved = [];
+    try {
+      const rows = await G.api('GET', '/support_tickets?select=messages&id=eq.' + encodeURIComponent(id) + '&limit=1');
+      saved = (rows && rows[0] && Array.isArray(rows[0].messages)) ? rows[0].messages : [];
+    } catch (e) {}
+
+    const hist = saved.length
+      ? saved.map(ms => ({ me: ms.role === 'admin', text: ms.text }))
+      : [{ me: false, text: message || '(sin mensaje)' }];
+
     const m = UI.openModal({
       title: 'Chat de soporte',
       subtitle: phone,
@@ -265,6 +275,15 @@
         '<div style="white-space:pre-wrap">' + UI.escapeHtml(h.text) + '</div></div>').join('');
     };
     renderHist();
+
+    const persist = async () => {
+      try {
+        await G.api('PATCH', '/support_tickets?id=eq.' + encodeURIComponent(id), {
+          messages: hist.map(h => ({ role: h.me ? 'admin' : 'user', text: h.text, at: new Date().toISOString() })),
+        });
+      } catch (e) {}
+    };
+
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
     m.panel.querySelector('[data-send]').addEventListener('click', async () => {
       const inp = m.panel.querySelector('#chatInput');
@@ -275,6 +294,7 @@
         hist.push({ me: true, text });
         inp.value = '';
         renderHist();
+        await persist();
         UI.toast('✅ Mensaje enviado');
       } catch (e) {
         UI.toast('❌ No se pudo enviar: ' + ((e && e.message) || e), 'error');
