@@ -347,9 +347,19 @@ function queryPendingSalaries(data: Record<string, any>, target: string): string
   const t = String(target || "").toLowerCase();
   const emp = (t && emps.find((e) => String((e.firstName || "") + " " + (e.lastName || "")).toLowerCase().includes(t))) || emps[0];
   const nombre = ((emp.firstName || "") + " " + (emp.lastName || "")).trim();
-  const adelantos = (data.expenses || []).filter((e: any) => e.employeeId === emp.id && e.expenseKind === "adelanto").reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
-  const pagos = (data.expenses || []).filter((e: any) => e.employeeId === emp.id && e.expenseKind !== "adelanto").reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
-  return "💸 *" + nombre + "*: adelantos " + money(adelantos) + " · pagos " + money(pagos);
+
+  const mk = new Date().toISOString().slice(0, 7); // mes actual (YYYY-MM)
+  const present = (data.attendance || []).filter((a: any) => a.employeeId === emp.id && String(a.date || "").slice(0, 7) === mk && a.status === "presente");
+  const horas = present.reduce((s: number, a: any) => s + (a.hours || []).reduce((s2: number, h: any) => s2 + (Number(h.hours) || 0), 0), 0);
+  const rate = Number(emp.hourlyRate || emp.hourly_rate || 0);
+  const generado = horas * rate;
+
+  const pays = (data.expenses || []).filter((x: any) => x.employeeId === emp.id && String(x.date || "").slice(0, 7) === mk);
+  const pagado = pays.filter((x: any) => x.expenseKind !== "adelanto").reduce((s: number, x: any) => s + (Number(x.amount) || 0), 0);
+  const adelantos = pays.filter((x: any) => x.expenseKind === "adelanto").reduce((s: number, x: any) => s + (Number(x.amount) || 0), 0);
+
+  const deuda = generado - (pagado + adelantos);
+  return "💸 *" + nombre + "*: Trabajó " + horas + " hs. Generó " + money(generado) + ". Pagado/Adelantado " + money(pagado + adelantos) + ". *Saldo pendiente: " + money(deuda) + "*";
 }
 
 serve(async (req) => {
