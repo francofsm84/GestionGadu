@@ -575,7 +575,18 @@ async function handleButtonReply(from: string, buttonId: string) {
     return;
   }
   if (buttonId === "fallback_humano") {
-    fireAndForget(sendWhatsApp(from, "🙋 Un asesor humano te va a contactar a la brevedad. Mientras tanto podés seguir cargando por acá."));
+    /* Insertar ticket de soporte (el admin lo ve en el panel) */
+    try {
+      await rest("support_tickets", {
+        method: "POST",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ user_id: userId, phone: from, message: "Solicitud de soporte desde WhatsApp", status: "open" }),
+      });
+      console.log("[GADU-WA-SUPPORT] ticket creado para", userId, "/", from);
+    } catch (e) {
+      console.error("[GADU-WA-SUPPORT] falló insertar ticket:", e);
+    }
+    fireAndForget(sendWhatsApp(from, "✅ Tu pedido fue enviado. Un asesor de GADU te contactará por este medio a la brevedad."));
     await deleteSession(normalizePhone(from));
     return;
   }

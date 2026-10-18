@@ -63,7 +63,7 @@
     }
     view.innerHTML =
       '<div class="tabs">' +
-      tabBtn('usuarios', '👥 Usuarios') + tabBtn('planes', '💳 Planes') + tabBtn('licencias', '🎫 Licencias') + tabBtn('config', '⚙️ Configuración') + tabBtn('metricas', '📊 Métricas') + tabBtn('auditoria', '🧾 Auditoría') +
+      tabBtn('usuarios', '👥 Usuarios') + tabBtn('planes', '💳 Planes') + tabBtn('licencias', '🎫 Licencias') + tabBtn('soporte', '📞 Soporte') + tabBtn('config', '⚙️ Configuración') + tabBtn('metricas', '📊 Métricas') + tabBtn('auditoria', '🧾 Auditoría') +
       '</div>' +
       '<div id="adminBody"></div>';
     view.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.t; render(view); }));
@@ -79,6 +79,7 @@
       if (tab === 'usuarios') await tabUsuarios(body);
       else if (tab === 'planes') await tabPlanes(body);
       else if (tab === 'licencias') await tabLicencias(body);
+      else if (tab === 'soporte') await tabSoporte(body);
       else if (tab === 'config') await tabConfig(body);
       else if (tab === 'metricas') await tabMetricas(body);
       else await tabAuditoria(body);
@@ -188,6 +189,38 @@
         UI.toast('❌ No se pudo generar: ' + ((err && err.message) || err), 'error');
       }
     });
+  }
+
+  /* ---------- Soporte (tickets "hablar con un humano") ---------- */
+  async function tabSoporte(body) {
+    let tickets = [];
+    try { tickets = await G.api('GET', '/support_tickets?select=*&status=eq.open&order=created_at.desc'); } catch (e) {}
+
+    body.innerHTML =
+      '<div class="card"><div class="card-head"><div><h3>Tickets de soporte</h3><p class="muted">' + tickets.length + ' abiertos</p></div></div>' +
+      '<div class="stack">' +
+      (tickets.map(t =>
+        '<div class="card-inset" style="margin-top:10px">' +
+        '<div class="split-row"><div class="split-row-main"><strong>' + UI.escapeHtml(t.phone || '—') + '</strong>' +
+        '<span class="muted small">' + (t.created_at ? UI.fmtDate(t.created_at) : '—') + '</span></div>' +
+        '<div class="split-row-end">' +
+        '<a class="btn btn-soft btn-sm" href="https://wa.me/' + String(t.phone || '').replace(/\D/g, '') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 14) + ' Responder</a>' +
+        '<button class="btn btn-soft btn-sm" data-close-ticket="' + t.id + '">' + UI.icon('check', 14) + ' Resolver</button>' +
+        '</div></div>' +
+        '<p class="muted" style="margin:6px 0 0">' + UI.escapeHtml(t.message || '—') + '</p>' +
+        '</div>').join('') || '<p class="form-hint">No hay tickets abiertos.</p>') +
+      '</div></div>';
+
+    body.querySelectorAll('[data-close-ticket]').forEach(b => b.addEventListener('click', async () => {
+      const id = b.dataset.closeTicket;
+      try {
+        await G.api('PATCH', '/support_tickets?id=eq.' + encodeURIComponent(id), { status: 'closed' });
+        UI.toast('✅ Ticket marcado como resuelto');
+        tabSoporte(body);
+      } catch (e) {
+        UI.toast('❌ No se pudo actualizar: ' + ((e && e.message) || e), 'error');
+      }
+    }));
   }
 
   async function tabUsuarios(body) {
