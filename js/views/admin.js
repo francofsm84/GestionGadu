@@ -104,36 +104,103 @@
 
   /* Auditoría de soporte: ver los datos de un cliente (solo lectura) */
   async function openVerDatos(uid, email) {
+    const esc = UI.escapeHtml;
     const m = UI.openModal({
       title: 'Datos de ' + email,
       subtitle: 'Auditoría de soporte · solo lectura',
       size: 'wide',
       body: '<div id="vdBody"><p class="form-hint">Cargando…</p></div>',
-      footer: '<button class="btn btn-ghost" data-cancel>Cerrar</button>',
+      footer: '<button class="btn btn-ghost" data-cancel>Cerrar</button><button class="btn btn-ghost" data-vd-back style="display:none">' + UI.icon('arrow-left', 14) + ' Volver</button>',
     });
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
-    try {
-      const rows = await G.api('GET', '/app_data?select=data,updated_at&user_id=eq.' + encodeURIComponent(uid) + '&limit=1');
-      const d = (rows && rows[0] && rows[0].data) || {};
-      const updatedAt = (rows && rows[0] && rows[0].updated_at) || '';
-      const works = d.works || [], contacts = d.contacts || [], employees = d.employees || [], budgets = d.budgets || [], incomes = d.incomes || [], expenses = d.expenses || [];
+    const backBtn = m.panel.querySelector('[data-vd-back]');
+    backBtn.addEventListener('click', () => showSummary());
+
+    let ctx = null;
+
+    const kpi = (section, label, value, sub) =>
+      '<button class="kpi-card kpi-click" data-vd-section="' + section + '" style="width:100%"><div class="kpi-body"><span class="kpi-label">' + label + '</span><strong class="kpi-value">' + value + '</strong><span class="kpi-sub">' + sub + '</span></div></button>';
+    const row = (section, label, valueHtml) =>
+      '<button class="split-row kpi-click" data-vd-section="' + section + '" style="width:100%;border:none;background:none;padding:8px 0;text-align:left;font:inherit"><strong>' + label + '</strong>' + valueHtml + '</button>';
+
+    function titleOf(s) {
+      return ({ obras: 'Obras', clientes: 'Clientes', empleados: 'Empleados', presupuestos: 'Presupuestos', ingresos: 'Ingresos', gastos: 'Gastos' })[s] || 'Detalle';
+    }
+
+    function showSummary() {
+      backBtn.style.display = 'none';
+      const works = ctx.works, contacts = ctx.contacts, employees = ctx.employees, budgets = ctx.budgets, incomes = ctx.incomes, expenses = ctx.expenses;
       const activas = works.filter(w => w.status === 'activa').length;
       const clientes = contacts.filter(c => c.type === 'cliente').length;
       const totalIn = S.sum(incomes.map(x => x.amount));
       const totalOut = S.sum(expenses.map(x => x.amount));
-      const stat = (l, v, s) => '<div class="kpi-card"><div class="kpi-body"><span class="kpi-label">' + l + '</span><strong class="kpi-value">' + v + '</strong><span class="kpi-sub">' + s + '</span></div></div>';
-      const obrasList = works.slice(0, 12).map(w => '<div class="split-row"><span>' + UI.escapeHtml(w.name || '—') + '</span>' + UI.chip(w.status || '', w.status === 'activa' ? 'success' : 'neutral') + '</div>').join('');
       m.panel.querySelector('#vdBody').innerHTML =
-        '<p class="muted small" style="margin-bottom:12px">Última sincronización: ' + (updatedAt ? UI.fmtDate(updatedAt) + ' · ' + new Date(updatedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '—') + '</p>' +
+        '<p class="muted small" style="margin-bottom:12px">Última sincronización: ' + (ctx.updatedAt ? UI.fmtDate(ctx.updatedAt) + ' · ' + new Date(ctx.updatedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '—') + '</p>' +
         '<div class="kpi-grid kpi-4" style="margin-bottom:14px">' +
-        stat('Obras', works.length, activas + ' activas') + stat('Clientes', clientes, '') + stat('Empleados', employees.length, '') + stat('Presupuestos', budgets.length, '') +
+        kpi('obras', 'Obras', works.length, activas + ' activas') +
+        kpi('clientes', 'Clientes', clientes, '') +
+        kpi('empleados', 'Empleados', employees.length, '') +
+        kpi('presupuestos', 'Presupuestos', budgets.length, '') +
         '</div>' +
         '<div class="card-inset">' +
-        '<div class="split-row"><strong>Ingresos</strong><b class="pos">+' + UI.fmtMoney(totalIn) + '</b></div>' +
-        '<div class="split-row"><strong>Gastos</strong><b class="neg">−' + UI.fmtMoney(totalOut) + '</b></div>' +
+        row('ingresos', 'Ingresos', '<b class="pos">+' + UI.fmtMoney(totalIn) + '</b>') +
+        row('gastos', 'Gastos', '<b class="neg">−' + UI.fmtMoney(totalOut) + '</b>') +
         '<div class="split-row"><strong>Balance</strong><b>' + UI.fmtMoney(totalIn - totalOut) + '</b></div>' +
-        (obrasList ? '<h4 style="margin-top:10px">Obras</h4>' + obrasList : '<p class="form-hint" style="margin-top:8px">Sin obras registradas.</p>') +
-        '</div>';
+        '</div>' +
+        '<p class="form-hint" style="margin-top:10px">Tocá una tarjeta o fila para ver el detalle.</p>';
+    }
+
+    function showDetail(section) {
+      backBtn.style.display = '';
+      const body = m.panel.querySelector('#vdBody');
+      let html = '';
+      if (section === 'obras') {
+        html = ctx.works.map(w =>
+          '<div class="card-inset" style="margin-top:6px"><div class="split-row"><strong>' + esc(w.name || '—') + '</strong>' + UI.chip(w.status || '', w.status === 'activa' ? 'success' : 'neutral') + '</div>' +
+          (w.client ? '<span class="muted small">Cliente: ' + esc(w.client) + '</span>' : '') + '</div>').join('') || '<p class="form-hint">Sin obras registradas.</p>';
+      } else if (section === 'clientes') {
+        const cli = ctx.contacts.filter(c => c.type === 'cliente');
+        html = cli.map(c =>
+          '<div class="card-inset" style="margin-top:6px"><strong>' + esc(c.name || '—') + '</strong>' +
+          (c.phone ? '<span class="muted small"> · ' + esc(c.phone) + '</span>' : '') +
+          (c.email ? '<span class="muted small"> · ' + esc(c.email) + '</span>' : '') + '</div>').join('') || '<p class="form-hint">Sin clientes registrados.</p>';
+      } else if (section === 'empleados') {
+        html = ctx.employees.map(em => {
+          const nm = String((em.firstName || '') + ' ' + (em.lastName || '')).trim() || em.name || '—';
+          return '<div class="card-inset" style="margin-top:6px"><strong>' + esc(nm) + '</strong>' +
+            (em.rol ? '<span class="muted small"> · ' + esc(em.rol) + '</span>' : '') +
+            (em.cuil ? '<span class="muted small"> · CUIL ' + esc(em.cuil) + '</span>' : '') + '</div>';
+        }).join('') || '<p class="form-hint">Sin empleados registrados.</p>';
+      } else if (section === 'presupuestos') {
+        html = ctx.budgets.map(b =>
+          '<div class="card-inset" style="margin-top:6px"><div class="split-row"><strong>' + esc(b.name || b.client || '—') + '</strong><b>' + UI.fmtMoney(b.total || b.amount || 0) + '</b></div>' +
+          (b.status ? '<span class="muted small">' + esc(b.status) + '</span>' : '') + '</div>').join('') || '<p class="form-hint">Sin presupuestos.</p>';
+      } else if (section === 'ingresos') {
+        html = ctx.incomes.map(i =>
+          '<div class="card-inset" style="margin-top:6px"><div class="split-row"><strong>' + esc(i.description || i.name || '—') + '</strong><b class="pos">+' + UI.fmtMoney(i.amount) + '</b></div>' +
+          '<span class="muted small">' + esc(String(i.date || i.fecha || '')) + '</span></div>').join('') || '<p class="form-hint">Sin ingresos registrados.</p>';
+      } else if (section === 'gastos') {
+        html = ctx.expenses.map(x =>
+          '<div class="card-inset" style="margin-top:6px"><div class="split-row"><strong>' + esc(x.description || x.name || '—') + '</strong><b class="neg">−' + UI.fmtMoney(x.amount) + '</b></div>' +
+          '<span class="muted small">' + esc(String(x.date || x.fecha || '')) + (x.categoria || x.category ? ' · ' + esc(x.categoria || x.category) : '') + '</span></div>').join('') || '<p class="form-hint">Sin gastos registrados.</p>';
+      }
+      body.innerHTML = '<h4 style="margin-bottom:10px">' + titleOf(section) + '</h4>' + html;
+    }
+
+    m.panel.querySelector('#vdBody').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-vd-section]');
+      if (btn) showDetail(btn.dataset.vdSection);
+    });
+
+    try {
+      const rows = await G.api('GET', '/app_data?select=data,updated_at&user_id=eq.' + encodeURIComponent(uid) + '&limit=1');
+      const d = (rows && rows[0] && rows[0].data) || {};
+      ctx = {
+        works: d.works || [], contacts: d.contacts || [], employees: d.employees || [],
+        budgets: d.budgets || [], incomes: d.incomes || [], expenses: d.expenses || [],
+        updatedAt: (rows && rows[0] && rows[0].updated_at) || '',
+      };
+      showSummary();
       await G.plan.log('ver_datos_usuario', email);
     } catch (err) {
       m.panel.querySelector('#vdBody').innerHTML = '<p class="form-hint" style="color:var(--danger)">No se pudo cargar: ' + ((err && err.message) || err) + '</p>';
