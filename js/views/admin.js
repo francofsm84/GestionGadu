@@ -204,7 +204,7 @@
         '<div class="split-row"><div class="split-row-main"><strong>' + UI.escapeHtml(t.phone || '—') + '</strong>' +
         '<span class="muted small">' + (t.created_at ? UI.fmtDate(t.created_at) : '—') + '</span></div>' +
         '<div class="split-row-end">' +
-        '<a class="btn btn-soft btn-sm" href="https://wa.me/' + String(t.phone || '').replace(/\D/g, '') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 14) + ' Responder</a>' +
+        '<button class="btn btn-soft btn-sm" data-reply="' + UI.escapeHtml(t.phone || '') + '" data-msg="' + UI.escapeHtml(t.message || '') + '">' + UI.icon('whatsapp', 14) + ' Responder</button>' +
         '<button class="btn btn-soft btn-sm" data-close-ticket="' + t.id + '">' + UI.icon('check', 14) + ' Resolver</button>' +
         '</div></div>' +
         '<p class="muted" style="margin:6px 0 0">' + UI.escapeHtml(t.message || '—') + '</p>' +
@@ -221,6 +221,65 @@
         UI.toast('❌ No se pudo actualizar: ' + ((e && e.message) || e), 'error');
       }
     }));
+
+    body.querySelectorAll('[data-reply]').forEach(b => b.addEventListener('click', () => {
+      openSupportChat(b.dataset.reply, b.dataset.msg);
+    }));
+  }
+
+  /* Envía un mensaje de WhatsApp usando la Edge Function (Graph API de Meta) */
+  async function sendWhatsAppMessage(to, text) {
+    const sess = G.auth.getSession();
+    const res = await fetch(G.auth.SUPABASE_URL + '/functions/v1/send-whatsapp-message', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': G.auth.SUPABASE_ANON_KEY,
+        'Authorization': 'Bearer ' + (sess ? sess.accessToken : ''),
+      },
+      body: JSON.stringify({ to, text }),
+    });
+    if (!res.ok) {
+      let msg = 'HTTP ' + res.status;
+      try { const j = await res.json(); msg = j.error || (j.meta && j.meta.error && j.meta.error.message) || msg; } catch (e) {}
+      throw new Error(msg);
+    }
+    return res.json();
+  }
+
+  /* Modal de chat para responder un ticket directamente por la API de Meta */
+  function openSupportChat(phone, message) {
+    const hist = [{ me: false, text: message || '(sin mensaje)' }];
+    const m = UI.openModal({
+      title: 'Chat de soporte',
+      subtitle: phone,
+      body:
+        '<div id="chatHist" class="stack" style="max-height:320px;overflow-y:auto;margin-bottom:10px"></div>' +
+        '<textarea class="input" id="chatInput" placeholder="Escribí tu respuesta…" style="width:100%;min-height:64px"></textarea>',
+      footer: '<button class="btn btn-ghost" data-cancel>Cerrar</button><button class="btn btn-primary" data-send>' + UI.icon('whatsapp', 14) + ' Enviar</button>',
+    });
+    const renderHist = () => {
+      m.panel.querySelector('#chatHist').innerHTML = hist.map(h =>
+        '<div class="card-inset" style="margin-top:6px' + (h.me ? ';background:var(--primary-soft)' : '') + '">' +
+        '<strong class="muted small">' + (h.me ? 'Vos' : 'Cliente') + '</strong>' +
+        '<div style="white-space:pre-wrap">' + UI.escapeHtml(h.text) + '</div></div>').join('');
+    };
+    renderHist();
+    m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+    m.panel.querySelector('[data-send]').addEventListener('click', async () => {
+      const inp = m.panel.querySelector('#chatInput');
+      const text = inp.value.trim();
+      if (!text) { UI.toast('Escribí un mensaje', 'error'); return; }
+      try {
+        await sendWhatsAppMessage(phone, text);
+        hist.push({ me: true, text });
+        inp.value = '';
+        renderHist();
+        UI.toast('✅ Mensaje enviado');
+      } catch (e) {
+        UI.toast('❌ No se pudo enviar: ' + ((e && e.message) || e), 'error');
+      }
+    });
   }
 
   async function tabUsuarios(body) {
