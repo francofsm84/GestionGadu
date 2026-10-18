@@ -917,7 +917,7 @@ async function processMessage(body: unknown) {
       fireAndForget(sendWhatsApp(resolved.from, "🤖 No pude escuchar el audio, ¿me lo escribís?"));
       return;
     }
-    const inc = { from: resolved.from, text: resolved.text };
+    const inc = { from: resolved.from, text: resolved.text, mediaUrl: resolved.mediaUrl || "" };
     console.log("[whatsapp-webhook] from=" + inc.from + " text=" + JSON.stringify(inc.text));
     console.log("[DEBUG] Remitente detectado: " + inc.from);
 
@@ -1513,6 +1513,8 @@ async function processMessage(body: unknown) {
         if (action.modulo === "gasto") {
           const gasto = (data.expenses && data.expenses[0]) || null;
           if (gasto) {
+            /* Si el gasto vino de una FOTO de ticket, adjuntar el comprobante */
+            if (inc.mediaUrl) gasto.receiptUrl = inc.mediaUrl;
             const gastoId = String(gasto.id || "");
             const monto = Number(gasto.amount) || 0;
             const cat = String(gasto.category || "gasto");

@@ -141,6 +141,40 @@ function normalizeImageMime(raw: string): string {
   return "image/jpeg";
 }
 
+/* Sube el media (imagen de ticket) a Supabase Storage y devuelve la URL pública.
+   Bucket: gadu_tickets · ruta: gadu_tickets/<userId>/whatsapp/<ts>.<ext> */
+async function uploadMediaToStorage(buffer: ArrayBuffer, mimeType: string, userId: string): Promise<string> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  if (!supabaseUrl || !serviceKey) {
+    console.warn("[GADU-WA-IMAGE] sin SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY: no se sube la imagen");
+    return "";
+  }
+  const norm = normalizeImageMime(mimeType);
+  const ext = norm === "image/png" ? "png" : (norm === "image/webp" ? "webp" : "jpg");
+  const path = "gadu_tickets/" + userId + "/whatsapp/" + Date.now() + "." + ext;
+  try {
+    const res = await fetch(supabaseUrl + "/storage/v1/object/" + path, {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer " + serviceKey,
+        "apikey": serviceKey,
+        "Content-Type": norm,
+        "x-upsert": "false",
+      },
+      body: new Uint8Array(buffer),
+    });
+    if (!res.ok) {
+      console.error("[GADU-WA-IMAGE] subida a Storage falló:", res.status, await res.text().catch(() => ""));
+      return "";
+    }
+    return supabaseUrl + "/storage/v1/object/public/" + path;
+  } catch (e) {
+    console.error("[GADU-WA-IMAGE] uploadMediaToStorage error:", e);
+    return "";
+  }
+}
+
 /* Analiza una imagen (ticket) con Gemini Vision + el caption del usuario */
 async function geminiAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption: string): Promise<string> {
   const apiKey = Deno.env.get("GEMINI_API_KEY") || "";
@@ -189,16 +223,11 @@ async function geminiAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption
   }
 }
 
-async function analyzeImage(mediaId: string, caption: string): Promise<string> {
-  const url = await getMediaUrl(mediaId);
-  const { buffer, mimeType } = await downloadMedia(url);
-  return await geminiAnalyzeImage(buffer, normalizeImageMime(mimeType), caption);
-}
-
 export interface ResolvedIncoming {
   from: string;
   text: string;
   audioFailed?: boolean;
+  mediaUrl?: string;
 }
 
 /* Resuelve el texto del mensaje entrante: texto plano O transcripción de audio.
@@ -254,18 +283,28 @@ export async function resolveIncomingText(payload: unknown): Promise<ResolvedInc
       if (!mediaId) return null;
       console.log("[GADU-WA-IMAGE] imagen detectada, media_id:", mediaId, "· caption:", caption);
       let text = "";
+      let mediaUrl = "";
       try {
-        text = await analyzeImage(mediaId, caption);
+        /* Descargamos una sola vez: con el buffer hacemos el análisis Gemini
+           Y subimos el comprobante a Storage. */
+        const url = await getMediaUrl(mediaId);
+        const { buffer, mimeType } = await downloadMedia(url);
+        text = await geminiAnalyzeImage(buffer, normalizeImageMime(mimeType), caption);
+        try {
+          mediaUrl = await uploadMediaToStorage(buffer, mimeType, from);
+        } catch (e) {
+          console.warn("[GADU-WA-IMAGE] no se pudo subir el comprobante:", e);
+        }
       } catch (e) {
         console.error("[GADU-WA-CRITICAL-FIX] analyzeImage falló:", e);
         return { from, text: "", audioFailed: true };
       }
       if (!text) {
         console.warn("[GADU-WA-IMAGE] análisis vacío para media", mediaId);
-        return { from, text: "", audioFailed: true };
+        return { from, text: "", audioFailed: true, mediaUrl };
       }
-      console.log("[GADU-WA-IMAGE] análisis:", text);
-      return { from, text };
+      console.log("[GADU-WA-IMAGE] análisis:", text, "· mediaUrl:", mediaUrl ? mediaUrl.slice(0, 80) : "(sin subir)");
+      return { from, text, mediaUrl };
     }
 
     return null;
