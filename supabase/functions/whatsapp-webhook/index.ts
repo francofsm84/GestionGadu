@@ -41,6 +41,8 @@ import {
   resolveAdvanceTarget,
   toMetaPhone,
   extractFrom,
+  formatProperName,
+  rawDigits,
 } from "./core.ts";
 import { resolveIncomingText } from "./transcribe.ts";
 import { enqueueMessage, claimNext, markDone, markFailed, resetStaleProcessing } from "./queue.ts";
@@ -779,13 +781,14 @@ async function handleButtonReply(from: string, buttonId: string) {
     return;
   }
 
-  /* [GADU-WA-MENU] Selección de rol para el nuevo contacto */
+  /* [GADU-WA-MENU] Selección de rol para el nuevo contacto.
+     Guarda el wizard multi-paso: WAITING_CONTACT_NAME → WAITING_CONTACT_PHONE. */
   if (buttonId.startsWith("contact_role:")) {
     const role = buttonId.slice("contact_role:".length);
     if (role === "empleado" || role === "socio" || role === "cliente") {
-      await upsertSession(from, userId, "WAITING_CONTACT", { role });
+      await upsertSession(from, userId, "WAITING_CONTACT_NAME", { contactType: role });
       const label = role === "empleado" ? "Empleado" : (role === "socio" ? "Socio" : "Cliente");
-      fireAndForget(sendWhatsApp(from, "Perfecto, vamos a registrar un *" + label + "*. ¿Cuál es el nombre completo?"));
+      fireAndForget(sendWhatsApp(from, "Perfecto, vamos a registrar un *" + label + "*. ¿Cuál es el nombre completo? (Escribí *cancelar* para abortar)"));
       return;
     }
     console.warn("[GADU-WA-MENU] rol de contacto desconocido:", role);
@@ -1238,55 +1241,75 @@ async function processMessage(body: unknown) {
       }
     }
 
-    /* [GADU-WA-WIZARD] Wizard de contacto (WAITING_CONTACT): rol + nombre */
-    let enWizardContact = false;
-    let contactRole = "";
+    /* [GADU-WA-WIZARD] Contacto paso 1: nombre (WAITING_CONTACT_NAME).
+       Intercepta el texto libre ANTES de la IA/fallback. */
+    let enWizardContactName = false;
+    let contactNameCtx: Record<string, unknown> = {};
     try {
-      const sessContact = await getSession(normalizePhone(inc.from));
-      if (sessContact && sessContact.state === "WAITING_CONTACT") {
-        enWizardContact = true;
-        contactRole = String((sessContact.context && sessContact.context.role) || "");
+      const sessCN = await getSession(normalizePhone(inc.from));
+      if (sessCN && sessCN.state === "WAITING_CONTACT_NAME") {
+        enWizardContactName = true;
+        contactNameCtx = (sessCN.context as Record<string, unknown>) || {};
       }
     } catch (e) {}
-    if (enWizardContact) {
-      const nombre = inc.text.trim();
-      if (!nombre) {
+    if (enWizardContactName) {
+      const t = inc.text.trim();
+      if (/^cancelar$/i.test(t)) {
+        await deleteSession(normalizePhone(inc.from));
+        fireAndForget(sendWhatsApp(inc.from, "✅ Carga cancelada. ¿En qué más te ayudo?"));
+        return json({ ok: true, from: inc.from, reply: "cancelado" });
+      }
+      if (!t) {
         fireAndForget(sendWhatsApp(inc.from, "🤖 ¿Cuál es el nombre completo del contacto?"));
         return json({ ok: true, from: inc.from, reply: "" });
       }
-      if (contactRole === "empleado") {
-        const res = executeAction(data, { modulo: "empleado", campos: { nombre } }, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
-        if (res.ok) {
-          await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
-            method: "PATCH",
-            headers: { Prefer: "return=minimal" },
-            body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
-          });
-          await deleteSession(normalizePhone(inc.from));
-          const reply = "✅ " + res.label;
-          fireAndForget(sendWhatsApp(inc.from, reply));
-          return json({ ok: true, from: inc.from, reply });
-        }
-        await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "🤖 No pude registrar el empleado. Probá de nuevo."));
-        return json({ ok: true, from: inc.from, reply: "" });
+      await upsertSession(inc.from, row.user_id, "WAITING_CONTACT_PHONE", { contactType: contactNameCtx.contactType, name: t });
+      fireAndForget(sendWhatsApp(inc.from, "Perfecto. ¿Cuál es el número de teléfono de *" + t + "*? (o escribí *omitir*)"));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* [GADU-WA-WIZARD] Contacto paso 2: teléfono (WAITING_CONTACT_PHONE) */
+    let enWizardContactPhone = false;
+    let contactPhoneCtx: Record<string, unknown> = {};
+    try {
+      const sessCP = await getSession(normalizePhone(inc.from));
+      if (sessCP && sessCP.state === "WAITING_CONTACT_PHONE") {
+        enWizardContactPhone = true;
+        contactPhoneCtx = (sessCP.context as Record<string, unknown>) || {};
       }
-      /* socio / cliente → guardar en el directorio (contacts) */
-      (data.contacts || (data.contacts = [])).unshift({
-        id: crypto.randomUUID(), name: nombre,
-        type: contactRole === "socio" ? "socio" : "cliente",
-        phone: "", email: "", source: "whatsapp",
-      });
+    } catch (e) {}
+    if (enWizardContactPhone) {
+      const t = inc.text.trim();
+      if (/^cancelar$/i.test(t)) {
+        await deleteSession(normalizePhone(inc.from));
+        fireAndForget(sendWhatsApp(inc.from, "✅ Carga cancelada. ¿En qué más te ayudo?"));
+        return json({ ok: true, from: inc.from, reply: "cancelado" });
+      }
+      const name = String(contactPhoneCtx.name || "").trim();
+      const contactType = String(contactPhoneCtx.contactType || "cliente");
+      const phone = /^omitir$/i.test(t) ? "" : t;
+      if (contactType === "empleado") {
+        const parsed = formatProperName(name);
+        (data.employees || (data.employees = [])).unshift({
+          id: crypto.randomUUID(), firstName: parsed.firstName, lastName: parsed.lastName,
+          phone, role: parsed.role || "empleado", active: true, source: "whatsapp",
+        });
+      } else {
+        (data.contacts || (data.contacts = [])).unshift({
+          id: crypto.randomUUID(), name,
+          type: contactType === "socio" ? "socio" : "cliente",
+          phone, email: "", source: "whatsapp",
+        });
+      }
       await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
         method: "PATCH",
         headers: { Prefer: "return=minimal" },
         body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
       });
       await deleteSession(normalizePhone(inc.from));
-      const label = contactRole === "socio" ? "Socio" : "Cliente";
-      const reply = "✅ " + label + " '" + nombre + "' agregado al directorio.";
-      fireAndForget(sendWhatsApp(inc.from, reply));
-      return json({ ok: true, from: inc.from, reply });
+      const label = contactType === "empleado" ? "Empleado" : (contactType === "socio" ? "Socio" : "Cliente");
+      fireAndForget(sendWhatsApp(inc.from, "✅ Contacto guardado correctamente: " + label + " '" + name + "'."));
+      return json({ ok: true, from: inc.from, reply: "contacto guardado" });
     }
 
     if (advIntent && !advIntent.nombre && advIntent.monto <= 0) {
