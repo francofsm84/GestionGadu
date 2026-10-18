@@ -91,3 +91,34 @@ self.addEventListener('fetch', (e) => {
     })
   );
 });
+
+/* ===== Notificaciones Push (Web Push API) ===== */
+self.addEventListener('push', (e) => {
+  let data = {};
+  try { data = e.data ? e.data.json() : {}; } catch (err) { data = { body: e.data ? e.data.text() : '' }; }
+  const title = data.title || 'GADU';
+  const body = data.body || '';
+  const url = data.url || '/';
+  e.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: './logo-192.png',
+      badge: './logo-192.png',
+      data: { url },
+      tag: data.tag || 'gadu',
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/';
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      for (const c of list) {
+        if ('focus' in c) { c.navigate(url); return c.focus(); }
+      }
+      return self.clients.openWindow(url);
+    })
+  );
+});

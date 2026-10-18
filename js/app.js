@@ -959,6 +959,14 @@
     try { if (G.onboarding && G.onboarding.maybeTutorial) G.onboarding.maybeTutorial(); } catch (e) {}
     try { if (G.pwa && G.pwa.init) G.pwa.init(); } catch (e) {}
 
+    /* Pedir permiso de notificaciones una sola vez */
+    try {
+      if (!localStorage.getItem('gadu_push_asked')) {
+        localStorage.setItem('gadu_push_asked', 'true');
+        if (G.push && G.push.subscribe) G.push.subscribe();
+      }
+    } catch (e) {}
+
     const navAdmin = document.getElementById('navAdmin');
     if (navAdmin) navAdmin.hidden = !G.plan.isAdmin();
     const pc = document.getElementById('planChip');
@@ -1064,6 +1072,44 @@
     });
   }
   registerServiceWorker();
+
+  /* ---------- Notificaciones Push (Web Push) ---------- */
+  const VAPID_PUBLIC_KEY = 'BNA_vP0z8GLpRPMoz9lZc1oAUFbQmFDhUArfAL4X342aeZlzeAeU-wSTWk4DY92TyKO-GwNQaIlU5TA29zQIQPw';
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(base64);
+    const output = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) output[i] = raw.charCodeAt(i);
+    return output;
+  }
+
+  async function subscribePush() {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) return false;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') return false;
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+      const sess = G.auth && G.auth.getSession ? G.auth.getSession() : null;
+      const uid = sess ? sess.userId : null;
+      if (!uid) return false;
+      await G.api('POST', '/push_subscriptions', {
+        user_id: uid,
+        endpoint: sub.endpoint,
+        keys: JSON.stringify(sub.toJSON().keys),
+      });
+      return true;
+    } catch (e) {
+      console.warn('[PUSH] suscripción falló:', e);
+      return false;
+    }
+  }
+  G.push = { subscribe: subscribePush };
 
   /* Pantalla de error visible: si algo falla al arrancar, nunca quedará
      una pantalla en negro muda — se muestra el motivo y un botón de reinicio */
