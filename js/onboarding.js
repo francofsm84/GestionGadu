@@ -58,11 +58,21 @@
     let code = (p.whatsapp && p.whatsapp.code) || '';
     const linked = !!(p.whatsapp && p.whatsapp.linked);
     const phoneDigits = () => '+' + prefix + local.replace(/[^\d]/g, '').replace(/^0+/, '');
+    let photo = p.photo || null;
 
     const m = UI.openModal({
       title: (S.data.settings && S.data.settings.onboardingDone) ? '👤 Mi perfil' : '👋 Antes de arrancar',
       subtitle: 'Configurá tu perfil y vinculá WhatsApp para recibir avisos.',
       body:
+        '<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">' +
+        '<div id="obAvatar">' + UI.avatar((prefNombre + ' ' + (p.apellido || '')).trim() || 'U', 64, photo) + '</div>' +
+        '<div style="flex:1;min-width:0">' +
+        '<button type="button" class="btn btn-soft btn-sm" id="obPhotoBtn">' + UI.icon('camera', 15) + (photo ? ' Cambiar foto' : ' Subir foto') + '</button>' +
+        (photo ? '<button type="button" class="btn btn-ghost btn-sm" id="obPhotoDel" style="margin-left:6px">' + UI.icon('trash', 14) + '</button>' : '') +
+        '<input type="file" id="obPhotoInput" accept="image/*" hidden>' +
+        '<div class="form-hint" style="margin-top:4px">Se guarda como tu foto de perfil.</div>' +
+        '</div>' +
+        '</div>' +
         '<div class="grid-form">' +
         '<div class="field"><label>Nombre</label><input class="input" id="obNombre" value="' + UI.escapeHtml(prefNombre) + '" placeholder="Tu nombre"></div>' +
         '<div class="field"><label>Apellido</label><input class="input" id="obApellido" value="' + UI.escapeHtml(p.apellido) + '" placeholder="Tu apellido"></div>' +
@@ -152,6 +162,45 @@
     m.panel.querySelector('#obPhone').addEventListener('input', e => { local = e.target.value; syncPhone(); });
     updateLink();
 
+    /* ---------- Foto de perfil (avatar) ---------- */
+    const avatarName = () => {
+      const n = m.panel.querySelector('#obNombre').value.trim();
+      const a = m.panel.querySelector('#obApellido').value.trim();
+      return (n + ' ' + a).trim() || prefNombre || 'U';
+    };
+    const renderAvatar = () => {
+      const slot = m.panel.querySelector('#obAvatar');
+      if (slot) slot.innerHTML = UI.avatar(avatarName(), 64, photo);
+      const del = m.panel.querySelector('#obPhotoDel');
+      if (del) del.style.display = photo ? '' : 'none';
+      const btn = m.panel.querySelector('#obPhotoBtn');
+      if (btn) btn.innerHTML = UI.icon('camera', 15) + (photo ? ' Cambiar foto' : ' Subir foto');
+    };
+    const blobToDataURL = blob => new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = () => rej(new Error('No se pudo leer la imagen'));
+      r.readAsDataURL(blob);
+    });
+    m.panel.querySelector('#obPhotoBtn').addEventListener('click', () => m.panel.querySelector('#obPhotoInput').click());
+    m.panel.querySelector('#obPhotoInput').addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      try {
+        const blob = await UI.compressImage(file, 320, 0.82);
+        photo = await blobToDataURL(blob);
+        renderAvatar();
+        UI.toast('Foto cargada. Guardá para confirmar.', 'info');
+      } catch (err) {
+        UI.toast('No se pudo cargar la foto: ' + ((err && err.message) || err), 'error');
+      }
+      e.target.value = '';
+    });
+    m.panel.querySelector('#obNombre').addEventListener('input', renderAvatar);
+    m.panel.querySelector('#obApellido').addEventListener('input', renderAvatar);
+    const photoDel = m.panel.querySelector('#obPhotoDel');
+    if (photoDel) photoDel.addEventListener('click', () => { photo = null; renderAvatar(); });
+
     /* Copiar el código al portapapeles (con fallback para navegadores viejos) */
     const copyFallback = (text) => {
       try {
@@ -197,6 +246,7 @@
           apellido: m.panel.querySelector('#obApellido').value.trim(),
           apodo: m.panel.querySelector('#obApodo').value.trim(),
           moneda: m.panel.querySelector('#obMoneda').value,
+          photo: photo || (p.photo || null),
           whatsapp: {
             phone: phoneDigits(),
             code,
