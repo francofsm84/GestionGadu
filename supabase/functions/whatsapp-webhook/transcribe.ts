@@ -89,6 +89,7 @@ async function geminiTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<
   }
   const model = Deno.env.get("GEMINI_MODEL") || "gemini-1.5-flash";
   const base64 = arrayBufferToBase64(buffer);
+  console.log("[GADU-WA-AUDIO] gemini transcribir:", buffer.byteLength, "bytes · mime:", mimeType, "· model:", model);
   /* Timeout de 8s: si Gemini tarda, abortamos y liberamos la cola. */
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
@@ -110,7 +111,8 @@ async function geminiTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<
       },
     );
     if (!res.ok) {
-      console.error("[GADU-WA-AUDIO] geminiTranscribe falló:", res.status, await res.text().catch(() => ""));
+      const body = await res.text().catch(() => "");
+      console.error("[GADU-WA-AUDIO] geminiTranscribe falló · HTTP", res.status, "· body:", body.slice(0, 400));
       return "";
     }
     const j = await res.json();
@@ -129,12 +131,17 @@ async function geminiTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<
 /* 3b) Transcribe audio con Groq (whisper-large-v3). Devuelve "" si falla. */
 async function groqTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<string> {
   const apiKey = Deno.env.get("GROQ_API_KEY") || "";
-  if (!apiKey) return "";
+  if (!apiKey) {
+    console.warn("[GADU-WA-GROQ] sin GROQ_API_KEY");
+    return "";
+  }
+  const norm = normalizeMime(mimeType);
+  console.log("[GADU-WA-GROQ] transcribir audio:", buffer.byteLength, "bytes · mime:", norm, "· model: whisper-large-v3");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
     const form = new FormData();
-    form.append("file", new Blob([buffer], { type: normalizeMime(mimeType) }), "audio.ogg");
+    form.append("file", new Blob([buffer], { type: norm }), "audio.ogg");
     form.append("model", "whisper-large-v3");
     const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
       method: "POST",
@@ -143,15 +150,17 @@ async function groqTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<st
       signal: controller.signal,
     });
     if (!res.ok) {
-      console.warn("[GADU-WA-GROQ] transcripción falló:", res.status, await res.text().catch(() => ""));
+      const body = await res.text().catch(() => "");
+      console.warn("[GADU-WA-GROQ] transcripción falló · HTTP", res.status, "· body:", body.slice(0, 400));
       return "";
     }
     const j = await res.json();
     const text = String((j as { text?: string }).text || "").trim();
     if (text) console.log("[GADU-WA-GROQ] ✅ transcripción:", text.slice(0, 80));
+    else console.warn("[GADU-WA-GROQ] 200 pero sin text:", JSON.stringify(j).slice(0, 200));
     return text;
   } catch (e) {
-    console.warn("[GADU-WA-GROQ] error transcribiendo:", e);
+    console.warn("[GADU-WA-GROQ] error/timeout transcribiendo:", e);
     return "";
   } finally {
     clearTimeout(timer);
@@ -230,6 +239,7 @@ async function geminiAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption
     "Si no es ni ticket ni producto, describí brevemente lo que ves.";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
+  console.log("[GADU-WA-IMAGE] gemini analizar imagen:", buffer.byteLength, "bytes · mime:", mimeType);
   try {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
@@ -248,7 +258,8 @@ async function geminiAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption
       },
     );
     if (!res.ok) {
-      console.error("[GADU-WA-IMAGE] geminiAnalyzeImage falló:", res.status, await res.text().catch(() => ""));
+      const body = await res.text().catch(() => "");
+      console.error("[GADU-WA-IMAGE] geminiAnalyzeImage falló · HTTP", res.status, "· body:", body.slice(0, 400));
       return "";
     }
     const j = await res.json();
@@ -264,15 +275,22 @@ async function geminiAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption
   }
 }
 
-/* Analiza una imagen con Groq Vision (llama-3.2-11b-vision-preview). Devuelve "" si falla. */
+/* Analiza una imagen con Groq Vision. Devuelve "" si falla.
+   Modelo vigente (GroqDocs "Images and Vision"): qwen/qwen3.8-27b
+   (llama-3.2-11b-vision-preview quedó deprecado). Límite de imagen: 20MB → 400. */
 async function groqAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption: string): Promise<string> {
   const apiKey = Deno.env.get("GROQ_API_KEY") || "";
-  if (!apiKey) return "";
+  if (!apiKey) {
+    console.warn("[GADU-WA-GROQ] sin GROQ_API_KEY");
+    return "";
+  }
+  const norm = normalizeImageMime(mimeType);
+  console.log("[GADU-WA-GROQ] analizar imagen:", buffer.byteLength, "bytes · mime:", norm, "· model: qwen/qwen3.8-27b");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
     const base64 = arrayBufferToBase64(buffer);
-    const dataUrl = "data:" + normalizeImageMime(mimeType) + ";base64," + base64;
+    const dataUrl = "data:" + norm + ";base64," + base64;
     const prompt = "Analiza esta imagen y el texto que la acompaña: '" + (caption || "") + "'. " +
       "Si es un ticket o comprobante, extrae el monto total, el proveedor y el concepto. " +
       "Si es un producto, identifica qué es y el monto mencionado en el texto. " +
@@ -281,7 +299,7 @@ async function groqAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption: 
       method: "POST",
       headers: { "Authorization": "Bearer " + apiKey, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "llama-3.2-11b-vision-preview",
+        model: "qwen/qwen3.8-27b",
         messages: [{
           role: "user",
           content: [
@@ -295,15 +313,17 @@ async function groqAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption: 
       signal: controller.signal,
     });
     if (!res.ok) {
-      console.warn("[GADU-WA-GROQ] visión falló:", res.status, await res.text().catch(() => ""));
+      const body = await res.text().catch(() => "");
+      console.warn("[GADU-WA-GROQ] visión falló · HTTP", res.status, "· body:", body.slice(0, 400));
       return "";
     }
     const j = await res.json();
     const text = String(j?.choices?.[0]?.message?.content || "").trim();
     if (text) console.log("[GADU-WA-GROQ] ✅ visión:", text.slice(0, 80));
+    else console.warn("[GADU-WA-GROQ] 200 pero sin contenido:", JSON.stringify(j).slice(0, 200));
     return text;
   } catch (e) {
-    console.warn("[GADU-WA-GROQ] error analizando imagen:", e);
+    console.warn("[GADU-WA-GROQ] error/timeout analizando imagen:", e);
     return "";
   } finally {
     clearTimeout(timer);
@@ -321,6 +341,7 @@ export interface ResolvedIncoming {
   from: string;
   text: string;
   audioFailed?: boolean;
+  imageFailed?: boolean;
   mediaUrl?: string;
 }
 
@@ -391,11 +412,11 @@ export async function resolveIncomingText(payload: unknown): Promise<ResolvedInc
         }
       } catch (e) {
         console.error("[GADU-WA-CRITICAL-FIX] analyzeImage falló:", e);
-        return { from, text: "", audioFailed: true };
+        return { from, text: "", imageFailed: true };
       }
       if (!text) {
         console.warn("[GADU-WA-IMAGE] análisis vacío para media", mediaId);
-        return { from, text: "", audioFailed: true, mediaUrl };
+        return { from, text: "", imageFailed: true, mediaUrl };
       }
       console.log("[GADU-WA-IMAGE] análisis:", text, "· mediaUrl:", mediaUrl ? mediaUrl.slice(0, 80) : "(sin subir)");
       return { from, text, mediaUrl };

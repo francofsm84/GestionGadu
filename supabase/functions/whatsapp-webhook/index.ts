@@ -917,6 +917,11 @@ async function processMessage(body: unknown) {
       fireAndForget(sendWhatsApp(resolved.from, "🤖 No pude escuchar el audio, ¿me lo escribís?"));
       return;
     }
+    if (resolved.imageFailed) {
+      console.warn("[GADU-WA-IMAGE] análisis de imagen falló para", resolved.from);
+      fireAndForget(sendWhatsApp(resolved.from, "🤖 No pude leer la imagen, ¿me escribís el gasto?"));
+      return;
+    }
     const inc = { from: resolved.from, text: resolved.text, mediaUrl: resolved.mediaUrl || "" };
     console.log("[whatsapp-webhook] from=" + inc.from + " text=" + JSON.stringify(inc.text));
     console.log("[DEBUG] Remitente detectado: " + inc.from);
