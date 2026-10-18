@@ -282,19 +282,45 @@ export function buildContext(data: Record<string, unknown>): string {
   return s.trim();
 }
 
-/* Sanitiza el nombre del empleado: quita "(rol)" del final y aplica Title Case.
-   "juan perez (albañil)" → { name: "Juan Perez", role: "albañil" } */
-export function sanitizeEmployeeName(raw: string): { name: string; role: string } {
-  let s = String(raw || "").trim();
-  let role = "";
-  const m = s.match(/\(([^)]+)\)\s*$/);   // rol entre paréntesis al final
-  if (m) {
-    role = m[1].trim();
-    s = s.slice(0, m.index).trim();
+/* Normaliza el texto del empleado: quita relleno ("agrega", "nuevo", "se llama"),
+   separa el oficio/rol (paréntesis o al final) y deja el nombre en Title Case.
+   "agrega un empleado nuevo. se llama juan rodriguez albañil" → { firstName:"Juan", lastName:"Rodriguez", role:"Albañil" } */
+export function formatProperName(raw: string): { firstName: string; lastName: string; role: string } {
+  const title = (str: string) => str.toLowerCase().replace(/(^|\s)([a-záéíóúñ])/g, (_m: string, p1: string, p2: string) => p1 + p2.toUpperCase());
+
+  let s = String(raw || "").toLowerCase()
+    .replace(/[.,;:!?¿¡()]/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+
+  // 1) Quitar relleno típico del dictado por WhatsApp
+  s = s.replace(/\b(?:agrega|agregá|agregar|alta|crear|crea|nuevo|nueva|un|una|empleado|trabajador|se\s+llama|llamado|llamada|me\s+llamo|quiero\s+(?:agregar|cargar)|cargar)\b/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+
+  // 2) Rol entre paréntesis al final (ej. "juan perez (albañil)")
+  let role = '';
+  const m = s.match(/\(([^)]+)\)\s*$/);
+  if (m) { role = m[1].trim(); s = s.slice(0, m.index).trim(); }
+
+  // 3) Rol al final sin paréntesis (oficios conocidos)
+  if (!role) {
+    const ROLES = [
+      'maestro mayor de obra', 'peon de albañil', 'peon de albanil', 'oficial albañil', 'oficial albanil',
+      'oficial electricista', 'oficial plomero', 'albañil', 'albanil', 'electricista', 'plomero',
+      'pintor', 'carpintero', 'ayudante', 'oficial', 'herrero', 'gasista', 'yesero', 'tornero',
+    ];
+    for (const r of ROLES) {
+      if (s.endsWith(r)) { role = r; s = s.slice(0, s.length - r.length).trim(); break; }
+    }
   }
-  // Title Case: "juan perez" → "Juan Perez"
-  s = s.toLowerCase().replace(/(^|\s)([a-záéíóúñ])/g, (_m, p1, p2) => p1 + p2.toUpperCase());
-  return { name: s, role };
+
+  // 4) Title Case + dividir en firstName / lastName
+  const nombre = title(s);
+  role = role ? title(role) : '';
+  const partes = nombre.split(/\s+/).filter(Boolean);
+  const firstName = partes[0] || '';
+  const lastName = partes.slice(1).join(' ');
+
+  return { firstName, lastName, role };
 }
 
 /* Ejecuta la acción del motor sobre los datos del usuario (misma lógica
@@ -361,15 +387,13 @@ export function executeAction(
   if (action.modulo === "empleado") {
     const raw = String(c.nombre || "").trim();
     if (!raw) return { ok: false, missing: "el nombre del empleado" };
-    const { name, role: rolParen } = sanitizeEmployeeName(raw);
+    const { firstName, lastName, role: rolParen } = formatProperName(raw);
     const rol = String(c.rol || rolParen || "").trim();
-    const partes = name.split(/\s+/);
-    const firstName = partes[0] || "";
-    const lastName = partes.slice(1).join(" ");
     (d.employees || (d.employees = [])).push({
       id: idGen(), firstName, lastName, phone: "", role: rol || "empleado", active: true, source: "whatsapp",
     } as unknown as Record<string, unknown>);
-    return { ok: true, label: "Empleado '" + name + "'" + (rol ? " (" + rol + ")" : "") + " agregado correctamente ✓" };
+    const nombre = (firstName + " " + lastName).trim();
+    return { ok: true, label: "Empleado '" + nombre + "'" + (rol ? " (" + rol + ")" : "") + " agregado correctamente ✓" };
   }
 
   if (action.modulo === "adelanto") {
