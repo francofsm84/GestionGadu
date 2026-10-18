@@ -1,5 +1,7 @@
 // Ejecución temporal (Node) para actualizar la foto de perfil de WhatsApp.
 // Uso: node scripts/run-profile-update.mjs  (con env vars WHATSAPP_TOKEN, WHATSAPP_PHONE_ID, META_APP_ID, IMAGE_URL)
+// IMAGE_URL puede ser una URL pública o una ruta de archivo local.
+import fs from "node:fs";
 const TOKEN = process.env.WHATSAPP_TOKEN || "";
 const PHONE_ID = process.env.WHATSAPP_PHONE_ID || "";
 const APP_ID = process.env.META_APP_ID || "";
@@ -11,16 +13,22 @@ if (!PHONE_ID) fail("falta WHATSAPP_PHONE_ID");
 if (!APP_ID) fail("falta META_APP_ID");
 if (!IMAGE_URL) fail("falta IMAGE_URL");
 
-// 1) Descargar imagen
-console.log("[GADU-WA-PROFILE] descargando:", IMAGE_URL);
-const img = await fetch(IMAGE_URL);
-if (!img.ok) fail("descarga HTTP " + img.status);
-const bytes = new Uint8Array(await img.arrayBuffer());
+// 1) Cargar imagen (URL pública o archivo local)
+let bytes;
+if (/^https?:/.test(IMAGE_URL)) {
+  console.log("[GADU-WA-PROFILE] descargando:", IMAGE_URL);
+  const img = await fetch(IMAGE_URL);
+  if (!img.ok) fail("descarga HTTP " + img.status);
+  bytes = new Uint8Array(await img.arrayBuffer());
+} else {
+  console.log("[GADU-WA-PROFILE] leyendo archivo local:", IMAGE_URL);
+  bytes = new Uint8Array(fs.readFileSync(IMAGE_URL));
+}
 console.log("[GADU-WA-PROFILE] imagen:", bytes.length, "bytes");
 
 // 2) Resumable upload → file handle
 const s = await fetch(
-  `https://graph.facebook.com/v21.0/${APP_ID}/uploads?file_name=gadu-bot.png&file_length=${bytes.length}&file_type=image/png`,
+  `https://graph.facebook.com/v21.0/${APP_ID}/uploads?file_name=logo-wpp-gadu.png&file_length=${bytes.length}&file_type=image/png`,
   { method: "POST", headers: { Authorization: `Bearer ${TOKEN}` } },
 );
 if (!s.ok) fail("init upload HTTP " + s.status + " " + await s.text());
