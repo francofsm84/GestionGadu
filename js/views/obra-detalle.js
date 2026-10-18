@@ -31,42 +31,64 @@
     return '<div class="split-row"><span class="muted">' + label + '</span><b class="' + (cls || '') + (xl ? ' xl' : '') + '">' + value + '</b></div>';
   }
 
-  /* Abre una ventana con un reporte formal de la obra e imprime a PDF (window.print) */
+  /* Genera un reporte ejecutivo en PDF (exclusivo Plan PRO/Empresa) */
   function exportPDF(ctx) {
+    const plan = (G.plan && G.plan.currentPlan) ? G.plan.currentPlan() : { id: 'free' };
+    if (plan.id !== 'pro' && plan.id !== 'empresa') {
+      if (G.ui && G.ui.toast) G.ui.toast('Los reportes en PDF son exclusivos del Plan PRO', 'warning');
+      if (G.upgrade) G.upgrade();
+      return;
+    }
+    if (typeof html2pdf === 'undefined') { if (G.ui && G.ui.toast) G.ui.toast('Cargando el generador de PDF…', 'info'); return; }
+
     const w = ctx.w, st = ctx.st;
     const client = S.contactById(w.clientId);
     const hoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
-    const num = 'style="text-align:right;font-variant-numeric:tabular-nums"';
-    const html =
-      '<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Reporte de obra — ' + UI.escapeHtml(w.name) + '</title>' +
-      '<style>' +
-      'body{font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#1e293b;margin:0;padding:32px;background:#fff}' +
-      'h1{font-size:24px;margin:0 0 4px;color:#0f172a}' +
-      'table{width:100%;border-collapse:collapse}' +
-      'th,td{text-align:left;padding:11px 12px;border-bottom:1px solid #e2e8f0;font-size:14px}' +
-      'th{color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid #cbd5e1}' +
-      '@page{size:A4;margin:16mm}' +
-      '@media print{body{padding:0}#btnPrint{display:none!important}}' +
-      '</style></head><body>' +
-      '<div style="max-width:720px;margin:0 auto">' +
-      '<div style="text-align:right;margin-bottom:24px"><button id="btnPrint" style="background:#f59e0b;color:#fff;border:0;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer" onclick="window.print()">Guardar como PDF</button></div>' +
-      '<h1>' + UI.escapeHtml(w.name) + (w.code ? ' <span style="color:#94a3b8;font-size:15px;font-weight:400">' + UI.escapeHtml(w.code) + '</span>' : '') + '</h1>' +
-      '<p style="color:#64748b;font-size:13px;margin:0 0 28px">Cliente: ' + UI.escapeHtml(client ? client.name : 'Sin cliente') + ' · ' + UI.escapeHtml(w.location || '') + ' · Generado el ' + hoy + '</p>' +
-      '<table>' +
-      '<tr><th>Concepto</th><th ' + num + '>Monto</th></tr>' +
-      '<tr><td>Presupuesto total</td><td ' + num + '>' + UI.fmtMoney(w.budgetTotal) + '</td></tr>' +
-      '<tr><td>Ingresos recibidos</td><td ' + num + '>' + UI.fmtMoney(st.incomes) + '</td></tr>' +
-      '<tr><td>Gastos totales (directos)</td><td ' + num + '>−' + UI.fmtMoney(st.costs) + '</td></tr>' +
-      '<tr><td style="font-weight:800;font-size:17px;border-top:2px solid #cbd5e1;color:#0f172a">Margen de ganancia</td><td style="text-align:right;font-weight:800;font-size:17px;border-top:2px solid #cbd5e1;color:#0f172a;font-variant-numeric:tabular-nums">' + UI.fmtMoney(st.margin) + '</td></tr>' +
-      '</table>' +
-      '<p style="color:#94a3b8;font-size:12px;margin-top:36px;text-align:center">Reporte generado por GADU Construye · gestiongadu.vercel.app</p>' +
-      '</div></body></html>';
+    const movs = ctx.incomes.slice(0, 10).map(i => ({ fecha: i.date, tipo: 'Ingreso', detalle: i.concept || '', monto: Number(i.amount) }))
+      .concat(ctx.costs.slice(0, 10).map(c => ({ fecha: c.date, tipo: 'Gasto', detalle: c.description || c.category || '', monto: -Number(c.amount) })))
+      .sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 12);
 
-    const win = window.open('', '_blank');
-    if (!win) { UI.toast('No se pudo abrir la ventana. Permití las ventanas emergentes.', 'error'); return; }
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
+    const html =
+      '<div style="font-family:Arial,Helvetica,sans-serif;color:#1e293b;padding:24px;background:#fff;max-width:760px">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #f59e0b;padding-bottom:12px;margin-bottom:16px">' +
+        '<div><div style="font-size:22px;font-weight:800;color:#0f172a">GADU Construye</div><div style="font-size:12px;color:#64748b">Tu gestión, perfecta</div></div>' +
+        '<div style="text-align:right"><div style="font-size:14px;color:#64748b">Reporte de obra</div><div style="font-size:12px;color:#94a3b8">' + hoy + '</div></div>' +
+      '</div>' +
+      '<h1 style="font-size:20px;margin:0 0 4px;color:#0f172a">' + UI.escapeHtml(w.name) + '</h1>' +
+      '<p style="font-size:13px;color:#64748b;margin:0 0 20px">Cliente: ' + UI.escapeHtml(client ? client.name : 'Sin cliente') + ' · ' + UI.escapeHtml(w.location || '') + '</p>' +
+      '<table style="width:100%;border-collapse:collapse;margin-bottom:20px">' +
+        '<tr><td style="padding:8px;color:#64748b">Presupuesto total</td><td style="padding:8px;text-align:right;font-weight:700">' + UI.fmtMoney(w.budgetTotal) + '</td></tr>' +
+        '<tr><td style="padding:8px;color:#64748b">Cobrado</td><td style="padding:8px;text-align:right;color:#16a34a;font-weight:700">' + UI.fmtMoney(st.incomes) + '</td></tr>' +
+        '<tr><td style="padding:8px;color:#64748b">Gastos directos</td><td style="padding:8px;text-align:right;color:#dc2626;font-weight:700">−' + UI.fmtMoney(st.costs) + '</td></tr>' +
+        '<tr style="border-top:2px solid #cbd5e1"><td style="padding:10px 8px;font-weight:800">Margen de ganancia</td><td style="padding:10px 8px;text-align:right;font-weight:800;font-size:16px;color:' + (st.margin >= 0 ? '#16a34a' : '#dc2626') + '">' + UI.fmtMoney(st.margin) + '</td></tr>' +
+      '</table>' +
+      '<div style="margin-bottom:20px"><div style="font-weight:700;margin-bottom:6px">Avance</div>' +
+        '<div style="font-size:13px;color:#64748b;margin-bottom:2px">Físico: ' + Math.round(Number(w.advanceFisico) || 0) + '%</div>' +
+        '<div style="font-size:13px;color:#64748b">Cobro: ' + Math.round(st.advanceCobro) + '%</div></div>' +
+      '<div style="font-weight:700;margin-bottom:6px">Últimos movimientos</div>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
+        '<tr style="background:#f1f5f9"><th style="text-align:left;padding:6px 8px;color:#64748b">Fecha</th><th style="text-align:left;padding:6px 8px;color:#64748b">Tipo</th><th style="text-align:left;padding:6px 8px;color:#64748b">Concepto</th><th style="text-align:right;padding:6px 8px;color:#64748b">Monto</th></tr>' +
+        (movs.map(m => '<tr><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">' + UI.fmtDate(m.fecha) + '</td><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">' + m.tipo + '</td><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">' + UI.escapeHtml(m.detalle) + '</td><td style="text-align:right;padding:6px 8px;border-bottom:1px solid #e2e8f0;color:' + (m.monto >= 0 ? '#16a34a' : '#dc2626') + '">' + (m.monto >= 0 ? '+' : '−') + UI.fmtMoney(Math.abs(m.monto)) + '</td></tr>').join('') || '<tr><td colspan="4" style="padding:8px;color:#94a3b8">Sin movimientos.</td></tr>') +
+      '</table>' +
+      '<div style="text-align:center;color:#94a3b8;font-size:12px;margin-top:24px">Generado por GADU - Tu gestión, perfecta</div>' +
+      '</div>';
+
+    const container = document.createElement('div');
+    container.style.position = 'fixed';
+    container.style.left = '-9999px';
+    container.style.top = '0';
+    container.innerHTML = html;
+    document.body.appendChild(container);
+
+    const filename = 'Reporte_Obra_' + String(w.name || 'obra').replace(/[^a-z0-9áéíóúñ ]/gi, '').replace(/\s+/g, '_') + '.pdf';
+
+    html2pdf().from(container).set({
+      margin: 8,
+      filename: filename,
+      image: { type: 'jpeg', quality: 0.95 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    }).save().then(() => { try { document.body.removeChild(container); } catch (e) {} });
   }
 
   function render(view, params) {
