@@ -318,6 +318,21 @@ async function deleteSession(phone: string) {
   await rest("whatsapp_sessions?phone_number=eq." + encodeURIComponent(phone), { method: "DELETE" });
 }
 
+/* ¿El usuario tiene un ticket de soporte ABIERTO? Mientras esté abierto,
+   el bot NO responde automáticamente (solo un humano lo atiende). */
+async function hasOpenSupport(phone: string): Promise<boolean> {
+  try {
+    const r = await rest(
+      "support_tickets?phone=eq." + encodeURIComponent(normalizePhone(phone)) + "&status=eq.open&limit=1",
+      { method: "GET" },
+    );
+    const rows = (await r.json().catch(() => [])) as Array<{ id: unknown }>;
+    return Array.isArray(rows) && rows.length > 0;
+  } catch (e) {
+    return false;
+  }
+}
+
 /* Al pedir obra: SELECT obras activas (LIMIT 3) y envía botones */
 async function askForWork(phone: string, userId: string, data: Record<string, any>) {
   const activeWorks = (data.works || []).filter((w: any) => w.status === "activa");
@@ -647,6 +662,17 @@ async function handleButtonReply(from: string, buttonId: string) {
     return;
   }
 
+  /* [GADU-WA-SUPPORT] Si hay un ticket ABIERTO, ignorar cualquier botón salvo
+     los de "hablar con humano" (que re-confirman el ticket). */
+  if (buttonId !== "action_humano" && buttonId !== "fallback_humano") {
+    try {
+      if (await hasOpenSupport(from)) {
+        console.log("[GADU-WA-SUPPORT] ticket abierto, ignorando botón:", buttonId);
+        return;
+      }
+    } catch (e) {}
+  }
+
   /* [GADU-WA-MENU] Opciones del menú principal (lista interactiva unificada) */
   if (buttonId.startsWith("action_")) {
     const act = buttonId.slice("action_".length);
@@ -804,6 +830,18 @@ async function processMessage(body: unknown) {
     if (!supabaseUrl() || !serviceKey()) {
       console.error("[whatsapp-webhook] falta SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
       return;
+    }
+
+    /* [GADU-WA-SUPPORT] Soporte humano activo: si hay un ticket OPEN para este
+       teléfono, ignorar los mensajes entrantes. El bot no responde (ni menú ni
+       fallback) hasta que el admin cierre el ticket en el panel. */
+    try {
+      if (await hasOpenSupport(inc.from)) {
+        console.log("[GADU-WA-SUPPORT] ticket abierto para", inc.from, "→ ignorando mensaje");
+        return json({ ok: true, from: inc.from, ignored: true });
+      }
+    } catch (e) {
+      console.warn("[GADU-WA-SUPPORT] error chequeando ticket:", e);
     }
 
     /* 0) Código de licencia "GADU-XXXXXX": validar contra license_codes y
