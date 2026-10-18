@@ -234,12 +234,13 @@ async function sendWhatsAppButtons(
   return res.ok;
 }
 
-/* Envía un mensaje interactivo de tipo "list" (hasta 10 filas) para cuando
-   hay más de 3 obras. Cada fila usa el mismo id "assign_work:<ID>" que los botones. */
+/* Envía un mensaje interactivo de tipo "list" (hasta 10 filas).
+   Cada fila usa un id estable; `description` y los rótulos son configurables. */
 async function sendWhatsAppList(
   to: string,
   text: string,
-  works: Array<{ id: string; title: string }>,
+  works: Array<{ id: string; title: string; description?: string }>,
+  opts?: { button?: string; sectionTitle?: string },
 ): Promise<boolean> {
   const token = Deno.env.get("WHATSAPP_TOKEN") || "";
   const phoneId = Deno.env.get("WHATSAPP_PHONE_ID") || "";
@@ -248,6 +249,8 @@ async function sendWhatsAppList(
     console.warn("[GADU-WA-LIST] sin WHATSAPP_TOKEN/WHATSAPP_PHONE_ID");
     return false;
   }
+  const buttonLabel = (opts && opts.button) || "Ver opciones";
+  const sectionTitle = (opts && opts.sectionTitle) || "Opciones";
   const body = {
     messaging_product: "whatsapp",
     to: toMetaPhone(to),
@@ -256,13 +259,13 @@ async function sendWhatsAppList(
       type: "list",
       body: { text },
       action: {
-        button: "Asignar Obra",
+        button: buttonLabel,
         sections: [{
-          title: "Obras",
+          title: sectionTitle,
           rows: works.slice(0, 10).map(w => ({
             id: w.id,
             title: w.title.slice(0, 24),
-            description: "Asignar gasto",
+            description: w.description || "Seleccionar opción",
           })),
         }],
       },
@@ -644,6 +647,50 @@ async function handleButtonReply(from: string, buttonId: string) {
     return;
   }
 
+  /* [GADU-WA-MENU] Opciones del menú principal (lista interactiva unificada) */
+  if (buttonId.startsWith("action_")) {
+    const act = buttonId.slice("action_".length);
+    if (act === "nuevo_gasto") {
+      fireAndForget(sendWhatsApp(from, "Dale, decime el monto y el concepto (ej: \"Gasté 5000 de nafta\")"));
+      await deleteSession(normalizePhone(from));
+      return;
+    }
+    if (act === "nueva_obra") {
+      fireAndForget(sendWhatsApp(from, "¿Cómo se llama la obra y en qué dirección está?"));
+      await deleteSession(normalizePhone(from));
+      return;
+    }
+    if (act === "adelanto") {
+      await upsertSession(from, userId, "WAITING_ADVANCE", {});
+      fireAndForget(sendWhatsApp(from, "💸 Decime *a qué empleado* y *de cuánto* es el adelanto. Ej: \"Adelanto de Hugo de 12000\"."));
+      return;
+    }
+    if (act === "presupuesto") {
+      fireAndForget(sendWhatsApp(from, "📄 Contame el presupuesto, por ejemplo: \"Presupuesto para Juan Perez: 20m2 de cerámica, 3 bolsas de pegamento\"."));
+      await deleteSession(normalizePhone(from));
+      return;
+    }
+    if (act === "consulta") {
+      fireAndForget(sendWhatsApp(from, "¿Qué querés consultar? Saldo de una obra, gastos de la semana, etc."));
+      await deleteSession(normalizePhone(from));
+      return;
+    }
+    if (act === "humano") {
+      try {
+        await rest("support_tickets", {
+          method: "POST",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ user_id: userId, phone: from, message: "Solicitud de soporte desde WhatsApp", status: "open" }),
+        });
+      } catch (e) {}
+      fireAndForget(sendWhatsApp(from, "✅ Tu pedido fue enviado. Un asesor de GADU te contactará por este medio a la brevedad."));
+      await deleteSession(normalizePhone(from));
+      return;
+    }
+    console.warn("[GADU-WA-MENU] acción desconocida:", act);
+    return;
+  }
+
   /* [GADU-WA-AI-UPGRADE] Botones del fallback inteligente (no necesitan gasto pendiente) */
   if (buttonId === "fallback_gasto") {
     fireAndForget(sendWhatsApp(from, "💰 Decime el gasto, por ejemplo: \"Gasté 15000 en cemento\" o \"5000 de nafta\"."));
@@ -837,6 +884,28 @@ async function processMessage(body: unknown) {
       const reply = "¡Hola! Tu cuenta de Gestión GADU ha sido vinculada correctamente con este número de WhatsApp. Ya podés recibir tus avisos y reportes aquí.";
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
+    }
+
+    /* 1b) Menú principal unificado: saludo + lista de opciones (igual que la web).
+       Solo si el texto es un saludo/palabra clave y NO está en medio de un wizard. */
+    const menuText = String(inc.text || "").trim().toLowerCase();
+    if (/^(hola|holis|holi|buenas|buen\s*d[ií]a|buenos\s*d[ií]as|menu|men[uú]|empezar|ayuda|help|inicio)\b/.test(menuText)) {
+      try {
+        const sessMenu = await getSession(normalizePhone(inc.from));
+        if (!sessMenu || !sessMenu.state) {
+          const opts = [
+            { id: "action_nueva_obra", title: "Nueva Obra" },
+            { id: "action_nuevo_gasto", title: "Cargar Gasto" },
+            { id: "action_adelanto", title: "Pago / Adelanto" },
+            { id: "action_presupuesto", title: "Presupuesto" },
+            { id: "action_consulta", title: "Consultar Saldo" },
+            { id: "action_humano", title: "Hablar con humano" },
+          ];
+          fireAndForget(sendWhatsApp(inc.from, "¡Hola! 👋 Soy tu asistente GADU. ¿Qué querés hacer hoy?"));
+          await sendWhatsAppList(inc.from, "Elegí una opción 👇", opts, { button: "Ver opciones", sectionTitle: "Menú" });
+          return json({ ok: true, from: inc.from });
+        }
+      } catch (e) { /* si no hay sesión, seguimos normal */ }
     }
 
     /* 2) Usuario vinculado: busca por linkedPhone/phone (app_data) y por la
