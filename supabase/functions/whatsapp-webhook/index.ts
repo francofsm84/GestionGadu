@@ -739,13 +739,13 @@ async function handleButtonReply(from: string, buttonId: string) {
       return;
     }
     if (act === "presupuesto") {
+      await upsertSession(from, userId, "WAITING_PRESUPUESTO", {});
       fireAndForget(sendWhatsApp(from, "¿Para qué cliente es el presupuesto y qué ítems incluye?"));
-      await deleteSession(normalizePhone(from));
       return;
     }
     if (act === "consulta") {
+      await upsertSession(from, userId, "WAITING_CONSULTA", {});
       fireAndForget(sendWhatsApp(from, "¿Qué querés consultar? Saldo de una obra, gastos de la semana, etc."));
-      await deleteSession(normalizePhone(from));
       return;
     }
     if (act === "contacto") {
@@ -1132,6 +1132,37 @@ async function processMessage(body: unknown) {
         fireAndForget(sendWhatsApp(inc.from, "🤖 Decime el gasto, por ejemplo: \"Gasté 5000 de nafta\" o \"5000 de cemento\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
+    }
+
+    /* [GADU-WA-WIZARD] Presupuesto (WAITING_PRESUPUESTO): la IA extrae cliente + ítems.
+       Interceptamos el texto, limpiamos el estado y dejamos que la IA (CREATE_BUDGET)
+       lo procese sin que el menú de respaldo lo intercepte. */
+    let enWizardPresupuesto = false;
+    try {
+      const sessPres = await getSession(normalizePhone(inc.from));
+      if (sessPres && sessPres.state === "WAITING_PRESUPUESTO") enWizardPresupuesto = true;
+    } catch (e) {}
+    if (enWizardPresupuesto) {
+      if (!inc.text || !inc.text.trim()) {
+        fireAndForget(sendWhatsApp(inc.from, "🤖 Contame qué querés incluir en el presupuesto y para qué cliente."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      await deleteSession(normalizePhone(inc.from));   // la IA procesa el texto libre a continuación
+    }
+
+    /* [GADU-WA-WIZARD] Consulta (WAITING_CONSULTA): la IA resuelve la pregunta.
+       Igual que arriba: limpiamos el estado y dejamos que QUERY_DATA responda. */
+    let enWizardConsulta = false;
+    try {
+      const sessCons = await getSession(normalizePhone(inc.from));
+      if (sessCons && sessCons.state === "WAITING_CONSULTA") enWizardConsulta = true;
+    } catch (e) {}
+    if (enWizardConsulta) {
+      if (!inc.text || !inc.text.trim()) {
+        fireAndForget(sendWhatsApp(inc.from, "🤖 ¿Qué querés consultar? Saldo de una obra, gastos de la semana, etc."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      await deleteSession(normalizePhone(inc.from));   // la IA (QUERY_DATA) responde a continuación
     }
 
     /* [GADU-WA-AI-UPGRADE] Wizard de adelanto en curso (estado WAITING_ADVANCE) */
