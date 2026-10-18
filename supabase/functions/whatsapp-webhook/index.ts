@@ -1368,6 +1368,9 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
     }
 
+    const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra"];
+    console.log("[GADU-WA-INTENT] texto a interpretar:", JSON.stringify(inc.text));
+
     const aiController = new AbortController();
     const aiTimer = setTimeout(() => aiController.abort(), 10000);
     try {
@@ -1392,10 +1395,10 @@ async function processMessage(body: unknown) {
       const ai = await aiRes.json().catch(() => ({}));
       console.log("[GADU-WA-BACKGROUND] ai-assistant http", aiRes.status, "· action:", JSON.stringify(ai.action || null), "· reply:", JSON.stringify(ai.reply || ai.error || ""));
       aiReply = ai.reply || "";
-      if (ai.action && ai.action.modulo) {
+      if (ai.action && ai.action.modulo && RECOGNIZED_MODULOS.includes(ai.action.modulo)) {
         action = ai.action;
       } else {
-        console.warn("[GADU-WA-BACKGROUND] IA SIN acción. status=", aiRes.status, "· body:", JSON.stringify(ai));
+        console.warn("[GADU-WA-BACKGROUND] IA sin acción o módulo no reconocido:", JSON.stringify(ai.action || null), "· status=", aiRes.status);
       }
     } catch (e) {
       console.error("[GADU-WA-BACKGROUND] ai-assistant falló/abortó:", e);
