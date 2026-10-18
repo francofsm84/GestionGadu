@@ -867,6 +867,21 @@ async function processMessage(body: unknown) {
       console.warn("[whatsapp-webhook] payload no reconocido:", JSON.stringify(body));
       return;
     }
+
+    /* [GADU-WA-SUPPORT] Soporte humano activo: PRIORITARIO, antes de cualquier
+       respuesta automática (menús, estados, audios). Si hay ticket OPEN, anexar
+       el mensaje y retornar sin que el bot responda. */
+    try {
+      const openTicket = await getOpenSupportTicket(resolved.from);
+      if (openTicket) {
+        console.log("[GADU-WA-SUPPORT] ticket abierto para", resolved.from, "→ registrando y sin responder");
+        if (resolved.text) await appendSupportMessage(resolved.from, resolved.text);
+        return json({ ok: true, from: resolved.from, ignored: true });
+      }
+    } catch (e) {
+      console.warn("[GADU-WA-SUPPORT] error chequeando ticket:", e);
+    }
+
     if (resolved.audioFailed) {
       console.warn("[GADU-WA-AUDIO] transcripción falló para", resolved.from);
       fireAndForget(sendWhatsApp(resolved.from, "🤖 No pude escuchar el audio, ¿me lo escribís?"));
@@ -879,20 +894,6 @@ async function processMessage(body: unknown) {
     if (!supabaseUrl() || !serviceKey()) {
       console.error("[whatsapp-webhook] falta SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
       return;
-    }
-
-    /* [GADU-WA-SUPPORT] Soporte humano activo: si hay un ticket OPEN para este
-       teléfono, ignorar los mensajes entrantes. El bot no responde (ni menú ni
-       fallback) hasta que el admin cierre el ticket en el panel. */
-    try {
-      const openTicket = await getOpenSupportTicket(inc.from);
-      if (openTicket) {
-        console.log("[GADU-WA-SUPPORT] ticket abierto para", inc.from, "→ registrando mensaje y sin responder");
-        await appendSupportMessage(inc.from, inc.text);
-        return json({ ok: true, from: inc.from, ignored: true });
-      }
-    } catch (e) {
-      console.warn("[GADU-WA-SUPPORT] error chequeando ticket:", e);
     }
 
     /* 0) Código de licencia "GADU-XXXXXX": validar contra license_codes y
