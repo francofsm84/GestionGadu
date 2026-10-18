@@ -43,9 +43,27 @@ export async function claimNext(
   const up = await rest("whatsapp_queue?id=eq." + item.id, {
     method: "PATCH",
     headers: { Prefer: "return=minimal" },
-    body: JSON.stringify({ status: "processing", attempts: item.attempts + 1 }),
+    body: JSON.stringify({ status: "processing", attempts: item.attempts + 1, claimed_at: new Date().toISOString() }),
   });
   return up.ok ? item : null;
+}
+
+/* Libera mensajes 'processing' que quedaron huérfanos (crash) hace más de 3 min.
+   Los devuelve a 'pending' para que se reintenten. Devuelve cuántos liberó. */
+export async function resetStaleProcessing(
+  rest: (path: string, opts?: Record<string, unknown>) => Promise<Response>,
+): Promise<number> {
+  const cutoff = new Date(Date.now() - 3 * 60000).toISOString();
+  const up = await rest(
+    "whatsapp_queue?status=eq.processing&claimed_at=lt." + encodeURIComponent(cutoff) + "&select=id",
+    {
+      method: "PATCH",
+      headers: { Prefer: "return=representation" },
+      body: JSON.stringify({ status: "pending", claimed_at: null }),
+    },
+  );
+  const rows = (await up.json().catch(() => [])) as Array<{ id: number }>;
+  return Array.isArray(rows) ? rows.length : 0;
 }
 
 export async function markDone(

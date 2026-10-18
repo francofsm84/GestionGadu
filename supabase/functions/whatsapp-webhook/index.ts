@@ -42,7 +42,7 @@ import {
   extractFrom,
 } from "./core.ts";
 import { resolveIncomingText } from "./transcribe.ts";
-import { enqueueMessage, claimNext, markDone, markFailed } from "./queue.ts";
+import { enqueueMessage, claimNext, markDone, markFailed, resetStaleProcessing } from "./queue.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -1140,6 +1140,14 @@ async function processMessage(body: unknown) {
 
 /* ===== Drain FIFO de la cola ===== */
 async function drainPhone(phone: string) {
+  /* [GADU-WA-RESET] Liberar mensajes 'processing' huérfanos (crash) hace más de 3 min */
+  try {
+    const freed = await resetStaleProcessing(rest);
+    if (freed > 0) console.warn("[GADU-WA-RESET] liberados", freed, "mensaje(s) processing huérfano(s)");
+  } catch (e) {
+    console.warn("[GADU-WA-RESET] error liberando huérfanos:", e);
+  }
+
   /* Mutex por teléfono: si otro drain ya tiene un mensaje en 'processing',
      salimos para no pisar el read-modify-write de app_data. */
   const busy = await rest("whatsapp_queue?status=eq.processing&phone=eq." + encodeURIComponent(phone) + "&limit=1", { method: "GET" });
