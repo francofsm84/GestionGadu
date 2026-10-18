@@ -44,7 +44,7 @@
   function filtered() {
     const q = state.q.toLowerCase();
     return S.data.employees.slice().sort((a, b) => S.employeeName(a).localeCompare(S.employeeName(b))).filter(e => {
-      const hay = (S.employeeName(e) + ' ' + (e.paymentData || '') + ' ' + (e.notes || '')).toLowerCase();
+      const hay = (S.employeeName(e) + ' ' + (e.role || '') + ' ' + (e.paymentData || '') + ' ' + (e.notes || '')).toLowerCase();
       const activeOk = state.filter === 'todos' || (state.filter === 'activos' ? e.active !== false : e.active === false);
       return activeOk && (!q || hay.includes(q));
     });
@@ -107,7 +107,7 @@
       kpi('check-circle', 'violet', 'Presentes hoy', String(today.length), monthDays + ' jornadas este mes') +
       '</section>' +
       '<div class="toolbar">' +
-      '<div class="search">' + UI.icon('search', 16) + '<input id="fq" class="input" placeholder="Buscar por nombre, alias o notas…" value="' + UI.escapeHtml(state.q) + '"></div>' +
+      '<div class="search">' + UI.icon('search', 16) + '<input id="fq" class="input" placeholder="Buscar por nombre, rol, alias o notas…" value="' + UI.escapeHtml(state.q) + '"></div>' +
       '<select id="ff" class="select" style="max-width:160px">' +
       '<option value="activos"' + (state.filter === 'activos' ? ' selected' : '') + '>Activos</option>' +
       '<option value="todos"' + (state.filter === 'todos' ? ' selected' : '') + '>Todos</option>' +

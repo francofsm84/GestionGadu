@@ -10,6 +10,7 @@
   const routes = [];
   let current = null;
   let resizeTimer = null;
+  let realtimeCleanup = null;   // cleanup del canal Realtime (para cerrar al logout)
 
   const router = {
     add(key, pattern, title, subtitle, render) {
@@ -377,6 +378,7 @@
       });
       if (ok) {
         await G.auth.logout();
+        try { if (realtimeCleanup) { realtimeCleanup(); realtimeCleanup = null; } } catch (e) {}
         S.attachUser(null);
         location.reload();
       }
@@ -1012,7 +1014,7 @@
 
     /* Supabase Realtime: cambios de app_data desde OTRO dispositivo (sync instantánea) */
     try {
-      G.sync.subscribeRealtime((remoteData, updatedAt) => {
+      realtimeCleanup = G.sync.subscribeRealtime((remoteData, updatedAt) => {
         if (!remoteData) return;
         const localTs = (S.data && S.data.settings && S.data.settings.lastCloudSync) || 0;
         /* Ignorar si la versión local ya es igual o más nueva (evita bucle de push) */
@@ -1023,7 +1025,7 @@
           try { renderNow(); } catch (e) {}
         }
       });
-    } catch (e) {}
+    } catch (e) { realtimeCleanup = null; }
 
     /* Asistente de IA (chat flotante) */
     try { G.ai.init(); } catch (e) {}
