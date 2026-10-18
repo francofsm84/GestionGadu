@@ -227,10 +227,9 @@
       /* 2) Bandera completada (memoria + localStorage, síncrono) */
       if (S.hasOnboarded && S.hasOnboarded()) return;
       if (!S.data || !S.data.settings) return;
-      /* 3) Perfil válido / WhatsApp vinculado / datos existentes → forzar true */
+      /* 3) WhatsApp vinculado o datos existentes → forzar true y no interrumpir */
       const wa = S.data.settings.profile && S.data.settings.profile.whatsapp;
-      const prof = S.data.settings.profile || {};
-      if ((wa && wa.linked) || prof.nombre || prof.apellido || prof.apodo || (S.hasLocalData && S.hasLocalData())) {
+      if ((wa && wa.linked) || (S.hasLocalData && S.hasLocalData())) {
         forceDone();
         return;
       }
