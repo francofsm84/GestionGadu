@@ -32,31 +32,11 @@
   }
 
   /* Compresión de imagen en cliente (canvas) */
-  function compressImage(file, maxDim, quality) {
-    maxDim = maxDim || 1200; quality = quality || 0.8;
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => {
-        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-        const w = Math.max(1, Math.round(img.width * scale));
-        const h = Math.max(1, Math.round(img.height * scale));
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        URL.revokeObjectURL(url);
-        canvas.toBlob(b => (b ? resolve(b) : reject(new Error('No se pudo comprimir'))), 'image/jpeg', quality);
-      };
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Imagen inválida')); };
-      img.src = url;
-    });
-  }
-
   /* Sube una foto de obra a Supabase Storage y devuelve la URL pública */
   async function uploadWorkPhoto(file, workId) {
     const sess = G.auth && G.auth.getSession ? G.auth.getSession() : null;
     const uid = (sess && sess.userId) || 'anon';
-    const blob = await compressImage(file);
+    const blob = await UI.compressImage(file);
     const path = uid + '/works/' + workId + '/' + Date.now() + '.jpg';
     const res = await fetch(G.auth.SUPABASE_URL + '/storage/v1/object/gadu_tickets/' + path, {
       method: 'POST',

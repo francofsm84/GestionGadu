@@ -5,6 +5,7 @@
   'use strict';
   const G = root.GADU = root.GADU || {};
   const UI = {};
+  let modalCount = 0;   // para restaurar el scroll del fondo al cerrar el último modal
 
   /* ---------- Formateo ---------- */
   const NF = new Intl.NumberFormat('es-AR');
@@ -12,6 +13,31 @@
   const MF2 = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   UI.fmtMoney = (v, dec) => (dec ? MF2 : MF0).format(Number(v) || 0);
+
+  /* Compresión de imagen en cliente (canvas → JPEG). Libera la memoria
+     del canvas al final (width/height = 0). Devuelve un Promise<Blob>. */
+  UI.compressImage = (file, maxDim, quality) => {
+    maxDim = maxDim || 1200; quality = quality || 0.8;
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(b => {
+          canvas.width = 0; canvas.height = 0;   // liberar memoria GPU del canvas
+          b ? resolve(b) : reject(new Error('No se pudo comprimir'));
+        }, 'image/jpeg', quality);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Imagen inválida')); };
+      img.src = url;
+    });
+  };
   UI.fmtNum = v => NF.format(Number(v) || 0);
   UI.fmtCompact = v => {
     const n = Number(v) || 0;
@@ -396,12 +422,18 @@
     const close = () => {
       overlay.remove();
       document.removeEventListener('keydown', esc);
+      /* Restaurar el scroll del fondo SOLO al cerrar el último modal abierto */
+      modalCount = Math.max(0, modalCount - 1);
+      if (modalCount === 0) document.body.style.overflow = '';
     };
     const esc = e => { if (e.key === 'Escape') close(); };
     overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
     overlay.querySelector('[data-close]').addEventListener('click', close);
     document.addEventListener('keydown', esc);
     rootEl.appendChild(overlay);
+    /* Bloquear el scroll del fondo mientras haya modales abiertos */
+    modalCount++;
+    document.body.style.overflow = 'hidden';
     requestAnimationFrame(() => overlay.classList.add('show'));
     return { overlay, panel: overlay.querySelector('.modal'), close };
   };
