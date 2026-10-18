@@ -917,7 +917,7 @@
     if (!sess) { renderLogin('login'); return; }
     initSyncIndicator();
     S.attachUser(sess.userId);
-    S.load();
+    await S.load();
     applyTheme(S.data.settings.theme || 'dark');
     document.body.classList.remove('no-session');
     const lr = document.getElementById('loginRoot');
