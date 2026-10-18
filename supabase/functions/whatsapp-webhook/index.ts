@@ -27,6 +27,7 @@
 // ============================================================
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
 import {
   matchVerificationCode,
   normalizePhone,
@@ -363,6 +364,102 @@ function queryPendingSalaries(data: Record<string, any>, target: string): string
 
   const deuda = generado - (pagado + adelantos);
   return "💸 *" + nombre + "*: Trabajó " + horas + " hs. Generó " + money(generado) + ". Pagado/Adelantado " + money(pagado + adelantos) + ". *Saldo pendiente: " + money(deuda) + "*";
+}
+
+/* ===== Presupuesto en PDF (pdf-lib) + envío de documentos ===== */
+interface BudgetItem { descripcion: string; cantidad: number; precio: number }
+
+async function generateBudgetPDF(budgetData: { cliente: string; items: BudgetItem[] }): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
+  let page = doc.addPage([595.28, 841.89]); // A4 portrait
+  const hoy = new Date().toLocaleDateString("es-AR", { day: "2-digit", month: "long", year: "numeric" });
+
+  const drawHeader = () => {
+    const { height } = page.getSize();
+    page.drawText("PRESUPUESTO GADU", { x: 50, y: height - 60, size: 22, font: fontBold, color: rgb(0.06, 0.09, 0.13) });
+    page.drawText("GADU Construye · Tu gestión, perfecta", { x: 50, y: height - 82, size: 11, font: font, color: rgb(0.39, 0.45, 0.55) });
+    page.drawText("Fecha: " + hoy, { x: 400, y: height - 60, size: 10, font: font, color: rgb(0.39, 0.45, 0.55) });
+    page.drawText("Cliente: " + (budgetData.cliente || "—"), { x: 50, y: height - 118, size: 13, font: fontBold, color: rgb(0.06, 0.09, 0.13) });
+  };
+
+  drawHeader();
+  let y = 841.89 - 158;
+  const cols = { desc: 50, cant: 330, prec: 400, total: 470 };
+  page.drawText("Descripción", { x: cols.desc, y, size: 10, font: fontBold, color: rgb(0.39, 0.45, 0.55) });
+  page.drawText("Cant.", { x: cols.cant, y, size: 10, font: fontBold, color: rgb(0.39, 0.45, 0.55) });
+  page.drawText("P. unit.", { x: cols.prec, y, size: 10, font: fontBold, color: rgb(0.39, 0.45, 0.55) });
+  page.drawText("Total", { x: cols.total, y, size: 10, font: fontBold, color: rgb(0.39, 0.45, 0.55) });
+  y -= 16;
+  page.drawLine({ start: { x: 50, y: y + 8 }, end: { x: 545, y: y + 8 }, thickness: 1, color: rgb(0.83, 0.86, 0.9) });
+
+  let totalGeneral = 0;
+  for (const it of budgetData.items || []) {
+    if (y < 90) { page = doc.addPage([595.28, 841.89]); drawHeader(); y = 841.89 - 158; }
+    y -= 22;
+    const cant = Number(it.cantidad) || 0;
+    const prec = Number(it.precio) || 0;
+    const tot = cant * prec;
+    totalGeneral += tot;
+    page.drawText(String(it.descripcion || "").slice(0, 55), { x: cols.desc, y, size: 10, font: font, color: rgb(0.06, 0.09, 0.13) });
+    page.drawText(String(cant), { x: cols.cant, y, size: 10, font: font, color: rgb(0.06, 0.09, 0.13) });
+    page.drawText("$" + prec.toLocaleString("es-AR"), { x: cols.prec, y, size: 10, font: font, color: rgb(0.06, 0.09, 0.13) });
+    page.drawText("$" + tot.toLocaleString("es-AR"), { x: cols.total, y, size: 10, font: font, color: rgb(0.06, 0.09, 0.13) });
+  }
+
+  y -= 30;
+  page.drawLine({ start: { x: 50, y: y + 12 }, end: { x: 545, y: y + 12 }, thickness: 1.5, color: rgb(0.83, 0.86, 0.9) });
+  page.drawText("TOTAL", { x: cols.desc, y, size: 12, font: fontBold, color: rgb(0.06, 0.09, 0.13) });
+  page.drawText("$" + totalGeneral.toLocaleString("es-AR"), { x: cols.total, y, size: 12, font: fontBold, color: rgb(0.06, 0.09, 0.13) });
+
+  page.drawText("Generado por GADU - Tu gestión, perfecta", { x: 50, y: 40, size: 10, font: font, color: rgb(0.58, 0.63, 0.71) });
+
+  return await doc.save();
+}
+
+async function sendWhatsAppDocument(to: string, pdfBytes: Uint8Array, filename: string): Promise<boolean> {
+  const token = Deno.env.get("WHATSAPP_TOKEN") || "";
+  const phoneId = Deno.env.get("WHATSAPP_PHONE_ID") || "";
+  const apiVersion = Deno.env.get("WHATSAPP_API_VERSION") || "v21.0";
+  if (!token || !phoneId) {
+    console.warn("[GADU-WA-DOC] sin WHATSAPP_TOKEN/WHATSAPP_PHONE_ID");
+    return false;
+  }
+
+  /* 1) Subir el PDF a Meta para obtener media_id */
+  const form = new FormData();
+  form.append("file", new Blob([pdfBytes], { type: "application/pdf" }), filename);
+  form.append("messaging_product", "whatsapp");
+  form.append("type", "application/pdf");
+  const up = await fetch(`https://graph.facebook.com/${apiVersion}/${phoneId}/media`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const upJson = await up.json().catch(() => ({}));
+  if (!up.ok || !upJson.id) {
+    console.error("[GADU-WA-DOC] subir media falló:", up.status, JSON.stringify(upJson));
+    return false;
+  }
+  const mediaId = String(upJson.id);
+
+  /* 2) Enviar el mensaje tipo document con ese media_id */
+  const body = {
+    messaging_product: "whatsapp",
+    to: toMetaPhone(to),
+    type: "document",
+    document: { id: mediaId, filename, caption: "Presupuesto GADU" },
+  };
+  const res = await fetch(`https://graph.facebook.com/${apiVersion}/${phoneId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  const respText = await res.text().catch(() => "");
+  if (!res.ok) console.error("[GADU-WA-DOC] enviar documento falló:", res.status, respText);
+  else console.log("[GADU-WA-DOC] documento enviado OK:", filename);
+  return res.ok;
 }
 
 serve(async (req) => {
@@ -801,6 +898,31 @@ async function processMessage(body: unknown) {
       console.log("[GADU-WA-QUERY]", qtype || "(sin tipo)", "· target:", target);
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
+    }
+
+    /* Presupuesto PDF (CREATE_BUDGET): generar + subir + enviar documento */
+    if (action && action.modulo === "presupuesto_pdf") {
+      const c = (action.campos || {}) as Record<string, unknown>;
+      const cliente = String(c.cliente || "Cliente");
+      const items = Array.isArray(c.items)
+        ? c.items.map((it: any) => ({ descripcion: String(it.descripcion || ""), cantidad: Number(it.cantidad) || 0, precio: Number(it.precio) || 0 }))
+        : [];
+      if (!items.length) {
+        fireAndForget(sendWhatsApp(inc.from, "🤖 Me faltan los ítems del presupuesto. Decímelos de nuevo, por ejemplo: \"20 m2 de cerámica, 3 bolsas de pegamento\"."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      try {
+        const pdf = await generateBudgetPDF({ cliente, items });
+        const filename = "Presupuesto_" + String(cliente || "gadu").replace(/[^a-z0-9áéíóúñ ]/gi, "").replace(/\s+/g, "_") + ".pdf";
+        const ok = await sendWhatsAppDocument(inc.from, pdf, filename);
+        const reply = ok ? "✅ Acá tenés el presupuesto para " + cliente + "." : "❌ No pude enviar el PDF. Probá de nuevo.";
+        fireAndForget(sendWhatsApp(inc.from, reply));
+        return json({ ok: true, from: inc.from, reply });
+      } catch (e) {
+        console.error("[GADU-WA-DOC] error generando PDF:", e);
+        fireAndForget(sendWhatsApp(inc.from, "❌ No pude generar el PDF. Probá de nuevo."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
     }
 
     /* 4) Ejecutar la acción contable (gasto/ingreso) e impactar en app_data */

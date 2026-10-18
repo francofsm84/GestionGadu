@@ -74,6 +74,11 @@ TOLERANCIA Y ADELANTOS (crítico):
 - Si el usuario escribe SOLO "adelanto" (sin nombre ni monto), respondé con UNA pregunta corta y amigable pidiendo los datos (ej. "¿A qué empleado y de cuánto es el adelanto?"). No lo mandes a la web.
 - ASK_FOR_CLARIFICATION: si falta un dato obligatorio (monto, empleado u obra), NO llames la herramienta con datos incompletos. Respondé con UNA pregunta corta pidiendo el dato que falta (ej. "¿De cuánto es el adelanto?" o "¿A qué obra corresponde?").
 
+PRESUPUESTO PDF (CREATE_BUDGET):
+- Si el usuario pide un PRESUPUESTO para un cliente (ej. "Presupuesto para Juan Perez: 20m2 de cerámica, 3 bolsas de pegamento"), llamá "abrir_formulario" con modulo="presupuesto_pdf" y campos={"cliente": "<nombre del cliente>", "items": [{"descripcion":"...","cantidad":<n>,"precio":<n>}, ...]}.
+- "items" = array de ítems. Cada ítem con "descripcion" (texto), "cantidad" (número) y "precio" (precio unitario; si el usuario NO lo dice, poné 0).
+- Si falta el nombre del cliente o no hay ítems, preguntá en lugar de llamar la herramienta.
+
 - Si el CONTEXTO muestra UNA sola obra activa y el usuario pide cargar un gasto/ingreso/adelanto SIN especificar obra, NO preguntes: llamá "abrir_formulario" con el campo "obra" vacío (la app la asigna sola automáticamente).
 - Si hay VARIAS obras y el usuario NOMBRA una obra o cliente, usá ese nombre exacto en "obra"/"cliente".
 - Si la información es ambigua o incompleta, NO adivines y NO llames la herramienta. Respondé con una pregunta aclaratoria corta que LISTE las opciones disponibles del CONTEXTO por su nombre (ej. "¿A qué obra corresponde: El arreglo del baño o Refacciones?"), para que el usuario conteste por voz. Si falta un dato obligatorio (ej. la obra en un ingreso), pedilo puntualmente.`;
@@ -110,10 +115,10 @@ function tools() {
       parameters: {
         type: "OBJECT",
         properties: {
-          modulo: { type: "STRING", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada", "adelanto", "consulta"], description: "Qué formulario abrir. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = el usuario hace una pregunta sobre sus datos." },
+          modulo: { type: "STRING", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada", "adelanto", "consulta", "presupuesto_pdf"], description: "Qué formulario abrir. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = generar un presupuesto en PDF para un cliente." },
           campos: {
             type: "OBJECT",
-            description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol (oficio/puesto del empleado), cliente, obra, empleado, monto (número), concepto, categoria, horas (número), ubicacion (para obra), presupuesto (número), query_type (solo con modulo='consulta'), target (solo con modulo='consulta').",
+            description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol, cliente, obra, empleado, monto, concepto, categoria, horas, ubicacion, presupuesto, query_type, target, items (solo con modulo='presupuesto_pdf').",
             properties: {
               nombre: { type: "STRING" },
               apellido: { type: "STRING" },
@@ -129,6 +134,18 @@ function tools() {
               presupuesto: { type: "NUMBER" },
               query_type: { type: "STRING", enum: ["expenses_week", "balance_work", "attendance_today", "pending_salaries"] },
               target: { type: "STRING" },
+              items: {
+                type: "ARRAY",
+                description: "Ítems del presupuesto (solo con modulo='presupuesto_pdf').",
+                items: {
+                  type: "OBJECT",
+                  properties: {
+                    descripcion: { type: "STRING" },
+                    cantidad: { type: "NUMBER" },
+                    precio: { type: "NUMBER" },
+                  },
+                },
+              },
             },
           },
         },
@@ -149,10 +166,10 @@ function toolsOpenAI() {
       parameters: {
         type: "object",
         properties: {
-          modulo: { type: "string", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada", "adelanto", "consulta"], description: "Qué formulario abrir. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = el usuario hace una pregunta sobre sus datos." },
+          modulo: { type: "string", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada", "adelanto", "consulta", "presupuesto_pdf"], description: "Qué formulario abrir. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = generar un presupuesto en PDF para un cliente." },
           campos: {
             type: "object",
-            description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol, cliente, obra, empleado, monto, concepto, categoria, horas, ubicacion, presupuesto, query_type (solo con modulo='consulta'), target (solo con modulo='consulta').",
+            description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol, cliente, obra, empleado, monto, concepto, categoria, horas, ubicacion, presupuesto, query_type, target, items (solo con modulo='presupuesto_pdf').",
             properties: {
               nombre: { type: "string" },
               apellido: { type: "string" },
@@ -168,6 +185,18 @@ function toolsOpenAI() {
               presupuesto: { type: "number" },
               query_type: { type: "string", enum: ["expenses_week", "balance_work", "attendance_today", "pending_salaries"] },
               target: { type: "string" },
+              items: {
+                type: "array",
+                description: "Ítems del presupuesto (solo con modulo='presupuesto_pdf').",
+                items: {
+                  type: "object",
+                  properties: {
+                    descripcion: { type: "string" },
+                    cantidad: { type: "number" },
+                    precio: { type: "number" },
+                  },
+                },
+              },
             },
           },
         },
