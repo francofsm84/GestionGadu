@@ -20,13 +20,27 @@ function toMetaPhone(p: unknown): string {
   return d;
 }
 
+/* fetch con timeout (AbortController). Lanza "Timeout exceeded" si se agota. */
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 8000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (e) {
+    if (controller.signal.aborted) throw new Error("Timeout exceeded");
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /* Dispara una notificación push (fire-and-forget; nunca bloquea ni tira) */
 function firePush(userId: string, title: string, message: string, url: string) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
   const serviceSecret = Deno.env.get("SERVICE_SECRET") || "";
   const doIt = async () => {
     try {
-      const res = await fetch(supabaseUrl + "/functions/v1/send-push", {
+      const res = await fetchWithTimeout(supabaseUrl + "/functions/v1/send-push", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-service-secret": serviceSecret },
         body: JSON.stringify({ user_id: userId, title, message, url }),
@@ -82,7 +96,7 @@ async function sendWhatsAppButtons(
     },
   };
   console.log("[GADU-WA-CRON] sendWhatsAppButtons payload:", JSON.stringify(body));
-  const res = await fetch(`https://graph.facebook.com/${API_VERSION}/${phoneId}/messages`, {
+  const res = await fetchWithTimeout(`https://graph.facebook.com/${API_VERSION}/${phoneId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(body),
@@ -126,7 +140,7 @@ async function sendWhatsAppList(
     },
   };
   console.log("[GADU-WA-CRON] sendWhatsAppList payload:", JSON.stringify(body));
-  const res = await fetch(`https://graph.facebook.com/${API_VERSION}/${phoneId}/messages`, {
+  const res = await fetchWithTimeout(`https://graph.facebook.com/${API_VERSION}/${phoneId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify(body),
@@ -166,7 +180,7 @@ serve(async (req) => {
     const restHeaders = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
 
     /* 1) Leer todos los documentos app_data */
-    const res = await fetch(supabaseUrl + "/rest/v1/app_data?select=user_id,data", { headers: restHeaders });
+    const res = await fetchWithTimeout(supabaseUrl + "/rest/v1/app_data?select=user_id,data", { headers: restHeaders });
     if (!res.ok) {
       const b = await res.text().catch(() => "");
       console.error("[GADU-WA-CRON] app_data falló:", res.status, b);
@@ -189,7 +203,7 @@ serve(async (req) => {
         "",
       );
       if (!phone) {
-        const pr = await fetch(
+        const pr = await fetchWithTimeout(
           supabaseUrl + "/rest/v1/profiles?select=whatsapp_number&user_id=eq." + encodeURIComponent(row.user_id) + "&limit=1",
           { headers: restHeaders },
         );
