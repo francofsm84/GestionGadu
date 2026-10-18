@@ -289,8 +289,8 @@
     } catch (e) {}
     const saved = Array.isArray(ticket.messages) ? ticket.messages : [];
     const hist = saved.length
-      ? saved.map(ms => ({ me: ms.role === 'admin', text: ms.text }))
-      : [{ me: false, text: message || '(sin mensaje)' }];
+      ? saved.map(ms => ({ me: ms.role === 'admin', text: ms.text, at: ms.at }))
+      : [{ me: false, text: message || '(sin mensaje)', at: ticket.created_at }];
 
     /* 2) Ficha del cliente (perfil + métricas) e historial de tickets */
     let profile = null, metrics = null, history = [];
@@ -352,10 +352,13 @@
       footer: '<button class="btn btn-ghost" data-cancel>Cerrar</button><button class="btn btn-soft" data-note>' + UI.icon('check', 14) + ' Guardar nota</button><button class="btn btn-primary" data-send>' + UI.icon('whatsapp', 14) + ' Enviar</button>',
     });
 
+    const fmtTime = at => {
+      try { return at ? new Date(at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : ''; } catch (e) { return ''; }
+    };
     const renderHist = () => {
       m.panel.querySelector('#chatHist').innerHTML = hist.map(h =>
         '<div class="card-inset" style="margin-top:6px' + (h.me ? ';background:var(--primary-soft)' : '') + '">' +
-        '<strong class="muted small">' + (h.me ? 'Vos' : 'Cliente') + '</strong>' +
+        '<strong class="muted small">' + (h.me ? 'Vos' : 'Cliente') + (fmtTime(h.at) ? ' · ' + fmtTime(h.at) : '') + '</strong>' +
         '<div style="white-space:pre-wrap">' + UI.escapeHtml(h.text) + '</div></div>').join('');
     };
     renderHist();
@@ -363,7 +366,7 @@
     const persist = async () => {
       try {
         await G.api('PATCH', '/support_tickets?id=eq.' + encodeURIComponent(id), {
-          messages: hist.map(h => ({ role: h.me ? 'admin' : 'user', text: h.text, at: new Date().toISOString() })),
+          messages: hist.map(h => ({ role: h.me ? 'admin' : 'user', text: h.text, at: h.at || new Date().toISOString() })),
         });
       } catch (e) {}
     };
@@ -388,7 +391,7 @@
       if (!text) { UI.toast('Escribí un mensaje', 'error'); return; }
       try {
         await sendWhatsAppMessage(phone, text);
-        hist.push({ me: true, text });
+        hist.push({ me: true, text, at: new Date().toISOString() });
         inp.value = '';
         renderHist();
         await persist();
