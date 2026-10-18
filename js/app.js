@@ -1043,6 +1043,24 @@
   /* API interna (para pruebas e integración) */
   G.app = { startApp, renderLogin, planInfo };
 
+  /* ---------- Service Worker (PWA offline) ---------- */
+  function registerServiceWorker() {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').then(reg => {
+        reg.addEventListener('updatefound', () => {
+          const nw = reg.installing;
+          if (nw) nw.addEventListener('statechange', () => {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+              try { if (UI && UI.toast) UI.toast('Nueva versión disponible. Recargá la página para actualizar', 'info'); } catch (e) {}
+            }
+          });
+        });
+      }).catch(err => console.warn('[SW] registro falló:', err));
+    });
+  }
+  registerServiceWorker();
+
   /* Pantalla de error visible: si algo falla al arrancar, nunca quedará
      una pantalla en negro muda — se muestra el motivo y un botón de reinicio */
   function renderBootError(err) {
