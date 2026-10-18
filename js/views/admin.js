@@ -335,7 +335,7 @@
         '<div class="card-inset client-card" style="margin-bottom:10px">' +
         '<div class="split-row"><div class="split-row-main"><strong>' + UI.escapeHtml(profile ? ((profile.nombre || '') + ' ' + (profile.apellido || '')).trim() || profile.email || 'Cliente' : 'Cliente') + '</strong>' +
         '<span class="muted small">' + UI.escapeHtml(profile ? (profile.email || '') : '') + '</span></div>' +
-        '<div class="split-row-end">' + UI.chip(statusLabel, statusTone) + '</div></div>' +
+        '<div class="split-row-end">' + UI.chip(statusLabel, statusTone) + (userId ? '<button class="btn btn-soft btn-sm" data-inspect-user title="Ver panel del usuario">' + UI.icon('eye', 14) + ' Ver Panel del Usuario</button>' : '') + '</div></div>' +
         '<div class="muted small">' +
         (profile ? 'Plan: ' + UI.escapeHtml(profile.plan_id || 'free') + ' · Estado: ' + UI.escapeHtml(profile.subscription_status || '—') : '') +
         (metrics ? (profile ? ' · ' : '') + 'Obras activas: ' + metrics.active + ' · Balance: ' + UI.fmtMoney(metrics.balance) + (metrics.lastActive ? ' · Últ. actividad: ' + UI.fmtDate(metrics.lastActive) : '') : '') +
@@ -374,6 +374,12 @@
     m.panel.querySelectorAll('[data-canned]').forEach(b => b.addEventListener('click', () => {
       m.panel.querySelector('#chatInput').value = CANNED[Number(b.dataset.canned)];
     }));
+
+    const inspectBtn = m.panel.querySelector('[data-inspect-user]');
+    if (inspectBtn) inspectBtn.addEventListener('click', () => {
+      m.close();
+      openVerDatos(userId, (profile && profile.email) || phone);
+    });
 
     m.panel.querySelector('[data-note]').addEventListener('click', async () => {
       try {
