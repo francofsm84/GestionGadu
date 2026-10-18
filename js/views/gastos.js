@@ -381,33 +381,28 @@
         paymentMethod: m.panel.querySelector('#fMethod').value,
       };
       /* Foto del ticket: subir a Storage y guardar la URL pública */
-      const ticketInput = m.panel.querySelector('#fTicket');
-      const file = ticketInput && ticketInput.files ? ticketInput.files[0] : null;
-      if (file) {
-        const saveBtn = m.panel.querySelector('[data-save]');
-        const original = saveBtn.textContent;
-        saveBtn.disabled = true;
-        saveBtn.textContent = 'Subiendo foto…';
-        try {
-          payload.receiptUrl = await uploadTicket(file);
-        } catch (e) {
-          UI.toast('No se pudo subir la foto: ' + ((e && e.message) || e), 'error');
-          saveBtn.disabled = false;
-          saveBtn.textContent = original;
-          return;
+      const saveBtn = m.panel.querySelector('[data-save]');
+      const originalHtml = saveBtn.innerHTML;
+      const busy = (on) => { saveBtn.disabled = on; if (on) saveBtn.textContent = 'Guardando…'; else saveBtn.innerHTML = originalHtml; };
+      busy(true);
+      try {
+        const ticketInput = m.panel.querySelector('#fTicket');
+        const file = ticketInput && ticketInput.files ? ticketInput.files[0] : null;
+        if (file) payload.receiptUrl = await uploadTicket(file);
+        if (isEdit) {
+          S.update('expenses', exp.id, payload);
+          UI.toast('Gasto actualizado');
+        } else {
+          S.add('expenses', payload);
+          UI.toast('Gasto cargado');
         }
-        saveBtn.disabled = false;
-        saveBtn.textContent = original;
+        m.close();
+        G.router.refresh();
+      } catch (e) {
+        UI.toast('No se pudo guardar: ' + ((e && e.message) || e), 'error');
+      } finally {
+        busy(false);
       }
-      if (isEdit) {
-        S.update('expenses', exp.id, payload);
-        UI.toast('Gasto actualizado');
-      } else {
-        S.add('expenses', payload);
-        UI.toast('Gasto cargado');
-      }
-      m.close();
-      G.router.refresh();
     });
   }
 })(typeof window !== 'undefined' ? window : globalThis);

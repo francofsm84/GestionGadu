@@ -10,9 +10,9 @@ const APP_SHELL = [
   './index.html',
   './manifest.json',
   './css/styles.css',
+  './logo-32.png',
   './logo-192.png',
   './logo-512.png',
-  './favicon.png',
   // Núcleo
   './js/storage.js',
   './js/store.js',

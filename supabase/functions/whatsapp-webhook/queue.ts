@@ -81,9 +81,22 @@ export async function markFailed(
   rest: (path: string, opts?: Record<string, unknown>) => Promise<Response>,
   id: number,
 ): Promise<void> {
-  await rest("whatsapp_queue?id=eq." + id, {
-    method: "PATCH",
-    headers: { Prefer: "return=minimal" },
-    body: JSON.stringify({ status: "failed", processed_at: new Date().toISOString() }),
-  });
+  /* Reintentos: si aún no llegó a 3 intentos, devolver a 'pending' para que se
+     vuelva a reclamar en el próximo drain; recién al 3er intento pasa a 'failed'. */
+  const r = await rest("whatsapp_queue?id=eq." + id + "&select=attempts", { method: "GET" });
+  const rows = (await r.json().catch(() => [])) as Array<{ attempts: number }>;
+  const attempts = (rows && rows[0] && rows[0].attempts) || 0;
+  if (attempts < 3) {
+    await rest("whatsapp_queue?id=eq." + id, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ status: "pending", claimed_at: null }),
+    });
+  } else {
+    await rest("whatsapp_queue?id=eq." + id, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ status: "failed", processed_at: new Date().toISOString() }),
+    });
+  }
 }
