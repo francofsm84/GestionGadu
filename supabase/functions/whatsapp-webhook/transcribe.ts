@@ -68,9 +68,9 @@ async function downloadMedia(url: string): Promise<{ buffer: ArrayBuffer; mimeTy
       throw new Error("downloadMedia HTTP " + res.status);
     }
     const buffer = await res.arrayBuffer();
-    const rawMime = res.headers.get("content-type") || "audio/ogg";
-    const mimeType = normalizeMime(rawMime);
-    console.log("[GADU-WA-AUDIO] ✅ audio descargado:", buffer.byteLength, "bytes · mime:", mimeType, "(raw:", rawMime + ")");
+    const rawMime = res.headers.get("content-type") || "application/octet-stream";
+    const mimeType = String(rawMime).split(";")[0].trim().toLowerCase();
+    console.log("[GADU-WA-MEDIA] ✅ media descargado:", buffer.byteLength, "bytes · mime:", mimeType, "(raw:", rawMime + ")");
     return { buffer, mimeType };
   } catch (e) {
     console.error("[GADU-WA-CRITICAL-FIX] downloadMedia timeout/error:", e);
@@ -129,7 +129,70 @@ async function geminiTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<
 async function transcribeMedia(mediaId: string): Promise<string> {
   const url = await getMediaUrl(mediaId);
   const { buffer, mimeType } = await downloadMedia(url);
-  return await geminiTranscribe(buffer, mimeType);
+  return await geminiTranscribe(buffer, normalizeMime(mimeType));
+}
+
+/* Normaliza el MIME de imagen para Gemini Vision */
+function normalizeImageMime(raw: string): string {
+  const m = String(raw || "").split(";")[0].trim().toLowerCase();
+  if (m === "image/jpeg" || m === "image/jpg") return "image/jpeg";
+  if (m === "image/png") return "image/png";
+  if (m === "image/webp") return "image/webp";
+  return "image/jpeg";
+}
+
+/* Analiza una imagen (ticket) con Gemini Vision + el caption del usuario */
+async function geminiAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption: string): Promise<string> {
+  const apiKey = Deno.env.get("GEMINI_API_KEY") || "";
+  if (!apiKey) {
+    console.warn("[GADU-WA-IMAGE] sin GEMINI_API_KEY: no se puede analizar la imagen");
+    return "";
+  }
+  const model = Deno.env.get("GEMINI_MODEL") || "gemini-1.5-flash";
+  const base64 = arrayBufferToBase64(buffer);
+  const prompt = "Analiza esta imagen. Si es un ticket o comprobante, extrae el monto total y el proveedor. El usuario dice: " +
+    (caption ? '"' + caption + '"' : "(sin texto)") +
+    ". Devolvé un texto claro que describa el gasto, por ejemplo: 'Gasté 2567 en servicio de hosting Donweb'. Si no es un ticket, describí brevemente lo que ves.";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: mimeType, data: base64 } },
+            ],
+          }],
+        }),
+        signal: controller.signal,
+      },
+    );
+    if (!res.ok) {
+      console.error("[GADU-WA-IMAGE] geminiAnalyzeImage falló:", res.status, await res.text().catch(() => ""));
+      return "";
+    }
+    const j = await res.json();
+    const text = j?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    if (text) console.log("[GADU-WA-IMAGE] ✅ análisis Gemini:", text.slice(0, 80));
+    else console.warn("[GADU-WA-IMAGE] Gemini respondió 200 pero sin texto:", JSON.stringify(j).slice(0, 200));
+    return String(text).trim();
+  } catch (e) {
+    console.error("[GADU-WA-IMAGE] geminiAnalyzeImage timeout/error:", e);
+    return "";
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function analyzeImage(mediaId: string, caption: string): Promise<string> {
+  const url = await getMediaUrl(mediaId);
+  const { buffer, mimeType } = await downloadMedia(url);
+  return await geminiAnalyzeImage(buffer, normalizeImageMime(mimeType), caption);
 }
 
 export interface ResolvedIncoming {
@@ -181,6 +244,27 @@ export async function resolveIncomingText(payload: unknown): Promise<ResolvedInc
         return { from, text: "", audioFailed: true };
       }
       console.log("[GADU-WA-AUDIO] transcripción:", text);
+      return { from, text };
+    }
+
+    // Imagen (ticket) → analizar con Gemini Vision + caption
+    if (msg.type === "image") {
+      const mediaId = String(msg.image?.id || "");
+      const caption = String(msg.image?.caption || "");
+      if (!mediaId) return null;
+      console.log("[GADU-WA-IMAGE] imagen detectada, media_id:", mediaId, "· caption:", caption);
+      let text = "";
+      try {
+        text = await analyzeImage(mediaId, caption);
+      } catch (e) {
+        console.error("[GADU-WA-CRITICAL-FIX] analyzeImage falló:", e);
+        return { from, text: "", audioFailed: true };
+      }
+      if (!text) {
+        console.warn("[GADU-WA-IMAGE] análisis vacío para media", mediaId);
+        return { from, text: "", audioFailed: true };
+      }
+      console.log("[GADU-WA-IMAGE] análisis:", text);
       return { from, text };
     }
 
