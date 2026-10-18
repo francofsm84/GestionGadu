@@ -682,8 +682,8 @@ async function handleButtonReply(from: string, buttonId: string) {
       return;
     }
     if (act === "nueva_obra") {
-      fireAndForget(sendWhatsApp(from, "¿Cómo se llama la obra y en qué dirección está?"));
-      await deleteSession(normalizePhone(from));
+      await upsertSession(from, userId, "WAITING_OBRA", {});
+      fireAndForget(sendWhatsApp(from, "¿Cómo se llama la obra y en qué dirección está? Ej: \"Casa Pérez en Alta Gracia\""));
       return;
     }
     if (act === "adelanto") {
@@ -1049,6 +1049,37 @@ async function processMessage(body: unknown) {
         return json({ ok: true, from: inc.from, reply: "" });
       }
       fireAndForget(sendWhatsApp(inc.from, "💸 ¿A qué empleado y de cuánto es el adelanto? Ej: \"Hugo de 12000\"."));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* [GADU-WA-WIZARD] Wizard de obra (estado WAITING_OBRA): nombre + dirección */
+    let enWizardObra = false;
+    try {
+      const sessObra = await getSession(normalizePhone(inc.from));
+      if (sessObra && sessObra.state === "WAITING_OBRA") enWizardObra = true;
+    } catch (e) {}
+    if (enWizardObra) {
+      const mObra = inc.text.match(/^(.*?)\s+en\s+(.+)$/i);
+      const nombreObra = String(mObra ? mObra[1] : inc.text).trim();
+      const ubicacionObra = String(mObra ? mObra[2] : "").trim();
+      if (nombreObra) {
+        const res = executeAction(data, { modulo: "obra", campos: { nombre: nombreObra, ubicacion: ubicacionObra } }, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
+        if (res.ok) {
+          await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+            method: "PATCH",
+            headers: { Prefer: "return=minimal" },
+            body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+          });
+          await deleteSession(normalizePhone(inc.from));
+          const reply = "✅ " + res.label;
+          fireAndForget(sendWhatsApp(inc.from, reply));
+          return json({ ok: true, from: inc.from, reply });
+        }
+        await deleteSession(normalizePhone(inc.from));
+        fireAndForget(sendWhatsApp(inc.from, "🤖 No pude crear la obra. Probá de nuevo: \"Casa Pérez en Alta Gracia\"."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      fireAndForget(sendWhatsApp(inc.from, "🤖 ¿Cómo se llama la obra? Ej: \"Casa Pérez en Alta Gracia\"."));
       return json({ ok: true, from: inc.from, reply: "" });
     }
 
