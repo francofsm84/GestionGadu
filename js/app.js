@@ -1135,6 +1135,13 @@
         });
       } catch (e) {}
 
+      /* Ruta pública (portal de cliente): no requiere sesión */
+      if (location.hash.indexOf('#/portal/') === 0) {
+        const token = decodeURIComponent(location.hash.split('/').filter(Boolean).pop() || '');
+        try { if (G.portal) G.portal.render(token); } catch (e) { console.error(e); }
+        return;
+      }
+
       const sess = G.auth.load();
       if (sess) {
         (async () => {

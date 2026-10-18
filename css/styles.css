@@ -972,3 +972,23 @@ body.no-session .app { display: none; }
   0% { background-color: rgba(255, 215, 0, 0.6); }
   100% { background-color: transparent; }
 }
+
+/* Portal público de obra (vista de cliente, sin sesión) */
+.portal-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; background: #eef1f7; }
+.portal-card { width: 100%; max-width: 540px; background: #fff; border-radius: 20px; padding: 28px 24px; box-shadow: 0 20px 60px rgba(15, 23, 42, .16); }
+.portal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.portal-logo { font-size: 20px; font-weight: 800; color: #0b1020; letter-spacing: .5px; }
+.portal-logo span { color: #f59e0b; }
+.portal-chip { font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px; background: #e6f4ea; color: #16a34a; }
+.portal-title { font-size: 26px; font-weight: 800; color: #0f172a; margin: 0 0 4px; }
+.portal-addr { color: #64748b; font-size: 14px; margin: 0 0 22px; }
+.portal-bar-item { margin-bottom: 16px; }
+.portal-bar-label { display: flex; justify-content: space-between; font-size: 13px; color: #334155; margin-bottom: 6px; }
+.portal-bar-label b { color: #0f172a; }
+.portal-bar { height: 14px; background: #e2e8f0; border-radius: 999px; overflow: hidden; }
+.portal-bar-fill { height: 100%; background: linear-gradient(90deg, #f59e0b, #fbbf24); border-radius: 999px; transition: width .6s ease; }
+.portal-bar-fill--info { background: linear-gradient(90deg, #2563eb, #3b82f6); }
+.portal-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin: 20px 0; }
+.portal-photos img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 12px; }
+.portal-foot { text-align: center; color: #94a3b8; font-size: 12px; margin: 20px 0 0; }
+.portal-empty { text-align: center; color: #64748b; padding: 40px; font-size: 15px; }
