@@ -110,8 +110,9 @@
     });
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
     try {
-      const rows = await G.api('GET', '/app_data?select=data&user_id=eq.' + encodeURIComponent(uid) + '&limit=1');
+      const rows = await G.api('GET', '/app_data?select=data,updated_at&user_id=eq.' + encodeURIComponent(uid) + '&limit=1');
       const d = (rows && rows[0] && rows[0].data) || {};
+      const updatedAt = (rows && rows[0] && rows[0].updated_at) || '';
       const works = d.works || [], contacts = d.contacts || [], employees = d.employees || [], budgets = d.budgets || [], incomes = d.incomes || [], expenses = d.expenses || [];
       const activas = works.filter(w => w.status === 'activa').length;
       const clientes = contacts.filter(c => c.type === 'cliente').length;
@@ -120,6 +121,7 @@
       const stat = (l, v, s) => '<div class="kpi-card"><div class="kpi-body"><span class="kpi-label">' + l + '</span><strong class="kpi-value">' + v + '</strong><span class="kpi-sub">' + s + '</span></div></div>';
       const obrasList = works.slice(0, 12).map(w => '<div class="split-row"><span>' + UI.escapeHtml(w.name || '—') + '</span>' + UI.chip(w.status || '', w.status === 'activa' ? 'success' : 'neutral') + '</div>').join('');
       m.panel.querySelector('#vdBody').innerHTML =
+        '<p class="muted small" style="margin-bottom:12px">Última sincronización: ' + (updatedAt ? UI.fmtDate(updatedAt) + ' · ' + new Date(updatedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '—') + '</p>' +
         '<div class="kpi-grid kpi-4" style="margin-bottom:14px">' +
         stat('Obras', works.length, activas + ' activas') + stat('Clientes', clientes, '') + stat('Empleados', employees.length, '') + stat('Presupuestos', budgets.length, '') +
         '</div>' +
@@ -137,6 +139,20 @@
 
   async function tabUsuarios(body) {
     const rows = await G.api('GET', '/profiles?select=*&order=created_at.asc');
+    /* Telemetría: contadores de uso por usuario desde app_data (JSON) */
+    const usage = {};
+    try {
+      const appRows = await G.api('GET', '/app_data?select=user_id,data,updated_at');
+      (appRows || []).forEach(r => {
+        const d = r.data || {};
+        usage[r.user_id] = {
+          obras: (d.works || []).length,
+          gastos: (d.expenses || []).length,
+          empleados: (d.employees || []).length,
+          updatedAt: r.updated_at || '',
+        };
+      });
+    } catch (e) {}
     let invitaciones = [];
     try { invitaciones = await G.api('GET', '/invitaciones?select=*&order=created_at.asc'); } catch (e) {}
     const planes = G.plan.planes || [];
@@ -154,8 +170,8 @@
       '<button class="btn btn-primary" id="btnInvite">' + UI.icon('plus', 16) + 'Registrar usuario</button>' +
       '</div>' +
       '<div class="table-wrap"><table class="data-table">' +
-      '<thead><tr><th>Usuario</th><th>Rol</th><th>Plan</th><th>Suscripción</th><th>Estado</th><th>Última conexión</th><th></th></tr></thead>' +
-      '<tbody>' + rows.map(u => userRow(u, planes)).join('') + '</tbody></table></div>' +
+      '<thead><tr><th>Usuario</th><th>Rol</th><th>Plan</th><th>Suscripción</th><th>Estado</th><th class="num">Obras</th><th class="num">Gastos</th><th class="num">Empleados</th><th>Última conexión</th><th></th></tr></thead>' +
+      '<tbody>' + rows.map(u => userRow(u, planes, usage[u.user_id])).join('') + '</tbody></table></div>' +
       (invitaciones.length
         ? '<div class="card" style="margin-top:14px"><div class="card-head"><div><h3>Invitaciones pendientes</h3><p class="muted">Se activan solas cuando la persona entra por primera vez con Google.</p></div></div>' +
           '<div class="stack">' + invitaciones.map(i =>
@@ -228,8 +244,9 @@
     }));
   }
 
-  function userRow(u, planes) {
+  function userRow(u, planes, usage) {
     const protegido = u.rol === 'admin' || u.rol === 'super_admin';
+    const uso = usage || { obras: 0, gastos: 0, empleados: 0 };
     const rubro = u.rubro_principal || u.rubro || '';
     const stTone = u.subscription_status === 'active' ? 'success' : (u.subscription_status === 'past_due' ? 'danger' : (u.subscription_status === 'trialing' ? 'info' : 'warning'));
     const planOpts = planes.map(p => '<option value="' + p.id + '"' + (u.plan_id === p.id ? ' selected' : '') + '>' + p.nombre + '</option>').join('');
@@ -240,6 +257,9 @@
       '<td><select class="select" data-sel="plan_id" data-uid="' + u.user_id + '"' + (protegido ? ' disabled' : '') + '>' + planOpts + '</select></td>' +
       '<td>' + UI.chip(trialLabel(u), stTone) + '</td>' +
       '<td>' + UI.chip(u.estado_cuenta === 'activo' ? 'Activo' : 'Suspendido', u.estado_cuenta === 'activo' ? 'success' : 'danger') + '</td>' +
+      '<td class="num">' + uso.obras + '</td>' +
+      '<td class="num">' + uso.gastos + '</td>' +
+      '<td class="num">' + uso.empleados + '</td>' +
       '<td class="muted small">' + (u.ultima_conexion ? UI.fmtDate(u.ultima_conexion) : '—') + '</td>' +
       '<td><div class="row-actions">' +
       '<button class="icon-btn sm" data-ver="' + u.user_id + '" title="Ver datos / auditar">' + UI.icon('eye', 14) + '</button>' +
