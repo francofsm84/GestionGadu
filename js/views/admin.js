@@ -11,6 +11,7 @@
   const ROL_LABEL = { super_admin: 'Super Admin', admin: 'Admin', gestor_obra: 'Gestor de obra', contador: 'Contador' };
   const STATUS_LABEL = { active: 'Activa', trialing: 'Prueba', past_due: 'En mora', canceled: 'Cancelada', expired: 'Vencida' };
   let tab = 'usuarios';
+  let soporteFilter = { tab: 'open', q: '' };
 
   /* ---------- Exportación de usuarios ---------- */
   function userColumns(u, planes) {
@@ -194,22 +195,52 @@
   /* ---------- Soporte (tickets "hablar con un humano") ---------- */
   async function tabSoporte(body) {
     let tickets = [];
-    try { tickets = await G.api('GET', '/support_tickets?select=*&status=eq.open&order=created_at.desc'); } catch (e) {}
+    try { tickets = await G.api('GET', '/support_tickets?select=*&order=created_at.desc'); } catch (e) {}
+
+    const filter = soporteFilter || (soporteFilter = { tab: 'open', q: '' });
+    const hasReply = t => Array.isArray(t.messages) && t.messages.some(m => m.role === 'admin');
+    const open = tickets.filter(t => t.status === 'open' && !hasReply(t));
+    const progress = tickets.filter(t => t.status === 'open' && hasReply(t));
+    const closed = tickets.filter(t => t.status === 'closed');
+    const list = filter.tab === 'open' ? open : (filter.tab === 'progress' ? progress : closed);
+    const q = filter.q.toLowerCase();
+    const filtered = q ? list.filter(t =>
+      String(t.phone || '').includes(q) ||
+      String(t.created_at || '').includes(q) ||
+      String(t.message || '').toLowerCase().includes(q)
+    ) : list;
+
+    const stabBtn = (k, label, count) =>
+      '<button class="tab' + (filter.tab === k ? ' active' : '') + '" data-stab="' + k + '">' + label + ' (' + count + ')</button>';
 
     body.innerHTML =
-      '<div class="card"><div class="card-head"><div><h3>Tickets de soporte</h3><p class="muted">' + tickets.length + ' abiertos</p></div></div>' +
+      '<div class="toolbar">' +
+      '<div class="tabs">' +
+      stabBtn('open', 'Abiertos', open.length) + stabBtn('progress', 'En Proceso', progress.length) + stabBtn('closed', 'Resueltos', closed.length) +
+      '</div>' +
+      '<div class="grow"></div>' +
+      '<div class="search">' + UI.icon('search', 16) + '<input id="sq" class="input" placeholder="Buscar por teléfono o fecha…" value="' + UI.escapeHtml(filter.q) + '"></div>' +
+      '</div>' +
+      '<div class="card" style="margin-top:10px">' +
+      '<div class="card-head"><div><h3>Tickets de soporte</h3><p class="muted">' + filtered.length + ' en esta vista</p></div></div>' +
       '<div class="stack">' +
-      (tickets.map(t =>
+      (filtered.map(t =>
         '<div class="card-inset" style="margin-top:10px">' +
         '<div class="split-row"><div class="split-row-main"><strong>' + UI.escapeHtml(t.phone || '—') + '</strong>' +
-        '<span class="muted small">' + (t.created_at ? UI.fmtDate(t.created_at) : '—') + '</span></div>' +
+        '<span class="muted small">' + (t.created_at ? UI.fmtDate(t.created_at) : '—') + (hasReply(t) && t.status !== 'closed' ? ' ' + UI.chip('En proceso', 'info') : '') + '</span></div>' +
         '<div class="split-row-end">' +
-        '<button class="btn btn-soft btn-sm" data-ticket="' + t.id + '" data-reply="' + UI.escapeHtml(t.phone || '') + '" data-msg="' + UI.escapeHtml(t.message || '') + '">' + UI.icon('whatsapp', 14) + ' Responder</button>' +
-        '<button class="btn btn-soft btn-sm" data-close-ticket="' + t.id + '">' + UI.icon('check', 14) + ' Resolver</button>' +
+        '<button class="btn btn-soft btn-sm" data-ticket="' + t.id + '" data-reply="' + UI.escapeHtml(t.phone || '') + '" data-msg="' + UI.escapeHtml(t.message || '') + '" data-user="' + (t.user_id || '') + '">' + UI.icon('whatsapp', 14) + ' Responder</button>' +
+        (t.status !== 'closed' ? '<button class="btn btn-soft btn-sm" data-close-ticket="' + t.id + '">' + UI.icon('check', 14) + ' Resolver</button>' : '') +
         '</div></div>' +
         '<p class="muted" style="margin:6px 0 0">' + UI.escapeHtml(t.message || '—') + '</p>' +
-        '</div>').join('') || '<p class="form-hint">No hay tickets abiertos.</p>') +
+        '</div>').join('') || '<p class="form-hint">No hay tickets en esta vista.</p>') +
       '</div></div>';
+
+    body.querySelectorAll('[data-stab]').forEach(b => b.addEventListener('click', () => {
+      filter.tab = b.dataset.stab; tabSoporte(body);
+    }));
+    const sq = body.querySelector('#sq');
+    if (sq) sq.addEventListener('input', () => { filter.q = sq.value; tabSoporte(body); });
 
     body.querySelectorAll('[data-close-ticket]').forEach(b => b.addEventListener('click', async () => {
       const id = b.dataset.closeTicket;
@@ -223,7 +254,7 @@
     }));
 
     body.querySelectorAll('[data-reply]').forEach(b => b.addEventListener('click', () => {
-      openSupportChat(b.dataset.ticket, b.dataset.reply, b.dataset.msg);
+      openSupportChat(b.dataset.ticket, b.dataset.reply, b.dataset.msg, b.dataset.user);
     }));
   }
 
@@ -249,25 +280,78 @@
 
   /* Modal de chat para responder un ticket directamente por la API de Meta.
      Carga el historial guardado en support_tickets.messages y lo persiste. */
-  async function openSupportChat(id, phone, message) {
-    let saved = [];
+  async function openSupportChat(id, phone, message, userId) {
+    /* 1) Ticket completo (messages + notes + status) */
+    let ticket = {};
     try {
-      const rows = await G.api('GET', '/support_tickets?select=messages&id=eq.' + encodeURIComponent(id) + '&limit=1');
-      saved = (rows && rows[0] && Array.isArray(rows[0].messages)) ? rows[0].messages : [];
+      const rows = await G.api('GET', '/support_tickets?select=*&id=eq.' + encodeURIComponent(id) + '&limit=1');
+      ticket = (rows && rows[0]) ? rows[0] : {};
     } catch (e) {}
-
+    const saved = Array.isArray(ticket.messages) ? ticket.messages : [];
     const hist = saved.length
       ? saved.map(ms => ({ me: ms.role === 'admin', text: ms.text }))
       : [{ me: false, text: message || '(sin mensaje)' }];
 
+    /* 2) Ficha del cliente (perfil + métricas) e historial de tickets */
+    let profile = null, metrics = null, history = [];
+    if (userId) {
+      try {
+        const p = await G.api('GET', '/profiles?select=*&user_id=eq.' + encodeURIComponent(userId) + '&limit=1');
+        profile = (p && p[0]) ? p[0] : null;
+      } catch (e) {}
+      try {
+        const a = await G.api('GET', '/app_data?select=data,updated_at&user_id=eq.' + encodeURIComponent(userId) + '&limit=1');
+        if (a && a[0]) {
+          const d = a[0].data || {};
+          const works = d.works || [];
+          const active = works.filter(w => w.status === 'activa').length;
+          const incomes = (d.incomes || []).reduce((s, x) => s + (Number(x.amount) || 0), 0);
+          const expenses = (d.expenses || []).reduce((s, x) => s + (Number(x.amount) || 0), 0);
+          metrics = { active, balance: incomes - expenses, lastActive: a[0].updated_at };
+        }
+      } catch (e) {}
+    }
+    try {
+      history = await G.api('GET', '/support_tickets?select=id,created_at,status&phone=eq.' + encodeURIComponent(phone) + '&order=created_at.desc&limit=10');
+    } catch (e) {}
+
+    /* 3) Plantillas rápidas */
+    const CANNED = [
+      '¡Hola! Gracias por escribirnos. ¿En qué podemos ayudarte?',
+      'Ya recibimos tu consulta y la estamos revisando.',
+      'Por favor, enviame una foto del comprobante y lo cargamos.',
+      '¿Podés confirmarme el número de WhatsApp vinculado a tu cuenta?',
+      'El problema fue resuelto. ¿Necesitás algo más?',
+    ];
+
+    const statusLabel = ticket.status === 'closed' ? 'Resuelto' : (hist.some(h => h.me) ? 'En proceso' : 'Abierto');
+    const statusTone = ticket.status === 'closed' ? 'success' : (hist.some(h => h.me) ? 'info' : 'warning');
+
     const m = UI.openModal({
       title: 'Chat de soporte',
       subtitle: phone,
+      size: 'wide',
       body:
-        '<div id="chatHist" class="stack" style="max-height:320px;overflow-y:auto;margin-bottom:10px"></div>' +
-        '<textarea class="input" id="chatInput" placeholder="Escribí tu respuesta…" style="width:100%;min-height:64px"></textarea>',
-      footer: '<button class="btn btn-ghost" data-cancel>Cerrar</button><button class="btn btn-primary" data-send>' + UI.icon('whatsapp', 14) + ' Enviar</button>',
+        '<div class="card-inset" style="margin-bottom:10px">' +
+        '<div class="split-row"><div class="split-row-main"><strong>' + UI.escapeHtml(profile ? ((profile.nombre || '') + ' ' + (profile.apellido || '')).trim() || profile.email || 'Cliente' : 'Cliente') + '</strong>' +
+        '<span class="muted small">' + UI.escapeHtml(profile ? (profile.email || '') : '') + '</span></div>' +
+        '<div class="split-row-end">' + UI.chip(statusLabel, statusTone) + '</div></div>' +
+        '<div class="muted small">' +
+        (profile ? 'Plan: ' + UI.escapeHtml(profile.plan_id || 'free') + ' · Estado: ' + UI.escapeHtml(profile.subscription_status || '—') : '') +
+        (metrics ? (profile ? ' · ' : '') + 'Obras activas: ' + metrics.active + ' · Balance: ' + UI.fmtMoney(metrics.balance) + (metrics.lastActive ? ' · Últ. actividad: ' + UI.fmtDate(metrics.lastActive) : '') : '') +
+        '</div>' +
+        (Array.isArray(history) && history.length > 1
+          ? '<div class="muted small" style="margin-top:4px">Historial: ' + history.length + ' ticket(s) · ' + history.slice(0, 5).map(h => (h.status === 'closed' ? 'Resuelto' : 'Abierto') + ' (' + UI.fmtDate(h.created_at) + ')').join(' · ') + '</div>'
+          : '') +
+        '</div>' +
+        '<div id="chatHist" class="stack" style="max-height:260px;overflow-y:auto;margin-bottom:10px"></div>' +
+        '<div class="ai-actions" style="margin:0 0 10px">' + CANNED.map((c, i) => '<button class="btn btn-soft btn-sm" data-canned="' + i + '" title="' + UI.escapeHtml(c) + '">' + UI.escapeHtml(c.slice(0, 22)) + '</button>').join('') + '</div>' +
+        '<textarea class="input" id="chatInput" placeholder="Escribí tu respuesta…" style="width:100%;min-height:64px"></textarea>' +
+        '<div style="margin-top:8px"><label class="muted small">Nota interna (solo admin, no se envía)</label>' +
+        '<textarea class="input" id="chatNote" placeholder="Nota privada…" style="width:100%;min-height:44px">' + UI.escapeHtml(ticket.notes || '') + '</textarea></div>',
+      footer: '<button class="btn btn-ghost" data-cancel>Cerrar</button><button class="btn btn-soft" data-note>' + UI.icon('check', 14) + ' Guardar nota</button><button class="btn btn-primary" data-send>' + UI.icon('whatsapp', 14) + ' Enviar</button>',
     });
+
     const renderHist = () => {
       m.panel.querySelector('#chatHist').innerHTML = hist.map(h =>
         '<div class="card-inset" style="margin-top:6px' + (h.me ? ';background:var(--primary-soft)' : '') + '">' +
@@ -283,6 +367,19 @@
         });
       } catch (e) {}
     };
+
+    m.panel.querySelectorAll('[data-canned]').forEach(b => b.addEventListener('click', () => {
+      m.panel.querySelector('#chatInput').value = CANNED[Number(b.dataset.canned)];
+    }));
+
+    m.panel.querySelector('[data-note]').addEventListener('click', async () => {
+      try {
+        await G.api('PATCH', '/support_tickets?id=eq.' + encodeURIComponent(id), { notes: m.panel.querySelector('#chatNote').value });
+        UI.toast('✅ Nota guardada');
+      } catch (e) {
+        UI.toast('❌ No se pudo guardar la nota', 'error');
+      }
+    });
 
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
     m.panel.querySelector('[data-send]').addEventListener('click', async () => {
