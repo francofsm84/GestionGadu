@@ -1524,7 +1524,7 @@ async function processMessage(body: unknown) {
         }
         fireAndForget(sendWhatsApp(inc.from, reply));
         /* Si quedó SIN obra (gasto en bandeja o adelanto de cliente), preguntar a qué obra */
-        if ((action.modulo === "gasto" && res.label.includes("bandeja")) || res.pendingWork) {
+        if (res.pendingWork) {
           await askForWork(inc.from, row.user_id, data);
         }
         return json({ ok: true, from: inc.from, reply });

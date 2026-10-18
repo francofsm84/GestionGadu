@@ -184,9 +184,11 @@ async function geminiAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption
   }
   const model = Deno.env.get("GEMINI_MODEL") || "gemini-1.5-flash";
   const base64 = arrayBufferToBase64(buffer);
-  const prompt = "Analiza esta imagen. Si es un ticket o comprobante, extrae el monto total y el proveedor. El usuario dice: " +
-    (caption ? '"' + caption + '"' : "(sin texto)") +
-    ". Devolvé un texto claro que describa el gasto, por ejemplo: 'Gasté 2567 en servicio de hosting Donweb'. Si no es un ticket, describí brevemente lo que ves.";
+  const prompt = "Analiza esta imagen y el texto que la acompaña: '" + (caption || "") + "'. " +
+    "Si es un ticket o comprobante, extrae el monto total, el proveedor y el concepto. " +
+    "Si es un producto, identifica qué es y el monto mencionado en el texto. " +
+    "Devolvé un string estructurado para registrar un gasto: 'Gasto de [Monto] en [Concepto]'. " +
+    "Si no es ni ticket ni producto, describí brevemente lo que ves.";
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {

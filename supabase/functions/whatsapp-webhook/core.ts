@@ -170,6 +170,7 @@ export function normCategory(raw: string): string {
   if (/seguro|art|p[oó]liza/.test(f)) return "Seguros";
   if (/servicio|luz|agua|internet|tel[eé]fono|gas natural/.test(f)) return "Servicios";
   if (/subcontrat|contratista/.test(f)) return "Subcontratos";
+  if (/cigarrillo|tabaco|ocio|entretenimiento|cine|juego|recreaci[oó]n|esparcimiento/.test(f)) return "Ocio";
   return String(raw).trim();
 }
 
@@ -411,8 +412,10 @@ export function executeAction(
   const monto = Number(c.monto);
   if (action.modulo === "gasto") {
     if (!(monto > 0)) return { ok: false, missing: "el monto" };
+    const concepto = String(c.categoria || sourceText || "").trim().slice(0, 60) || "gasto";
     const cat = normCategory(String(c.categoria || sourceText));
     if (!cat) return { ok: false, missing: "la categoría" };
+    const montoFmt = monto.toLocaleString("es-AR");
     const ob = resolveObra();
     if (ob.missing) {
       /* Quick Capture: sin obra → se guarda "sin asignar" (workId null). */
@@ -422,14 +425,14 @@ export function executeAction(
         description: String(sourceText || "").slice(0, 200), invoiceNumber: "", paymentMethod: "", source: "whatsapp",
       } as unknown as Record<string, unknown>);
       console.log("[GADU-WA-INBOX] gasto sin obra guardado en bandeja: $" + monto + " (" + cat + ")");
-      return { ok: true, label: "Gasto de $" + monto + " (" + cat + ") guardado en tu bandeja. Al final del día te recuerdo asignarlo a una obra." };
+      return { ok: true, pendingWork: true, label: "Gasto registrado: $" + montoFmt + " en " + concepto + " (" + cat + ") (Pendiente de asignar a obra)" };
     }
     (d.expenses || (d.expenses = [])).unshift({
       id: idGen(), type: "obra", workId: ob.workId, date: todayISO, amount: monto,
       category: cat, providerId: null, employeeId: null, expenseKind: null,
       description: String(sourceText || "").slice(0, 200), invoiceNumber: "", paymentMethod: "", source: "whatsapp",
     } as unknown as Record<string, unknown>);
-    return { ok: true, label: "Gasto de $" + monto + " (" + cat + ") en " + ob.label + " ✓" };
+    return { ok: true, label: "Gasto registrado: $" + montoFmt + " en " + concepto + " (" + cat + ") en " + ob.label };
   }
   if (action.modulo === "ingreso") {
     if (!(monto > 0)) return { ok: false, missing: "el monto" };
