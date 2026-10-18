@@ -621,6 +621,7 @@
       notifyDelete(trashItem);
     }
     save();
+    syncNow();
   }
   function restore(trashId) {
     const t = (data.trash || []).find(x => x.id === trashId);
@@ -628,7 +629,16 @@
     data[t.collection].unshift(t.item);
     data.trash = data.trash.filter(x => x.id !== trashId);
     save();
+    syncNow();
     return true;
+  }
+
+  /* Sincronización inmediata con la nube (sin esperar el debounce de save):
+     garantiza que el borrado/restauración llegue a Supabase ya. */
+  function syncNow() {
+    try {
+      if (G.sync && G.sync.push && data) G.sync.push(data).catch(() => {});
+    } catch (e) { /* sin conexión: el push programado reintenta */ }
   }
 
   /* Etiqueta legible del item borrado (para el mensaje de WhatsApp) */
