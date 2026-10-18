@@ -63,7 +63,7 @@
     }
     view.innerHTML =
       '<div class="tabs">' +
-      tabBtn('usuarios', '👥 Usuarios') + tabBtn('planes', '💳 Planes') + tabBtn('config', '⚙️ Configuración') + tabBtn('metricas', '📊 Métricas') + tabBtn('auditoria', '🧾 Auditoría') +
+      tabBtn('usuarios', '👥 Usuarios') + tabBtn('planes', '💳 Planes') + tabBtn('licencias', '🎫 Licencias') + tabBtn('config', '⚙️ Configuración') + tabBtn('metricas', '📊 Métricas') + tabBtn('auditoria', '🧾 Auditoría') +
       '</div>' +
       '<div id="adminBody"></div>';
     view.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.t; render(view); }));
@@ -78,6 +78,7 @@
     try {
       if (tab === 'usuarios') await tabUsuarios(body);
       else if (tab === 'planes') await tabPlanes(body);
+      else if (tab === 'licencias') await tabLicencias(body);
       else if (tab === 'config') await tabConfig(body);
       else if (tab === 'metricas') await tabMetricas(body);
       else await tabAuditoria(body);
@@ -135,6 +136,58 @@
     } catch (err) {
       m.panel.querySelector('#vdBody').innerHTML = '<p class="form-hint" style="color:var(--danger)">No se pudo cargar: ' + ((err && err.message) || err) + '</p>';
     }
+  }
+
+  /* ---------- Licencias (códigos prepagos) ---------- */
+  function randomCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let out = 'GADU-';
+    for (let i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
+    return out;
+  }
+
+  async function tabLicencias(body) {
+    const planes = G.plan.planes || [];
+    let codes = [];
+    try { codes = await G.api('GET', '/license_codes?select=*&order=created_at.desc'); } catch (e) {}
+
+    body.innerHTML =
+      '<div class="card" style="margin-bottom:14px">' +
+      '<div class="card-head"><div><h3>Generar código de licencia</h3><p class="muted">Códigos prepagos de un solo uso para activar planes.</p></div></div>' +
+      '<div class="grid-form">' +
+      '<div class="field"><label>Plan</label><select class="select" id="lcPlan">' +
+      planes.map(p => '<option value="' + p.id + '">' + p.nombre + '</option>').join('') +
+      '</select></div>' +
+      '<div class="field"><label>Días de duración</label><input class="input" type="number" id="lcDays" value="30" min="1"></div>' +
+      '<div class="field"><label>&nbsp;</label><button class="btn btn-primary" id="lcGen">' + UI.icon('plus', 16) + 'Generar Código</button></div>' +
+      '</div></div>' +
+      '<div class="card"><div class="card-head"><div><h3>Códigos generados</h3><p class="muted">' + codes.length + ' códigos</p></div></div>' +
+      '<div class="table-wrap"><table class="data-table">' +
+      '<thead><tr><th>Código</th><th>Plan</th><th>Días</th><th>Estado</th><th>Usado por</th><th>Fecha de uso</th></tr></thead>' +
+      '<tbody>' + (codes.map(c =>
+        '<tr>' +
+        '<td><code>' + UI.escapeHtml(c.code) + '</code></td>' +
+        '<td>' + UI.escapeHtml((planes.find(p => p.id === c.plan_id) || {}).nombre || c.plan_id) + '</td>' +
+        '<td>' + c.duration_days + '</td>' +
+        '<td>' + (c.is_used ? UI.chip('Usado', 'danger') : UI.chip('Disponible', 'success')) + '</td>' +
+        '<td class="muted small">' + (c.used_by_user_id ? UI.escapeHtml(String(c.used_by_user_id).slice(0, 8)) + '…' : '—') + '</td>' +
+        '<td class="muted small">' + (c.used_at ? UI.fmtDate(c.used_at) : '—') + '</td>' +
+        '</tr>').join('') || '<tr><td colspan="6">' + UI.emptyState('inbox', 'Sin códigos', 'Generá el primero desde el formulario de arriba.') + '</td></tr>') +
+      '</tbody></table></div></div>';
+
+    body.querySelector('#lcGen').addEventListener('click', async () => {
+      const plan_id = body.querySelector('#lcPlan').value;
+      const duration_days = Number(body.querySelector('#lcDays').value) || 30;
+      const code = randomCode();
+      try {
+        await G.api('POST', '/license_codes', { code, plan_id, duration_days });
+        await G.plan.log('licencia_generada', code + ' · ' + plan_id + ' · ' + duration_days + 'd');
+        UI.toast('✅ Código generado: ' + code);
+        tabLicencias(body);
+      } catch (err) {
+        UI.toast('❌ No se pudo generar: ' + ((err && err.message) || err), 'error');
+      }
+    });
   }
 
   async function tabUsuarios(body) {

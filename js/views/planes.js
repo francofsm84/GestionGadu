@@ -53,6 +53,40 @@
     return '<div class="plans-grid">' + cards.map(p => cardHTML(p, '')).join('') + '</div>';
   }
 
+  function redeemHTML() {
+    return '<div class="card" style="margin-bottom:14px">' +
+      '<div class="card-head"><div><h3>¿Tenés un código de activación?</h3><p class="muted">Canjealo acá para activar tu plan al instante.</p></div></div>' +
+      '<div class="split-row" style="gap:8px;flex-wrap:wrap">' +
+      '<input class="input" id="codeInput" placeholder="Ej: GADU-8X2K9P" style="flex:1;min-width:200px;text-transform:uppercase;letter-spacing:1px">' +
+      '<button class="btn btn-primary" id="btnRedeem">' + UI.icon('check', 15) + 'Canjear</button>' +
+      '</div></div>';
+  }
+
+  function bindRedeem(view) {
+    const input = view.querySelector('#codeInput');
+    const btn = view.querySelector('#btnRedeem');
+    if (!input || !btn) return;
+    btn.addEventListener('click', async () => {
+      const code = input.value.trim();
+      if (!code) { UI.toast('Ingresá el código', 'error'); return; }
+      btn.disabled = true;
+      try {
+        const res = await G.api('POST', '/rpc/canjear_licencia', { p_code: code });
+        if (res && res.ok) {
+          UI.toast('¡Felicidades! Plan activado hasta el ' + UI.fmtDate(res.vencimiento), 'success');
+          try { await G.plan.load(); } catch (e) {}
+          render(view);
+        } else {
+          UI.toast((res && res.error) || 'Código inválido', 'error');
+        }
+      } catch (e) {
+        UI.toast('Código inválido', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
   function render(view) {
     const planes = (G.plan && G.plan.planes) || [];
     const actual = G.plan ? G.plan.currentPlan() : { id: '' };
@@ -60,9 +94,11 @@
     const st = prof ? prof.subscription_status : 'trialing';
     const days = G.plan ? G.plan.trialDaysLeft() : null;
 
-    view.innerHTML = bannerHTML(st === 'trialing' ? days : null) +
+    view.innerHTML = redeemHTML() +
+      bannerHTML(st === 'trialing' ? days : null) +
       (planes.length
         ? '<div class="plans-grid">' + planes.map(p => cardHTML(p, actual.id)).join('') + '</div>'
         : fallbackHTML());
+    bindRedeem(view);
   }
 })(typeof window !== 'undefined' ? window : globalThis);

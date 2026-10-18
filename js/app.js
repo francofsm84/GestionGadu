@@ -804,7 +804,7 @@
           '<div class="split-row-end"><b>' + (Number(p.precio_mensual) > 0 ? UI.fmtMoney(Number(p.precio_mensual)) + '/mes' : 'Gratis') + '</b></div>' +
           '</div>').join('') || '<p class="form-hint">No hay planes disponibles.</p>') +
         '</div>',
-      footer: '<button class="btn btn-ghost" data-cancel>Ahora no</button><a class="btn btn-primary" href="https://wa.me/5493547469000?text=' + encodeURIComponent('Hola! Quiero mejorar mi plan de GADU.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 15) + 'Mejorar por WhatsApp</a>',
+      footer: '<button class="btn btn-ghost" data-cancel>Ahora no</button><a class="btn btn-soft" href="#/planes">Ver planes</a><a class="btn btn-primary" href="https://wa.me/5493547469000?text=' + encodeURIComponent('Hola! Quiero mejorar mi plan de GADU.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 15) + 'Mejorar por WhatsApp</a>',
     });
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
   }
