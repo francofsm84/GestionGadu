@@ -96,6 +96,33 @@ function firePush(userId: string, title: string, message: string, url: string) {
   })());
 }
 
+/* Verifica la firma HMAC-SHA256 de Meta (X-Hub-Signature-256).
+   Comparación en tiempo constante para evitar timing attacks. */
+async function verifyMetaSignature(rawBody: string, secret: string, signatureHeader: string): Promise<boolean> {
+  try {
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const sig = await crypto.subtle.sign("HMAC", key, enc.encode(rawBody));
+    const hex = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+    const expected = "sha256=" + hex;
+    const a = enc.encode(expected);
+    const b = enc.encode(String(signatureHeader || "").trim());
+    if (a.length !== b.length) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+    return diff === 0;
+  } catch (e) {
+    console.error("[whatsapp-webhook] error verificando firma de Meta:", e);
+    return false;
+  }
+}
+
 async function rest(path: string, opts: Record<string, unknown> = {}) {
   const sk = serviceKey();
   const headers = {
@@ -526,10 +553,30 @@ serve(async (req) => {
     }
   }
 
-  const body = await req.json().catch(() => ({}));
+  /* ===== Validación de firma de Meta (X-Hub-Signature-256) =====
+     Intercepta el body crudo ANTES de parsear, verifica el HMAC-SHA256
+     con WHATSAPP_APP_SECRET y rechaza con 403 si no coincide. */
+  const rawBody = await req.text().catch(() => "");
+  const signature = req.headers.get("x-hub-signature-256") || "";
+  const appSecret = Deno.env.get("WHATSAPP_APP_SECRET") || "";
+  if (appSecret) {
+    if (!signature) {
+      console.warn("[whatsapp-webhook] falta header X-Hub-Signature-256");
+      return new Response("invalid signature", { status: 403, headers: corsHeaders });
+    }
+    const okSig = await verifyMetaSignature(rawBody, appSecret, signature);
+    if (!okSig) {
+      console.warn("[whatsapp-webhook] firma inválida de Meta");
+      return new Response("invalid signature", { status: 403, headers: corsHeaders });
+    }
+  } else {
+    console.warn("[whatsapp-webhook] WHATSAPP_APP_SECRET no configurado: no se valida firma");
+  }
+
+  let body: Record<string, any> = {};
+  try { body = JSON.parse(rawBody || "{}"); } catch (e) { body = {}; }
   console.log("=== PAYLOAD ENTRANTE ===", JSON.stringify(body));
   console.log("=== WEBHOOK EVENT RECEIVED ===", JSON.stringify(body));
-  console.log("RAW BODY:", JSON.stringify(body));
 
   const messageId = extractMessageId(body);
   const fromQuick = extractFrom(body);
