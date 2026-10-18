@@ -7,6 +7,9 @@
   const G = root.GADU;
   const S = G.store, UI = G.ui;
 
+  /* Número de WhatsApp del bot (producción), en formato internacional sin '+'. */
+  G.BOT_PHONE_NUMBER = G.BOT_PHONE_NUMBER || '5493547665984';
+
   const routes = [];
   let current = null;
   let resizeTimer = null;

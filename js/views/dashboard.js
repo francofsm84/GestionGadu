@@ -120,7 +120,7 @@
       '<input type="date" class="input" id="pTo" value="' + period.to + '"' + (period.preset === 'custom' ? '' : ' hidden') + '>' +
       '<span class="muted small" id="periodDesc">' + UI.escapeHtml(range.label) + '</span>' +
       '<div style="flex:1"></div>' +
-      '<a class="btn btn-primary" href="https://wa.me/5493547665984?text=' + encodeURIComponent('Hola GADU, quiero cargar un gasto rápido.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 16) + ' Cargar por WhatsApp</a>' +
+      '<a class="btn btn-primary" href="https://wa.me/' + (G.BOT_PHONE_NUMBER || '5493547665984') + '?text=' + encodeURIComponent('Hola GADU, quiero cargar un gasto rápido.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 16) + ' Cargar por WhatsApp</a>' +
       '</div>' +
 
       '<section class="kpi-grid">' +

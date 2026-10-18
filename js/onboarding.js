@@ -16,10 +16,9 @@
     return st.profile || { nombre: '', apellido: '', apodo: '', moneda: 'ARS', whatsapp: { phone: '', code: '', linked: false } };
   }
 
-  /* Número de destino del bot de GADU para la vinculación por WhatsApp
-     (bot de prueba de Meta Cloud API). El enlace wa.me apunta SIEMPRE
-     a este número, nunca al teléfono del usuario. */
-  const BOT_WHATSAPP_NUMBER = '15556643689';
+  /* Número de destino del bot de GADU para la vinculación por WhatsApp.
+     Centralizado en G.BOT_PHONE_NUMBER (definido en js/app.js). */
+  const BOT_WHATSAPP_NUMBER = G.BOT_PHONE_NUMBER || '15556643689';
 
   /* Prefijos de país más comunes (Argentina +54 por defecto) */
   const COUNTRY_CODES = [
