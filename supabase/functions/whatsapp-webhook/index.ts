@@ -301,9 +301,14 @@ async function findUserId(from: string): Promise<string | null> {
   return null;
 }
 
-/* Sesiones del wizard (tabla whatsapp_sessions) */
+/* Sesiones del wizard (tabla whatsapp_sessions).
+   IMPORTANTE: normalizamos el teléfono SIEMPRE (canonical 54 sin "9") para que
+   upsertSession/deleteSession (que reciben el `from` crudo de los botones) y
+   getSession (que recibe normalizePhone desde processMessage) apunten a la MISMA
+   clave. Antes, un botón guardaba "549…" (con 9) y el wizard leía "54…" (sin 9),
+   perdiendo el estado (p. ej. WAITING_CONTACT) y cayendo al fallback. */
 async function getSession(phone: string) {
-  const r = await rest("whatsapp_sessions?phone_number=eq." + encodeURIComponent(phone) + "&limit=1", { method: "GET" });
+  const r = await rest("whatsapp_sessions?phone_number=eq." + encodeURIComponent(normalizePhone(phone)) + "&limit=1", { method: "GET" });
   const rows = (await r.json().catch(() => [])) as Array<{ state: string; context: Record<string, unknown> }>;
   return (Array.isArray(rows) && rows.length) ? rows[0] : null;
 }
@@ -311,11 +316,11 @@ async function upsertSession(phone: string, userId: string, state: string, conte
   await rest("whatsapp_sessions", {
     method: "POST",
     headers: { Prefer: "resolution=merge-duplicates" },
-    body: JSON.stringify({ phone_number: phone, user_id: userId, state, context, updated_at: new Date().toISOString() }),
+    body: JSON.stringify({ phone_number: normalizePhone(phone), user_id: userId, state, context, updated_at: new Date().toISOString() }),
   });
 }
 async function deleteSession(phone: string) {
-  await rest("whatsapp_sessions?phone_number=eq." + encodeURIComponent(phone), { method: "DELETE" });
+  await rest("whatsapp_sessions?phone_number=eq." + encodeURIComponent(normalizePhone(phone)), { method: "DELETE" });
 }
 
 /* ¿El usuario tiene un ticket de soporte ABIERTO? Devuelve el ticket (id + messages)
