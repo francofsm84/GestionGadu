@@ -955,6 +955,10 @@
        Nunca bloquea el Dashboard (modal descartable sobre la app). */
     try { if (G.onboarding && G.onboarding.maybeShow) G.onboarding.maybeShow(); } catch (e) {}
 
+    /* Tutorial de bienvenida (3 pasos) + banner de instalación PWA */
+    try { if (G.onboarding && G.onboarding.maybeTutorial) G.onboarding.maybeTutorial(); } catch (e) {}
+    try { if (G.pwa && G.pwa.init) G.pwa.init(); } catch (e) {}
+
     const navAdmin = document.getElementById('navAdmin');
     if (navAdmin) navAdmin.hidden = !G.plan.isAdmin();
     const pc = document.getElementById('planChip');

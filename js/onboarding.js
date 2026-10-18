@@ -224,5 +224,88 @@
     } catch (e) { /* nunca bloquear el dashboard */ }
   }
 
-  G.onboarding = { maybeShow, open };
+  /* ---------- Tutorial de bienvenida (3 pasos) ---------- */
+  const TUTORIAL_STEPS = [
+    { icon: 'whatsapp', title: 'Vinculá tu WhatsApp', text: '¡Bienvenido a GADU! Vinculá tu WhatsApp desde "Mi Perfil" para cargar gastos por audio.' },
+    { icon: 'hard-hat', title: 'Creá tu primera obra', text: 'Creá tu primera obra para empezar a controlar tus costos.' },
+    { icon: 'zap', title: 'Usá el asistente', text: 'Usá el asistente (el robot del costado) para pedir presupuestos o consultar saldos en segundos.' },
+  ];
+
+  function showTutorial() {
+    const UI = G.ui;
+    if (!UI || !UI.openModal) return;
+    let step = 0;
+    const m = UI.openModal({
+      title: '👋 Bienvenido a GADU',
+      subtitle: 'Tres pasos para sacarle el máximo provecho',
+      body: '<div id="tutBody"></div>',
+      footer: '<button class="btn btn-ghost" data-cancel>Saltar</button><button class="btn btn-primary" data-next>Siguiente</button>',
+    });
+    const renderStep = () => {
+      const s = TUTORIAL_STEPS[step];
+      m.panel.querySelector('#tutBody').innerHTML =
+        '<div style="text-align:center;padding:6px 0">' +
+        '<div style="margin-bottom:10px">' + UI.icon(s.icon, 44) + '</div>' +
+        '<strong style="font-size:16px;display:block;margin-bottom:8px">' + s.title + '</strong>' +
+        '<p class="muted" style="margin:0">' + s.text + '</p>' +
+        '<div style="margin-top:16px">' +
+        TUTORIAL_STEPS.map((_, i) => '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + (i === step ? 'var(--primary)' : 'var(--muted)') + ';margin:0 4px"></span>').join('') +
+        '</div></div>';
+      m.panel.querySelector('[data-next]').textContent = step === TUTORIAL_STEPS.length - 1 ? 'Finalizar' : 'Siguiente';
+    };
+    renderStep();
+    const done = () => { try { localStorage.setItem('gadu_onboarding_done', 'true'); } catch (e) {} };
+    m.panel.querySelector('[data-next]').addEventListener('click', () => {
+      if (step < TUTORIAL_STEPS.length - 1) { step++; renderStep(); }
+      else { done(); m.close(); }
+    });
+    m.panel.querySelector('[data-cancel]').addEventListener('click', () => { done(); m.close(); });
+  }
+
+  function maybeTutorial() {
+    try {
+      if (localStorage.getItem('gadu_onboarding_done')) return;
+      showTutorial();
+    } catch (e) { /* nunca bloquear */ }
+  }
+
+  /* ---------- Banner de instalación PWA ---------- */
+  let deferredPrompt = null;
+
+  function initPWA() {
+    if (typeof window === 'undefined') return;
+    const standalone = !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    if (standalone || window.navigator.standalone === true) return;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      showInstallBanner();
+    });
+  }
+
+  function showInstallBanner() {
+    if (document.getElementById('pwaBanner')) return;
+    const host = document.createElement('div');
+    host.id = 'pwaBanner';
+    host.className = 'pwa-banner';
+    host.innerHTML =
+      '<span style="flex:1;min-width:0">📲 Instalá GADU en tu celular para usarla sin internet</span>' +
+      '<button class="btn btn-primary btn-sm" id="pwaInstall">Instalar</button>' +
+      '<button class="icon-btn sm" id="pwaClose" title="Cerrar" style="flex:none">×</button>';
+    document.body.appendChild(host);
+    host.querySelector('#pwaInstall').addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      try {
+        const choice = await deferredPrompt.userChoice;
+        if (choice && choice.outcome === 'accepted') { try { G.ui && G.ui.toast('✅ ¡GADU instalada!'); } catch (e) {} }
+      } catch (e) {}
+      deferredPrompt = null;
+      host.remove();
+    });
+    host.querySelector('#pwaClose').addEventListener('click', () => host.remove());
+  }
+
+  G.onboarding = { maybeShow, open, maybeTutorial, showTutorial };
+  G.pwa = { init: initPWA };
 })(typeof window !== 'undefined' ? window : globalThis);
