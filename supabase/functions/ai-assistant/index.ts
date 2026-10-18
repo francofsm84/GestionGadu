@@ -80,6 +80,11 @@ PRESUPUESTO PDF (CREATE_BUDGET):
 - Si el usuario menciona "IVA" o "descuento", agregá los campos "tax" (monto del IVA) y "discount" (monto del descuento) al objeto "campos".
 - Si falta el nombre del cliente o no hay ítems, preguntá en lugar de llamar la herramienta.
 
+REGISTRO DE ASISTENCIA (REGISTER_ATTENDANCE):
+- Si el usuario registra horas trabajadas de empleados (ej. "Hoy trabajó Juan 8 horas, Pedro 6 y Luis 4" o "Registrá jornada de ayer: Juan 8, Pedro 8"), llamá "abrir_formulario" con modulo="asistencia" y campos={"fecha": "hoy"|"ayer"|"YYYY-MM-DD", "employees": [{"nombre":"Juan","horas":8}, ...]}.
+- "fecha": "hoy" si no se aclara, "ayer" si dice "ayer", o la fecha ISO si la da explícita.
+- "employees": array de {nombre, horas}. Si un empleado no tiene horas, poné horas=0.
+
 - Si el CONTEXTO muestra UNA sola obra activa y el usuario pide cargar un gasto/ingreso/adelanto SIN especificar obra, NO preguntes: llamá "abrir_formulario" con el campo "obra" vacío (la app la asigna sola automáticamente).
 - Si hay VARIAS obras y el usuario NOMBRA una obra o cliente, usá ese nombre exacto en "obra"/"cliente".
 - Si la información es ambigua o incompleta, NO adivines y NO llames la herramienta. Respondé con una pregunta aclaratoria corta que LISTE las opciones disponibles del CONTEXTO por su nombre (ej. "¿A qué obra corresponde: El arreglo del baño o Refacciones?"), para que el usuario conteste por voz. Si falta un dato obligatorio (ej. la obra en un ingreso), pedilo puntualmente.`;
@@ -116,7 +121,7 @@ function tools() {
       parameters: {
         type: "OBJECT",
         properties: {
-          modulo: { type: "STRING", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada", "adelanto", "consulta", "presupuesto_pdf"], description: "Qué formulario abrir. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = generar un presupuesto en PDF para un cliente." },
+          modulo: { type: "STRING", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada", "adelanto", "consulta", "presupuesto_pdf", "asistencia"], description: "Qué formulario abrir. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = presupuesto en PDF. 'asistencia' = registrar horas trabajadas de empleados." },
           campos: {
             type: "OBJECT",
             description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol, cliente, obra, empleado, monto, concepto, categoria, horas, ubicacion, presupuesto, query_type, target, items (solo con modulo='presupuesto_pdf').",
@@ -149,6 +154,18 @@ function tools() {
               },
               tax: { type: "NUMBER", description: "Monto de IVA (solo si se menciona)" },
               discount: { type: "NUMBER", description: "Monto de descuento (solo si se menciona)" },
+              fecha: { type: "STRING", description: "Fecha de la jornada: 'hoy', 'ayer' o 'YYYY-MM-DD' (solo con modulo='asistencia')" },
+              employees: {
+                type: "ARRAY",
+                description: "Empleados y horas (solo con modulo='asistencia').",
+                items: {
+                  type: "OBJECT",
+                  properties: {
+                    nombre: { type: "STRING" },
+                    horas: { type: "NUMBER" },
+                  },
+                },
+              },
             },
           },
         },
@@ -169,7 +186,7 @@ function toolsOpenAI() {
       parameters: {
         type: "object",
         properties: {
-          modulo: { type: "string", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada", "adelanto", "consulta", "presupuesto_pdf"], description: "Qué formulario abrir. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = generar un presupuesto en PDF para un cliente." },
+          modulo: { type: "string", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada", "adelanto", "consulta", "presupuesto_pdf", "asistencia"], description: "Qué formulario abrir. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = presupuesto en PDF. 'asistencia' = registrar horas trabajadas de empleados." },
           campos: {
             type: "object",
             description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol, cliente, obra, empleado, monto, concepto, categoria, horas, ubicacion, presupuesto, query_type, target, items (solo con modulo='presupuesto_pdf').",
@@ -202,6 +219,18 @@ function toolsOpenAI() {
               },
               tax: { type: "number", description: "Monto de IVA (solo si se menciona)" },
               discount: { type: "number", description: "Monto de descuento (solo si se menciona)" },
+              fecha: { type: "string", description: "Fecha de la jornada: 'hoy', 'ayer' o 'YYYY-MM-DD' (solo con modulo='asistencia')" },
+              employees: {
+                type: "array",
+                description: "Empleados y horas (solo con modulo='asistencia').",
+                items: {
+                  type: "object",
+                  properties: {
+                    nombre: { type: "string" },
+                    horas: { type: "number" },
+                  },
+                },
+              },
             },
           },
         },

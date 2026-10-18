@@ -310,6 +310,17 @@ async function markProcessed(messageId: string): Promise<void> {
 function money(n: unknown): string {
   return "$" + Math.round(Number(n) || 0).toLocaleString("es-AR");
 }
+function flatStr(s: unknown): string {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+function resolveFecha(raw: string): string {
+  const r = String(raw || "hoy").toLowerCase();
+  const hoy = new Date();
+  if (r === "hoy" || !r) return hoy.toISOString().slice(0, 10);
+  if (r === "ayer") return new Date(hoy.getTime() - 86400000).toISOString().slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(r)) return r;
+  return hoy.toISOString().slice(0, 10);
+}
 function findWorkByName(data: Record<string, any>, target: string): Record<string, any> | null {
   const ws = (data.works || []) as Array<Record<string, any>>;
   if (!ws.length) return null;
@@ -955,6 +966,40 @@ async function processMessage(body: unknown) {
         fireAndForget(sendWhatsApp(inc.from, "❌ No pude generar el PDF. Probá de nuevo."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
+    }
+
+    /* Registro de asistencia (REGISTER_ATTENDANCE) */
+    if (action && action.modulo === "asistencia") {
+      const c = (action.campos || {}) as Record<string, unknown>;
+      const fecha = resolveFecha(String(c.fecha || "hoy"));
+      const employees = Array.isArray(c.employees) ? c.employees : [];
+      const registrados: Array<{ nombre: string; horas: number }> = [];
+      const noEncontrados: string[] = [];
+      for (const e of employees) {
+        const nombre = String((e as any).nombre || "").trim();
+        const horas = Number((e as any).horas) || 0;
+        if (!nombre || horas <= 0) continue;
+        const emp = (data.employees || []).find((x: any) =>
+          flatStr(String((x.firstName || "") + " " + (x.lastName || "")).trim()).includes(flatStr(nombre))
+        );
+        if (!emp) { noEncontrados.push(nombre); continue; }
+        (data.attendance || (data.attendance = [])).push({
+          id: crypto.randomUUID(), employeeId: String(emp.id || ""), date: fecha,
+          status: "presente", hours: [{ workId: null, hours }], notes: "",
+        });
+        registrados.push({ nombre: String((emp.firstName || "") + " " + (emp.lastName || "")).trim(), horas });
+      }
+      const up = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+      });
+      if (!up.ok) console.error("[GADU-WA-ATT] falló PATCH app_data:", up.status);
+      const partes = registrados.map(r => r.nombre + " (" + r.horas + "hs)");
+      let reply = "✅ Asistencia registrada: " + (partes.join(", ") || "nadie") + ".";
+      if (noEncontrados.length) reply += " (No encontré a " + noEncontrados.join(", ") + " en tu lista de empleados).";
+      fireAndForget(sendWhatsApp(inc.from, reply));
+      return json({ ok: true, from: inc.from, reply });
     }
 
     /* 4) Ejecutar la acción contable (gasto/ingreso) e impactar en app_data */
