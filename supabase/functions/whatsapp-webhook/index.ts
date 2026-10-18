@@ -724,8 +724,8 @@ async function handleButtonReply(from: string, buttonId: string) {
   if (buttonId.startsWith("action_")) {
     const act = buttonId.slice("action_".length);
     if (act === "nuevo_gasto") {
-      fireAndForget(sendWhatsApp(from, "Dale, decime el monto y el concepto (ej: \"Gasté 5000 de nafta\")"));
-      await deleteSession(normalizePhone(from));
+      await upsertSession(from, userId, "WAITING_GASTO", {});
+      fireAndForget(sendWhatsApp(from, "Dale, decime el monto y el concepto (ej: \"Gasté 5000 de nafta\" o \"5000 de cemento\")"));
       return;
     }
     if (act === "nueva_obra") {
@@ -1097,6 +1097,42 @@ async function processMessage(body: unknown) {
     /* [GADU-WA-AI-UPGRADE] Detección determinística de "adelanto" (regex de apoyo).
        Si solo dijo "adelanto" sin datos → arrancamos el wizard paso a paso. */
     const advIntent = detectAdvanceIntent(inc.text);
+
+    /* [GADU-WA-WIZARD] Wizard de gasto (WAITING_GASTO): captura monto + concepto
+       de forma determinística ANTES de la IA o el menú de respaldo. */
+    let enWizardGasto = false;
+    try {
+      const sessGasto = await getSession(normalizePhone(inc.from));
+      if (sessGasto && sessGasto.state === "WAITING_GASTO") enWizardGasto = true;
+    } catch (e) {}
+    if (enWizardGasto) {
+      const localGasto = localIntent(inc.text);
+      if (localGasto && localGasto.modulo === "gasto") {
+        const resG = executeAction(data, localGasto, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
+        if (resG.ok) {
+          await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+            method: "PATCH",
+            headers: { Prefer: "return=minimal" },
+            body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+          });
+          await deleteSession(normalizePhone(inc.from));
+          const reply = "✅ " + resG.label;
+          fireAndForget(sendWhatsApp(inc.from, reply));
+          return json({ ok: true, from: inc.from, reply });
+        }
+        await deleteSession(normalizePhone(inc.from));
+        fireAndForget(sendWhatsApp(inc.from, "🤖 " + (resG.missing ? "Me falta " + resG.missing + "." : "No pude cargar el gasto.") + " Probá de nuevo: \"Gasté 5000 de nafta\"."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      if (localGasto && localGasto.modulo && localGasto.modulo !== "gasto") {
+        /* El usuario cambió de idea: cancelar el wizard y dejar que la IA lo resuelva */
+        await deleteSession(normalizePhone(inc.from));
+        console.log("[GADU-WA-WIZARD] WAITING_GASTO cancelado, respuesta es:", localGasto.modulo);
+      } else {
+        fireAndForget(sendWhatsApp(inc.from, "🤖 Decime el gasto, por ejemplo: \"Gasté 5000 de nafta\" o \"5000 de cemento\"."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+    }
 
     /* [GADU-WA-AI-UPGRADE] Wizard de adelanto en curso (estado WAITING_ADVANCE) */
     let enWizardAdelanto = false;
