@@ -230,6 +230,7 @@
         '<span class="muted small">' + (t.created_at ? UI.fmtDate(t.created_at) : '—') + (hasReply(t) && t.status !== 'closed' ? ' ' + UI.chip('En proceso', 'info') : '') + '</span></div>' +
         '<div class="split-row-end">' +
         '<button class="btn btn-soft btn-sm" data-ticket="' + t.id + '" data-reply="' + UI.escapeHtml(t.phone || '') + '" data-msg="' + UI.escapeHtml(t.message || '') + '" data-user="' + (t.user_id || '') + '">' + UI.icon('whatsapp', 14) + ' Responder</button>' +
+        (t.user_id ? '<button class="btn btn-soft btn-sm" data-inspect="' + t.user_id + '" data-inspect-phone="' + UI.escapeHtml(t.phone || '') + '" title="Ver panel del usuario">' + UI.icon('eye', 14) + '</button>' : '') +
         (t.status !== 'closed' ? '<button class="btn btn-soft btn-sm" data-close-ticket="' + t.id + '">' + UI.icon('check', 14) + ' Resolver</button>' : '') +
         '</div></div>' +
         '<p class="muted" style="margin:6px 0 0">' + UI.escapeHtml(t.message || '—') + '</p>' +
@@ -255,6 +256,10 @@
 
     body.querySelectorAll('[data-reply]').forEach(b => b.addEventListener('click', () => {
       openSupportChat(b.dataset.ticket, b.dataset.reply, b.dataset.msg, b.dataset.user);
+    }));
+
+    body.querySelectorAll('[data-inspect]').forEach(b => b.addEventListener('click', () => {
+      openVerDatos(b.dataset.inspect, b.dataset.inspectPhone || '');
     }));
   }
 
@@ -335,7 +340,7 @@
         '<div class="card-inset client-card" style="margin-bottom:10px">' +
         '<div class="split-row"><div class="split-row-main"><strong>' + UI.escapeHtml(profile ? ((profile.nombre || '') + ' ' + (profile.apellido || '')).trim() || profile.email || 'Cliente' : 'Cliente') + '</strong>' +
         '<span class="muted small">' + UI.escapeHtml(profile ? (profile.email || '') : '') + '</span></div>' +
-        '<div class="split-row-end">' + UI.chip(statusLabel, statusTone) + (userId ? '<button class="btn btn-soft btn-sm" data-inspect-user title="Ver panel del usuario">' + UI.icon('eye', 14) + ' Ver Panel del Usuario</button>' : '') + '</div></div>' +
+        '<div class="split-row-end">' + UI.chip(statusLabel, statusTone) + '</div></div>' +
         '<div class="muted small">' +
         (profile ? 'Plan: ' + UI.escapeHtml(profile.plan_id || 'free') + ' · Estado: ' + UI.escapeHtml(profile.subscription_status || '—') : '') +
         (metrics ? (profile ? ' · ' : '') + 'Obras activas: ' + metrics.active + ' · Balance: ' + UI.fmtMoney(metrics.balance) + (metrics.lastActive ? ' · Últ. actividad: ' + UI.fmtDate(metrics.lastActive) : '') : '') +
@@ -374,12 +379,6 @@
     m.panel.querySelectorAll('[data-canned]').forEach(b => b.addEventListener('click', () => {
       m.panel.querySelector('#chatInput').value = CANNED[Number(b.dataset.canned)];
     }));
-
-    const inspectBtn = m.panel.querySelector('[data-inspect-user]');
-    if (inspectBtn) inspectBtn.addEventListener('click', () => {
-      m.close();
-      openVerDatos(userId, (profile && profile.email) || phone);
-    });
 
     m.panel.querySelector('[data-note]').addEventListener('click', async () => {
       try {
