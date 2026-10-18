@@ -1003,9 +1003,15 @@
         ? '¡Hola! 👋 Estás en la obra <b>' + esc(ctxWork.name) + '</b>. Tocá una acción rápida de esta obra.'
         : '¡Hola! 👋 Soy tu asistente GADU. Tocá una acción rápida o preguntame lo que necesites.');
 
+    /* Acceso directo a WhatsApp (solo para usuarios, no para el COO admin) */
+    const waBlock = admin ? '' :
+      '<div class="ai-tip">💡 Tip: También podés usar nuestro bot de WhatsApp para dictar audios y sacar fotos.</div>' +
+      '<a class="ai-wa-btn" href="' + waLink(G.BOT_PHONE_NUMBER || '15556643689', 'Hola GADU, quiero cargar datos por acá') + '" target="_blank" rel="noopener">📲 Abrir WhatsApp</a>';
+
     const bot = bubble(
       saludo + '<br>' +
-      '<div class="ai-actions">' + pills.map(p => '<button class="btn btn-soft btn-sm" data-act="' + p.k + '">' + p.e + ' ' + p.l + '</button>').join('') + '</div>',
+      '<div class="ai-actions">' + pills.map(p => '<button class="btn btn-soft btn-sm" data-act="' + p.k + '">' + p.e + ' ' + p.l + '</button>').join('') + '</div>' +
+      waBlock,
       'bot');
     appendLog(bot);
     log.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => firePill(b.dataset.act)));
