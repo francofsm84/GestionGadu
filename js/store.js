@@ -479,7 +479,9 @@
   /* Debounce de guardado local (500ms) para evitar write-amplification.
      El flush inmediato se dispara en 'beforeunload' para no perder datos. */
   let saveTimer = null;
+  let _supportBackup = null;   // backup del admin en modo soporte (inspección de usuario)
   function flushSave() {
+    if (_supportBackup !== null) return;   // en modo soporte NO persistir nada
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
     if (data) {
       storage().set(key, JSON.stringify(data)).catch(e => {
@@ -491,6 +493,7 @@
   }
   function save() {
     if (!data) return;
+    if (_supportBackup !== null) return;   // en modo soporte NO guardar ni sincronizar
     /* IndexedDB (localForage): debounce 500ms para evitar write-amplification.
        localStorage fallback (Node/tests): escritura sincrónica (no necesita debounce). */
     if (G.storage && G.storage.isIDB) {
@@ -514,6 +517,7 @@
      Normaliza SIEMPRE el documento entrante: documentos remotos antiguos
      (sin seguros, compromisos, empleados, etc.) no pueden tumbar el Dashboard. */
   function applyRemote(newData) {
+    if (_supportBackup !== null) return false;   // en modo soporte NO aplicar remoto
     if (!newData || typeof newData !== 'object' ||
       !Array.isArray(newData.works) || !Array.isArray(newData.incomes) || !Array.isArray(newData.expenses)) return false;
     const prev = data;
@@ -531,6 +535,26 @@
     storage().set(key, JSON.stringify(data)).catch(() => {});
     return true;
   }
+
+  /* ---------- Modo soporte (admin inspecciona a un usuario) ----------
+     Reemplaza `data` EN MEMORIA (sin persistir ni sincronizar) y guarda
+     el backup del admin para restaurarlo al salir. */
+  function enterSupportMode(d) {
+    if (!d || typeof d !== 'object' || !Array.isArray(d.works)) return false;
+    _supportBackup = data;
+    data = d;
+    normalize();
+    _hasData = true;
+    return true;
+  }
+  function exitSupportMode() {
+    if (_supportBackup === null) return false;
+    data = _supportBackup;
+    _supportBackup = null;
+    normalize();
+    return true;
+  }
+  function inSupportMode() { return _supportBackup !== null; }
 
   /* ---------- Empezar de cero (datos reales) ---------- */
   function currentSettings() {
@@ -1026,6 +1050,7 @@
     moveAsset, setAssetStatus, assetUsage, addAttendance,
     CATS_OBRA, CATS_GENERAL, METODOS, WORK_STATUS, ASSET_STATUS, ASSET_CATS, SEGURO_TIPOS, CONTACT_TYPES, BUDGET_STATUS,
     uid, todayISO, parseISO, monthLabel, daysAgo, daysAhead, sum, KEY, attachUser, hasLocalData, hasOnboarded, applyRemote,
+    enterSupportMode, exitSupportMode, inSupportMode,
     seguroDaysLeft, seguroEstado,
     /* Getter defensivo: nunca devuelve null (auto-carga/seed) para evitar
        errores del tipo "reading 'incomes'" durante el render inicial. */

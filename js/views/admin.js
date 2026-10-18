@@ -102,6 +102,22 @@
     return STATUS_LABEL[u.subscription_status] || u.subscription_status;
   }
 
+  /* Barra flotante "Modo soporte": se muestra mientras el admin inspecciona a un usuario */
+  function showSupportBanner() {
+    if (document.getElementById('supportModeBar')) return;
+    const bar = document.createElement('div');
+    bar.id = 'supportModeBar';
+    bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:var(--warning-soft,#3a2f14);color:var(--text,#f5f5f5);padding:9px 14px;display:flex;align-items:center;gap:12px;justify-content:center;flex-wrap:wrap;font-size:13px;box-shadow:0 2px 10px rgba(0,0,0,.35)';
+    bar.innerHTML = '<span>🔎 <strong>Modo soporte activo</strong> · estás viendo el panel del usuario</span>' +
+      '<button id="supportModeExit" style="cursor:pointer;background:var(--primary,#f59e0b);color:#fff;border:none;padding:6px 14px;border-radius:7px;font-weight:600">Salir del modo soporte</button>';
+    document.body.appendChild(bar);
+    bar.querySelector('#supportModeExit').addEventListener('click', () => {
+      try { S.exitSupportMode(); } catch (e) {}
+      bar.remove();
+      G.router.navigate('#/admin');
+    });
+  }
+
   /* Auditoría de soporte: ver y corregir los datos de un cliente */
   async function openVerDatos(uid, email) {
     const esc = UI.escapeHtml;
@@ -110,9 +126,16 @@
       subtitle: 'Auditoría de soporte',
       size: 'wide',
       body: '<div id="vdBody"><p class="form-hint">Cargando…</p></div>',
-      footer: '<button class="btn btn-ghost" data-cancel>Cerrar</button><button class="btn btn-ghost" data-vd-back style="display:none">' + UI.icon('arrow-left', 14) + ' Volver</button>',
+      footer: '<button class="btn btn-ghost" data-cancel>Cerrar</button><button class="btn btn-ghost" data-vd-back style="display:none">' + UI.icon('arrow-left', 14) + ' Volver</button><button class="btn btn-soft" data-vd-enter>' + UI.icon('eye', 14) + ' Acceder al panel de este usuario</button>',
     });
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+    m.panel.querySelector('[data-vd-enter]').addEventListener('click', () => {
+      if (!ctx || !ctx.d) return;
+      m.close();
+      try { S.enterSupportMode(ctx.d); } catch (e) { UI.toast('No se pudo entrar en modo soporte', 'error'); return; }
+      showSupportBanner();
+      G.router.navigate('#/dashboard');
+    });
     const backBtn = m.panel.querySelector('[data-vd-back]');
     backBtn.addEventListener('click', () => showSummary());
 
