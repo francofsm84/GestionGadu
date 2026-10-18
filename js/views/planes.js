@@ -13,7 +13,7 @@
   function bannerHTML(days) {
     if (days == null) return '';
     return days > 0
-      ? '<div class="card" style="border-left:3px solid var(--info);margin-bottom:14px">' +
+      ? '<div class="card" style="border-left:3px solid var(--warning);margin-bottom:14px">' +
           '<strong>⏳ Período de prueba</strong>' +
           '<p class="muted" style="margin:4px 0 0">Estás en período de prueba. Te quedan <b>' + days + ' día' + (days !== 1 ? 's' : '') + '</b>. ¡Mejorá tu plan para no perder tus obras!</p>' +
         '</div>'
