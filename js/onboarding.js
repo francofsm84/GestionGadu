@@ -217,10 +217,13 @@
   function maybeShow() {
     try {
       const S = G.store;
-      if (!S || !S.data || !S.data.settings) return;
-      if (S.data.settings.onboardingDone) return;
-      /* Si el WhatsApp ya está vinculado, el usuario ya pasó por el flujo:
-         marcar como completado y NO volver a interrumpir. */
+      if (!S) return;
+      /* 1) Admin → nunca interrumpir */
+      if (G.plan && G.plan.isAdmin && G.plan.isAdmin()) return;
+      /* 2) Bandera completada (memoria + localStorage, síncrono) */
+      if (S.hasOnboarded && S.hasOnboarded()) return;
+      if (!S.data || !S.data.settings) return;
+      /* 3) Si el WhatsApp ya está vinculado, marcar como completado y NO volver */
       const wa = S.data.settings.profile && S.data.settings.profile.whatsapp;
       if (wa && wa.linked) {
         S.data.settings.onboardingDone = true;

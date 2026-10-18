@@ -351,6 +351,18 @@
     try { return !!localStorage.getItem(key); } catch (e) { return false; }
   }
 
+  /* ¿El onboarding ya está completado? Verificación SÍNCRONA en memoria y
+     en localStorage (para que maybeShow no dependa de una carga async). */
+  function hasOnboarded() {
+    if (data && data.settings && data.settings.onboardingDone) return true;
+    try {
+      const raw = localStorage.getItem(key) || localStorage.getItem(KEY);
+      if (!raw) return false;
+      const d = JSON.parse(raw);
+      return !!(d && d.settings && d.settings.onboardingDone);
+    } catch (e) { return false; }
+  }
+
   function load() {
     if (data) return Promise.resolve(data);
     /* 1) SYNC: leer localStorage legacy (arranque + tests Node). Deja `data`
@@ -1013,7 +1025,7 @@
     workClientAdvances, workEmployeeAdvances, workEmployees,
     moveAsset, setAssetStatus, assetUsage, addAttendance,
     CATS_OBRA, CATS_GENERAL, METODOS, WORK_STATUS, ASSET_STATUS, ASSET_CATS, SEGURO_TIPOS, CONTACT_TYPES, BUDGET_STATUS,
-    uid, todayISO, parseISO, monthLabel, daysAgo, daysAhead, sum, KEY, attachUser, hasLocalData, applyRemote,
+    uid, todayISO, parseISO, monthLabel, daysAgo, daysAhead, sum, KEY, attachUser, hasLocalData, hasOnboarded, applyRemote,
     seguroDaysLeft, seguroEstado,
     /* Getter defensivo: nunca devuelve null (auto-carga/seed) para evitar
        errores del tipo "reading 'incomes'" durante el render inicial. */
