@@ -610,7 +610,12 @@ async function processMessage(body: unknown) {
           console.error("[whatsapp-webhook] falló impactar el movimiento:", up.status);
           return json({ ok: false, error: "no se pudo guardar el movimiento" });
         }
-        const reply = (aiReply ? aiReply + "\n\n" : "") + "✅ " + res.label;
+        let reply = (aiReply ? aiReply + "\n\n" : "") + "✅ " + res.label;
+        /* Deep link: enlazar al gasto recién creado para abrirlo resaltado en la app */
+        if (action.modulo === "gasto") {
+          const gastoId = (data.expenses && data.expenses[0]) ? String(data.expenses[0].id || "") : "";
+          if (gastoId) reply += "\n\n👉 Ver en GADU: https://gestiongadu.vercel.app/#/gastos?id=" + gastoId;
+        }
         fireAndForget(sendWhatsApp(inc.from, reply));
         /* Si fue gasto SIN obra (bandeja), enviar botones para asignarlo ya */
         if (action.modulo === "gasto" && res.label.includes("bandeja")) {

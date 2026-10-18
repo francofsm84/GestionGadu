@@ -965,3 +965,10 @@ body.no-session .app { display: none; }
   /* Espacio inferior para que el botón flotante no tape las tarjetas */
   .view { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 }
+
+/* Fila resaltada por deep link (#/gastos?id=<uuid>): fondo ámbar que se desvanece */
+.highlight-row { background-color: rgba(255, 215, 0, 0.2) !important; animation: fadeHighlight 3s ease-out; }
+@keyframes fadeHighlight {
+  0% { background-color: rgba(255, 215, 0, 0.6); }
+  100% { background-color: transparent; }
+}

@@ -36,6 +36,32 @@
 
   function cats() { return state.tab === 'obra' ? S.CATS_OBRA : S.CATS_GENERAL; }
 
+  /* Deep link #/gastos?id=<uuid>: resalta y scrollea hasta ese gasto una sola vez */
+  function handleDeepLink(view) {
+    try {
+      const m = String(location.hash || '').match(/[?&]id=([^&]+)/);
+      if (!m) return;
+      const id = decodeURIComponent(m[1]);
+      /* Si el gasto está en la otra solapa, cambiarse a ella */
+      const exp = S.data.expenses.find(x => x.id === id);
+      if (exp && exp.type && exp.type !== state.tab) {
+        state.tab = exp.type === 'obra' ? 'obra' : 'general';
+        view.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === state.tab));
+        view.querySelector('#contentWrap').innerHTML = contentHTML();
+        bindContent(view);
+      }
+      setTimeout(() => {
+        const row = view.querySelector('tr[data-id="' + id + '"]');
+        if (!row) return;
+        try { row.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+        row.classList.add('highlight-row');
+        setTimeout(() => { try { row.classList.remove('highlight-row'); } catch (e) {} }, 3000);
+      }, 300);
+      /* Limpiar la URL para que un refresh no vuelva a scrollear/resaltar */
+      try { history.replaceState(null, '', '#/gastos'); } catch (e) {}
+    } catch (e) {}
+  }
+
   function render(view) {
     view.innerHTML =
       '<div class="tabs page-tabs">' +
@@ -54,6 +80,7 @@
       bindContent(view);
     });
     bindContent(view);
+    handleDeepLink(view);
   }
 
   function contentHTML() {
@@ -155,7 +182,7 @@
       (list.map(x => {
         const w = S.data.works.find(wk => wk.id === x.workId);
         const prov = S.contactById(x.providerId);
-        return '<tr>' +
+        return '<tr data-id="' + x.id + '">' +
           '<td><input type="checkbox" class="sel-row" data-sel="' + x.id + '"' + (state.sel.indexOf(x.id) >= 0 ? ' checked' : '') + '></td>' +
           '<td class="muted">' + UI.fmtDate(x.date) + '</td>' +
           '<td>' + (state.tab === 'obra'
