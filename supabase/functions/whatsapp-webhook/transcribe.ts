@@ -128,7 +128,7 @@ async function geminiTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<
   }
 }
 
-/* 3b) Transcribe audio con Groq (whisper-large-v3). Devuelve "" si falla. */
+/* 3b) Transcribe audio con Groq (whisper-large-v3-turbo). Devuelve "" si falla. */
 async function groqTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<string> {
   const apiKey = Deno.env.get("GROQ_API_KEY") || "";
   if (!apiKey) {
@@ -136,13 +136,13 @@ async function groqTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<st
     return "";
   }
   const norm = normalizeMime(mimeType);
-  console.log("[GADU-WA-GROQ] transcribir audio:", buffer.byteLength, "bytes · mime:", norm, "· model: whisper-large-v3");
+  console.log("[GADU-WA-GROQ] transcribir audio:", buffer.byteLength, "bytes · mime:", norm, "· model: whisper-large-v3-turbo");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
     const form = new FormData();
     form.append("file", new Blob([buffer], { type: norm }), "audio.ogg");
-    form.append("model", "whisper-large-v3");
+    form.append("model", "whisper-large-v3-turbo");
     const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
       method: "POST",
       headers: { "Authorization": "Bearer " + apiKey },
@@ -276,8 +276,8 @@ async function geminiAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption
 }
 
 /* Analiza una imagen con Groq Vision. Devuelve "" si falla.
-   Modelo vigente (GroqDocs "Images and Vision"): qwen/qwen3.8-27b
-   (llama-3.2-11b-vision-preview quedó deprecado). Límite de imagen: 20MB → 400. */
+   Modelo vigente de visión Groq: meta-llama/llama-4-scout-17b-16e-instruct
+   (llama-3.2-11b-vision-preview y qwen/qwen3.8-27b quedaron deprecados). */
 async function groqAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption: string): Promise<string> {
   const apiKey = Deno.env.get("GROQ_API_KEY") || "";
   if (!apiKey) {
@@ -285,7 +285,7 @@ async function groqAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption: 
     return "";
   }
   const norm = normalizeImageMime(mimeType);
-  console.log("[GADU-WA-GROQ] analizar imagen:", buffer.byteLength, "bytes · mime:", norm, "· model: qwen/qwen3.8-27b");
+  console.log("[GADU-WA-GROQ] analizar imagen:", buffer.byteLength, "bytes · mime:", norm, "· model: meta-llama/llama-4-scout-17b-16e-instruct");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
@@ -299,7 +299,7 @@ async function groqAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption: 
       method: "POST",
       headers: { "Authorization": "Bearer " + apiKey, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "qwen/qwen3.8-27b",
+        model: "meta-llama/llama-4-scout-17b-16e-instruct",
         messages: [{
           role: "user",
           content: [
