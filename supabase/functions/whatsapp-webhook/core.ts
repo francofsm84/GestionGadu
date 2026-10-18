@@ -282,6 +282,21 @@ export function buildContext(data: Record<string, unknown>): string {
   return s.trim();
 }
 
+/* Sanitiza el nombre del empleado: quita "(rol)" del final y aplica Title Case.
+   "juan perez (albañil)" → { name: "Juan Perez", role: "albañil" } */
+export function sanitizeEmployeeName(raw: string): { name: string; role: string } {
+  let s = String(raw || "").trim();
+  let role = "";
+  const m = s.match(/\(([^)]+)\)\s*$/);   // rol entre paréntesis al final
+  if (m) {
+    role = m[1].trim();
+    s = s.slice(0, m.index).trim();
+  }
+  // Title Case: "juan perez" → "Juan Perez"
+  s = s.toLowerCase().replace(/(^|\s)([a-záéíóúñ])/g, (_m, p1, p2) => p1 + p2.toUpperCase());
+  return { name: s, role };
+}
+
 /* Ejecuta la acción del motor sobre los datos del usuario (misma lógica
    que el wizard del chat web: solo guarda con los campos obligatorios).
    No toca nada si falta un dato: devuelve qué falta para preguntarlo. */
@@ -344,16 +359,17 @@ export function executeAction(
     return { ok: true, label: "Ingreso de $" + monto + " (" + concepto + ") en " + ob.label + " ✓" };
   }
   if (action.modulo === "empleado") {
-    const nombre = String(c.nombre || "").trim();
-    if (!nombre) return { ok: false, missing: "el nombre del empleado" };
-    const rol = String(c.rol || "").trim();
-    const partes = nombre.split(/\s+/);
+    const raw = String(c.nombre || "").trim();
+    if (!raw) return { ok: false, missing: "el nombre del empleado" };
+    const { name, role: rolParen } = sanitizeEmployeeName(raw);
+    const rol = String(c.rol || rolParen || "").trim();
+    const partes = name.split(/\s+/);
     const firstName = partes[0] || "";
     const lastName = partes.slice(1).join(" ");
     (d.employees || (d.employees = [])).push({
       id: idGen(), firstName, lastName, phone: "", role: rol || "empleado", active: true, source: "whatsapp",
     } as unknown as Record<string, unknown>);
-    return { ok: true, label: "Empleado '" + nombre + "'" + (rol ? " (" + rol + ")" : "") + " agregado correctamente ✓" };
+    return { ok: true, label: "Empleado '" + name + "'" + (rol ? " (" + rol + ")" : "") + " agregado correctamente ✓" };
   }
 
   if (action.modulo === "adelanto") {
