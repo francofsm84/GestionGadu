@@ -36,6 +36,7 @@ import {
   localIntent,
   detectAdvanceIntent,
   parseAdvanceNameAmount,
+  resolveAdvanceTarget,
   toMetaPhone,
   extractFrom,
 } from "./core.ts";
@@ -481,29 +482,37 @@ async function handleButtonReply(from: string, buttonId: string) {
   }
   const data = rowsData[0].data || {};
 
-  /* 3) Gasto pendiente más reciente (unshift = el primero que cumple) */
+  /* 3) Pendiente más reciente: primero gastos, después ingresos (adelanto de cliente) */
   const expenses = (data.expenses || []) as Array<Record<string, any>>;
-  const idx = expenses.findIndex(e => e.source === "whatsapp" && e.workId == null);
-  if (idx === -1) {
-    console.warn("[GADU-WA-BUTTONS] sin gastos pendientes para", userId);
-    fireAndForget(sendWhatsApp(from, "🤖 No encontré gastos pendientes de asignar."));
+  const incomes = (data.incomes || []) as Array<Record<string, any>>;
+  const idxExp = expenses.findIndex(e => e.source === "whatsapp" && e.workId == null);
+  let target: Record<string, any> | null = null;
+  let esIngreso = false;
+  if (idxExp !== -1) {
+    target = expenses[idxExp];
+  } else {
+    const idxInc = incomes.findIndex(i => i.source === "whatsapp" && i.workId == null);
+    if (idxInc !== -1) { target = incomes[idxInc]; esIngreso = true; }
+  }
+  if (!target) {
+    console.warn("[GADU-WA-BUTTONS] sin movimientos pendientes para", userId);
+    fireAndForget(sendWhatsApp(from, "🤖 No encontré movimientos pendientes de asignar."));
     return;
   }
-  const expense = expenses[idx];
-  const monto = Number(expense.amount) || 0;
+  const monto = Number(target.amount) || 0;
 
   /* 4) Asignar según el botón */
   if (buttonId.startsWith("assign_work:")) {
     const workId = buttonId.slice("assign_work:".length);
     const work = (data.works || []).find((w: Record<string, any>) => String(w.id) === workId);
     const workName = String(work?.nombre || work?.name || "la obra");
-    expense.workId = workId;
-    expense.type = "obra";
-    fireAndForget(sendWhatsApp(from, "✅ Listo, el gasto de $" + monto + " fue asignado a la obra " + workName + "."));
+    target.workId = workId;
+    if (!esIngreso) target.type = "obra";
+    fireAndForget(sendWhatsApp(from, "✅ Listo, " + (esIngreso ? "el ingreso" : "el gasto") + " de $" + monto + " fue asignado a la obra " + workName + "."));
   } else if (buttonId === "assign_general") {
-    expense.workId = null;
-    expense.type = "general";
-    fireAndForget(sendWhatsApp(from, "✅ Listo, el gasto de $" + monto + " quedó registrado como Gasto General."));
+    target.workId = null;
+    if (!esIngreso) target.type = "general";
+    fireAndForget(sendWhatsApp(from, "✅ Listo, " + (esIngreso ? "el ingreso" : "el gasto") + " de $" + monto + " quedó registrado como " + (esIngreso ? "ingreso sin obra" : "Gasto General") + "."));
   } else {
     console.warn("[GADU-WA-BUTTONS] botón desconocido:", buttonId);
     return;
@@ -759,10 +768,15 @@ async function processMessage(body: unknown) {
         console.log("[GADU-WA-BACKGROUND] usando intent local (fallback):", JSON.stringify(local));
       }
     }
-    /* [GADU-WA-AI-UPGRADE] Si el regex detectó "adelanto" con nombre+monto, lo fuerza por encima de la IA */
+    /* [GADU-WA-SMART-CONTEXT] Si el regex detectó "adelanto" con nombre+monto, desambiguar cliente vs empleado */
     if (advIntent && advIntent.nombre && advIntent.monto > 0) {
-      action = { modulo: "adelanto", campos: { empleado: advIntent.nombre, monto: advIntent.monto } };
-      console.log("[GADU-WA-AI-UPGRADE] adelanto detectado (regex):", JSON.stringify(advIntent));
+      const target = resolveAdvanceTarget(data, advIntent.nombre);
+      if (target.kind === "cliente") {
+        action = { modulo: "ingreso", campos: { concepto: "Adelanto", cliente: target.nombre, monto: advIntent.monto } };
+      } else {
+        action = { modulo: "adelanto", campos: { empleado: target.nombre, monto: advIntent.monto } };
+      }
+      console.log("[GADU-WA-SMART-CONTEXT] adelanto → " + target.kind + ":", target.nombre, "· monto:", advIntent.monto);
     }
     console.log("[DEBUG] Intent detectado: " + (action ? action.modulo : "ninguno"));
 
@@ -809,8 +823,8 @@ async function processMessage(body: unknown) {
           if (gastoId) reply += "\n\n👉 Ver en GADU: https://gestiongadu.vercel.app/#/gastos?id=" + gastoId;
         }
         fireAndForget(sendWhatsApp(inc.from, reply));
-        /* Si fue gasto SIN obra (bandeja), enviar botones para asignarlo ya */
-        if (action.modulo === "gasto" && res.label.includes("bandeja")) {
+        /* Si quedó SIN obra (gasto en bandeja o adelanto de cliente), preguntar a qué obra */
+        if ((action.modulo === "gasto" && res.label.includes("bandeja")) || res.pendingWork) {
           await askForWork(inc.from, row.user_id, data);
         }
         return json({ ok: true, from: inc.from, reply });

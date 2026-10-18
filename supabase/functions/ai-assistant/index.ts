@@ -67,6 +67,10 @@ CONSULTAS (QUERY_DATA):
 TOLERANCIA Y ADELANTOS (crítico):
 - MONTO CON "p": si el monto trae una "p" o "pesos" pegada (ej. "12000p", "12000 pesos"), ignorá esa letra y tomá solo el número (12000).
 - ADELANTO A EMPLEADO: si el usuario dice "adelanto de [Nombre]" o "anticipo de [Nombre]" y ese nombre coincide con un empleado del CONTEXTO, la intención es modulo="adelanto" con campos={"empleado": "<nombre>", "monto": <número>}. NO lo interpretes como gasto general.
+- DESAMBIGUACIÓN "adelanto de [Nombre]": buscá [Nombre] en el CONTEXTO antes de decidir:
+  - Si coincide con un CLIENTE (del directorio) → es un COBRO ANTICIPADO del cliente: modulo="ingreso" con campos={"concepto":"Adelanto", "cliente":"<nombre>", "monto":<número>}.
+  - Si coincide con un EMPLEADO → es un adelanto de dinero: modulo="adelanto" con campos={"empleado":"<nombre>", "monto":<número>}.
+  - Si no está claro si es cliente o empleado, NO adivines: preguntá "¿[Nombre] es un cliente o un empleado?".
 - Si el usuario escribe SOLO "adelanto" (sin nombre ni monto), respondé con UNA pregunta corta y amigable pidiendo los datos (ej. "¿A qué empleado y de cuánto es el adelanto?"). No lo mandes a la web.
 - ASK_FOR_CLARIFICATION: si falta un dato obligatorio (monto, empleado u obra), NO llames la herramienta con datos incompletos. Respondé con UNA pregunta corta pidiendo el dato que falta (ej. "¿De cuánto es el adelanto?" o "¿A qué obra corresponde?").
 

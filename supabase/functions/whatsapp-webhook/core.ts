@@ -299,6 +299,7 @@ export interface ExecResult {
   label?: string;
   missing?: string;      // dato faltante para pedirlo por chat
   unsupported?: string;  // módulo que el conector no ejecuta (lo responde la IA)
+  pendingWork?: boolean; // se guardó sin obra: el webhook debe preguntar "¿a qué obra?"
 }
 
 /* Contexto compacto de la cuenta (mismo espíritu que context() del chat web) */
@@ -314,6 +315,18 @@ export function buildContext(data: Record<string, unknown>): string {
   const assets = (d.assets || []).map(a => a.name + " (" + (a.status || "operativo") + ")");
   if (assets.length) s += " Herramientas: " + assets.slice(0, 8).join(", ") + ".";
   return s.trim();
+}
+
+/* Desambiguación de "adelanto de [Nombre]": ¿cliente (cobro anticipado) o empleado (adelanto)?
+   Devuelve { kind: "cliente" | "empleado" | "desconocido", id, nombre }. */
+export function resolveAdvanceTarget(data: Record<string, unknown>, nombre: string): { kind: string; id?: string; nombre: string } {
+  const d = (data || {}) as Record<string, Array<Record<string, unknown>>>;
+  const fn = flat(nombre);
+  const cli = (d.contacts || []).find((c) => flat(String(c.name || "")).includes(fn));
+  if (cli) return { kind: "cliente", id: String(cli.id || ""), nombre: String(cli.name || nombre) };
+  const emp = (d.employees || []).find((e) => flat(String((e.firstName || "") + " " + (e.lastName || "")).trim()).includes(fn));
+  if (emp) return { kind: "empleado", id: String(emp.id || ""), nombre: String(((emp.firstName || "") + " " + (emp.lastName || "")).trim() || nombre) };
+  return { kind: "desconocido", nombre };
 }
 
 /* Normaliza el texto del empleado: quita relleno ("agrega", "nuevo", "se llama"),
@@ -410,13 +423,26 @@ export function executeAction(
     if (!(monto > 0)) return { ok: false, missing: "el monto" };
     const concepto = ["Adelanto", "Certificación", "Cobro"].find(x => flat(String(c.concepto || "")).includes(flat(x))) || "Cobro";
     const ob = resolveObra();
-    if (ob.missing) return { ok: false, missing: ob.missing };
+    const esAdelanto = concepto === "Adelanto";
+    /* Solo los "adelantos" de cliente pueden quedar sin obra (se pregunta después) */
+    if (ob.missing && !esAdelanto) return { ok: false, missing: ob.missing };
+    /* Cliente (si se nombra): buscar en el directorio para guardar su clientId */
+    let clientId: string | null = null;
+    let clientName = "";
+    const clienteRaw = String(c.cliente || "").trim();
+    if (clienteRaw) {
+      const cli = (d.contacts || []).find((x: Record<string, unknown>) => flat(String(x.name || "")).includes(flat(clienteRaw)));
+      if (cli) { clientId = String(cli.id || ""); clientName = String(cli.name || ""); }
+    }
     (d.incomes || (d.incomes = [])).unshift({
-      id: idGen(), workId: ob.workId, clientId: null, date: todayISO, amount: monto,
+      id: idGen(), workId: ob.workId, clientId, date: todayISO, amount: monto,
       concept: concepto, method: "", reference: "", notes: String(sourceText || "").slice(0, 200),
       incomeKind: concepto === "Adelanto" ? "adelanto" : "pago", source: "whatsapp",
     } as unknown as Record<string, unknown>);
-    return { ok: true, label: "Ingreso de $" + monto + " (" + concepto + ") en " + ob.label + " ✓" };
+    const label = concepto === "Adelanto" && clientName
+      ? "Ingreso de $" + monto + " (Adelanto) del cliente " + clientName + " guardado"
+      : "Ingreso de $" + monto + " (" + concepto + ") en " + ob.label + " ✓";
+    return { ok: true, label, pendingWork: !!(esAdelanto && ob.missing) };
   }
   if (action.modulo === "empleado") {
     const raw = String(c.nombre || "").trim();
