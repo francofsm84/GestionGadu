@@ -37,6 +37,9 @@
 
   /* Empty state de bienvenida (usuario nuevo sin obras ni gastos) */
   function emptyStateHTML() {
+    const prof = (S.data && S.data.settings && S.data.settings.profile) || {};
+    const wa = prof.whatsapp || {};
+    const linked = !!(wa.linked || wa.verified || prof.whatsapp_verified);
     return '<div class="card" style="text-align:center;padding:48px 24px;max-width:520px;margin:0 auto">' +
       '<span class="empty-ico">' + UI.icon('hard-hat', 40) + '</span>' +
       '<h2 style="margin:12px 0 6px">¡Bienvenido a GADU! 👋</h2>' +
@@ -44,7 +47,7 @@
       '<div class="stack" style="gap:10px">' +
         '<button class="btn btn-primary btn-block" id="btnFirstWork">' + UI.icon('hard-hat', 16) + ' Crear mi primera Obra</button>' +
         '<button class="btn btn-soft btn-block" id="btnFirstExpense">' + UI.icon('receipt', 16) + ' Cargar un Gasto</button>' +
-        '<button class="btn btn-soft-success btn-block" id="btnFirstWhatsApp">' + UI.icon('whatsapp', 16) + ' Vincular mi WhatsApp</button>' +
+        (linked ? '' : '<button class="btn btn-soft-success btn-block" id="btnFirstWhatsApp">' + UI.icon('whatsapp', 16) + ' Vincular mi WhatsApp</button>') +
       '</div>' +
     '</div>';
   }
