@@ -19,6 +19,7 @@ let abierto = 0;
 G.ui = {
   escapeHtml: s => String(s),
   icon: () => '',
+  avatar: () => '',
   toast: () => {},
   openModal: () => {
     abierto++;
