@@ -294,6 +294,7 @@ const MENU_OPTS = [
   { id: "action_adelanto", title: "Pago / Adelanto" },
   { id: "action_presupuesto", title: "Presupuesto" },
   { id: "action_consulta", title: "Consultar Saldo" },
+  { id: "action_ingreso", title: "Registrar Cobro" },
   { id: "action_contacto", title: "Nuevo Contacto / Directorio" },
   { id: "action_humano", title: "Hablar con humano" },
 ];
@@ -831,13 +832,20 @@ async function handleButtonReply(from: string, buttonId: string) {
       fireAndForget(sendWhatsApp(from, "¿Qué querés consultar? Saldo de una obra, gastos de la semana, etc."));
       return;
     }
+    if (act === "ingreso") {
+      await upsertSession(from, userId, "WAITING_INGRESO", {});
+      fireAndForget(sendWhatsApp(from, "¿De cuánto es el cobro? (ej. 50000)"));
+      return;
+    }
     if (act === "contacto") {
       await upsertSession(from, userId, "WAITING_CONTACT_ROLE", {});
-      await sendWhatsAppButtons(from, "¿Qué tipo de contacto querés registrar?", [
-        { id: "contact_role:empleado", title: "Empleado" },
-        { id: "contact_role:socio", title: "Socio" },
+      await sendWhatsAppList(from, "¿Qué tipo de contacto querés registrar?", [
         { id: "contact_role:cliente", title: "Cliente" },
-      ]);
+        { id: "contact_role:proveedor", title: "Proveedor" },
+        { id: "contact_role:subcontratista", title: "Subcontratista" },
+        { id: "contact_role:socio", title: "Socio" },
+        { id: "contact_role:empleado", title: "Empleado" },
+      ], { button: "Elegir tipo", sectionTitle: "Contacto" });
       return;
     }
     if (act === "humano") {
@@ -863,9 +871,9 @@ async function handleButtonReply(from: string, buttonId: string) {
      Guarda el wizard multi-paso: WAITING_CONTACT_NAME → WAITING_CONTACT_PHONE. */
   if (buttonId.startsWith("contact_role:")) {
     const role = buttonId.slice("contact_role:".length);
-    if (role === "empleado" || role === "socio" || role === "cliente") {
+    if (role === "empleado" || role === "socio" || role === "cliente" || role === "proveedor" || role === "subcontratista") {
       await upsertSession(from, userId, "WAITING_CONTACT_NAME", { contactType: role });
-      const label = role === "empleado" ? "Empleado" : (role === "socio" ? "Socio" : "Cliente");
+      const label = role === "empleado" ? "Empleado" : (role === "socio" ? "Socio" : (role === "proveedor" ? "Proveedor" : (role === "subcontratista" ? "Subcontratista" : "Cliente")));
       fireAndForget(sendWhatsApp(from, "Perfecto, vamos a registrar un *" + label + "*. ¿Cuál es el nombre completo? (Escribí *cancelar* para abortar)"));
       return;
     }
@@ -1298,6 +1306,83 @@ async function processMessage(body: unknown) {
         return json({ ok: true, from: inc.from, reply: "✅ " + resG.label });
       }
       fireAndForget(sendWhatsApp(inc.from, "🤖 No pude guardar el gasto. Probá de nuevo."));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* [GADU-WA-WIZARD] Ingreso/cobro (WAITING_INGRESO): monto → concepto → obra */
+    let enWizardIngreso = false;
+    try {
+      const sessIng = await getSession(normalizePhone(inc.from));
+      if (sessIng && sessIng.state === "WAITING_INGRESO") enWizardIngreso = true;
+    } catch (e) {}
+    if (enWizardIngreso) {
+      const localIng = localIntent(inc.text);
+      if (localIng && localIng.modulo === "ingreso") {
+        const res = executeAction(data, localIng, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
+        if (res.ok) {
+          await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+            method: "PATCH",
+            headers: { Prefer: "return=minimal" },
+            body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+          });
+          await deleteSession(normalizePhone(inc.from));
+          fireAndForget(sendWhatsApp(inc.from, "✅ " + res.label));
+          return json({ ok: true, from: inc.from, reply: "✅ " + res.label });
+        }
+        await deleteSession(normalizePhone(inc.from));
+        fireAndForget(sendWhatsApp(inc.from, "🤖 " + (res.missing ? "Me falta " + res.missing + "." : "No pude cargarlo.")));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      const mSuelto = String(inc.text || "").trim().match(/^\$?\s*([\d][\d.,]*)\s*$/);
+      if (mSuelto) {
+        const monto = Number(String(mSuelto[1]).replace(/\./g, "").replace(",", "."));
+        if (monto > 0) {
+          await upsertSession(inc.from, row.user_id, "WAITING_INGRESO_CONCEPTO", { monto });
+          fireAndForget(sendWhatsApp(inc.from, "¿Qué concepto? (Cobro, Adelanto, Certificación)"));
+          return json({ ok: true, from: inc.from, reply: "" });
+        }
+      }
+      fireAndForget(sendWhatsApp(inc.from, "🤖 ¿De cuánto es el cobro? Ej: \"Cobré 50000 por la obra\"."));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* Ingreso paso 2: concepto (WAITING_INGRESO_CONCEPTO) */
+    let enWizardIngConc = false;
+    let ingConcCtx: Record<string, unknown> = {};
+    try {
+      const sessIC2 = await getSession(normalizePhone(inc.from));
+      if (sessIC2 && sessIC2.state === "WAITING_INGRESO_CONCEPTO") { enWizardIngConc = true; ingConcCtx = (sessIC2.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardIngConc) {
+      const t = String(inc.text || "").trim();
+      if (!t) { fireAndForget(sendWhatsApp(inc.from, "🤖 ¿Qué concepto? (Cobro, Adelanto, Certificación)")); return json({ ok: true, from: inc.from, reply: "" }); }
+      await upsertSession(inc.from, row.user_id, "WAITING_INGRESO_OBRA", { monto: ingConcCtx.monto, concepto: t });
+      fireAndForget(sendWhatsApp(inc.from, "¿A qué obra corresponde?"));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* Ingreso paso 3: obra → guardar (WAITING_INGRESO_OBRA) */
+    let enWizardIngObra = false;
+    let ingObraCtx: Record<string, unknown> = {};
+    try {
+      const sessIO = await getSession(normalizePhone(inc.from));
+      if (sessIO && sessIO.state === "WAITING_INGRESO_OBRA") { enWizardIngObra = true; ingObraCtx = (sessIO.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardIngObra) {
+      const t = String(inc.text || "").trim();
+      const actionI = { modulo: "ingreso", campos: { monto: ingObraCtx.monto, concepto: ingObraCtx.concepto, obra: t } };
+      const res = executeAction(data, actionI, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
+      if (res.ok) {
+        await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+        });
+        await deleteSession(normalizePhone(inc.from));
+        fireAndForget(sendWhatsApp(inc.from, "✅ " + res.label));
+        return json({ ok: true, from: inc.from, reply: "✅ " + res.label });
+      }
+      fireAndForget(sendWhatsApp(inc.from, res.missing ? "🤖 Me falta " + res.missing + "." : "🤖 No pude cargarlo."));
       return json({ ok: true, from: inc.from, reply: "" });
     }
 
@@ -1752,7 +1837,7 @@ async function processMessage(body: unknown) {
       } else {
         (data.contacts || (data.contacts = [])).unshift({
           id: crypto.randomUUID(), name,
-          type: contactType === "socio" ? "socio" : "cliente",
+          type: contactType === "subcontratista" ? "subcontratista" : (contactType === "proveedor" ? "proveedor" : (contactType === "socio" ? "socio" : "cliente")),
           phone, email: "", source: "whatsapp",
         });
       }
@@ -1762,7 +1847,7 @@ async function processMessage(body: unknown) {
         body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
       });
       await deleteSession(normalizePhone(inc.from));
-      const label = contactType === "empleado" ? "Empleado" : (contactType === "socio" ? "Socio" : "Cliente");
+      const label = contactType === "empleado" ? "Empleado" : (contactType === "socio" ? "Socio" : (contactType === "proveedor" ? "Proveedor" : (contactType === "subcontratista" ? "Subcontratista" : "Cliente")));
       fireAndForget(sendWhatsApp(inc.from, "✅ Contacto guardado correctamente: " + label + " '" + name + "'."));
       return json({ ok: true, from: inc.from, reply: "contacto guardado" });
     }
