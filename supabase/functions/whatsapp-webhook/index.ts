@@ -946,7 +946,7 @@ async function processMessage(body: unknown) {
     }
     if (resolved.imageNoMonto) {
       console.warn("[GADU-WA-IMAGE] no se pudo leer el monto del ticket para", resolved.from);
-      fireAndForget(sendWhatsApp(resolved.from, "🤖 No pude leer el monto del ticket. ¿Podrías escribirme cuánto gastaste?"));
+      fireAndForget(sendWhatsApp(resolved.from, "🤖 No pude leer el ticket. ¿Me escribís el monto?"));
       return;
     }
     const inc = { from: resolved.from, text: resolved.text, mediaUrl: resolved.mediaUrl || "" };

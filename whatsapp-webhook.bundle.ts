@@ -749,11 +749,12 @@ async function geminiAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption
   }
   const model = Deno.env.get("GEMINI_MODEL") || "gemini-1.5-flash";
   const base64 = arrayBufferToBase64(buffer);
-  const prompt = "Eres un experto leyendo tickets. Lee la imagen con atenci\u00f3n, incluso si est\u00e1 rotada o tiene letra peque\u00f1a. " +
-    "Busca la palabra 'TOTAL' (o 'TOTAL A PAGAR', 'IMPORTE') para extraer el monto. " +
-    "Devuelve SOLO un JSON v\u00e1lido (sin markdown, sin comentarios) con esta estructura exacta: " +
-    '{"monto": <numero>, "concepto": "<descripcion>", "categoria": "<rubro>"}. ' +
-    'Si no puedes leer el monto, devuelve {"monto": 0}. Texto que acompa\u00f1a la imagen: "' + (caption || "") + '".';
+  const prompt = "Eres un experto leyendo tickets de compra, incluso si est\u00e1n rotados, borrosos o con letra muy peque\u00f1a. " +
+    "Busca SIEMPRE la palabra 'TOTAL' (o 'TOTAL A PAGAR', 'IMPORTE') para extraer el monto exacto. " +
+    "Devuelve SOLO y ESTRICTAMENTE un JSON v\u00e1lido, sin markdown ni comentarios, con esta estructura exacta: " +
+    '{"monto": <numero>, "concepto": "<descripcion>"}. ' +
+    'Si no puedes leer el monto, devuelve {"monto": 0, "concepto": ""}. ' +
+    'Texto que acompa\u00f1a la imagen: "' + (caption || "") + '".';
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   console.log("[GADU-WA-IMAGE] gemini analizar imagen:", buffer.byteLength, "bytes \u00b7 mime:", mimeType);
@@ -813,11 +814,12 @@ async function groqAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption: 
   try {
     const base64 = arrayBufferToBase64(buffer);
     const dataUrl = "data:" + norm + ";base64," + base64;
-    const prompt = "Eres un experto leyendo tickets. Lee la imagen con atenci\u00f3n, incluso si est\u00e1 rotada o tiene letra peque\u00f1a. " +
-      "Busca la palabra 'TOTAL' (o 'TOTAL A PAGAR', 'IMPORTE') para extraer el monto. " +
-      "Devuelve SOLO un JSON v\u00e1lido (sin markdown, sin comentarios) con esta estructura exacta: " +
-      '{"monto": <numero>, "concepto": "<descripcion>", "categoria": "<rubro>"}. ' +
-      'Si no puedes leer el monto, devuelve {"monto": 0}. Texto que acompa\u00f1a la imagen: "' + (caption || "") + '".';
+    const prompt = "Eres un experto leyendo tickets de compra, incluso si est\u00e1n rotados, borrosos o con letra muy peque\u00f1a. " +
+      "Busca SIEMPRE la palabra 'TOTAL' (o 'TOTAL A PAGAR', 'IMPORTE') para extraer el monto exacto. " +
+      "Devuelve SOLO y ESTRICTAMENTE un JSON v\u00e1lido, sin markdown ni comentarios, con esta estructura exacta: " +
+      '{"monto": <numero>, "concepto": "<descripcion>"}. ' +
+      'Si no puedes leer el monto, devuelve {"monto": 0, "concepto": ""}. ' +
+      'Texto que acompa\u00f1a la imagen: "' + (caption || "") + '".';
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: { "Authorization": "Bearer " + apiKey, "Content-Type": "application/json" },
@@ -1052,24 +1054,13 @@ export async function markFailed(
   rest: (path: string, opts?: Record<string, unknown>) => Promise<Response>,
   id: number,
 ): Promise<void> {
-  /* Reintentos: si a\u00fan no lleg\u00f3 a 3 intentos, devolver a 'pending' para que se
-     vuelva a reclamar en el pr\u00f3ximo drain; reci\u00e9n al 3er intento pasa a 'failed'. */
-  const r = await rest("whatsapp_queue?id=eq." + id + "&select=attempts", { method: "GET" });
-  const rows = (await r.json().catch(() => [])) as Array<{ attempts: number }>;
-  const attempts = (rows && rows[0] && rows[0].attempts) || 0;
-  if (attempts < 3) {
-    await rest("whatsapp_queue?id=eq." + id, {
-      method: "PATCH",
-      headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({ status: "pending", claimed_at: null }),
-    });
-  } else {
-    await rest("whatsapp_queue?id=eq." + id, {
-      method: "PATCH",
-      headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({ status: "failed", processed_at: new Date().toISOString() }),
-    });
-  }
+  /* Marcar 'failed' INMEDIATAMENTE (sin reintentos) para que la cola no se bloquee:
+     el drainPhone pasa al siguiente mensaje al instante. */
+  await rest("whatsapp_queue?id=eq." + id, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ status: "failed", processed_at: new Date().toISOString() }),
+  });
 }
 
 
@@ -2002,7 +1993,7 @@ async function processMessage(body: unknown) {
     }
     if (resolved.imageNoMonto) {
       console.warn("[GADU-WA-IMAGE] no se pudo leer el monto del ticket para", resolved.from);
-      fireAndForget(sendWhatsApp(resolved.from, "[BOT] No pude leer el monto del ticket. \u00bfPodr\u00edas escribirme cu\u00e1nto gastaste?"));
+      fireAndForget(sendWhatsApp(resolved.from, "[BOT] No pude leer el ticket. \u00bfMe escrib\u00eds el monto?"));
       return;
     }
     const inc = { from: resolved.from, text: resolved.text, mediaUrl: resolved.mediaUrl || "" };
