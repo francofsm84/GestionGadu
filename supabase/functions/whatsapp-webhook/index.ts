@@ -290,6 +290,7 @@ const MENU_OPTS = [
   { id: "action_nueva_obra", title: "Nueva Obra" },
   { id: "action_nuevo_gasto", title: "Cargar Gasto" },
   { id: "action_inversion", title: "Registrar Inversión" },
+  { id: "action_herramienta", title: "Registrar Herramienta" },
   { id: "action_adelanto", title: "Pago / Adelanto" },
   { id: "action_presupuesto", title: "Presupuesto" },
   { id: "action_consulta", title: "Consultar Saldo" },
@@ -789,6 +790,11 @@ async function handleButtonReply(from: string, buttonId: string) {
       fireAndForget(sendWhatsApp(from, "¿De cuánto fue la inversión y en qué? Ej: \"Invertí 50000 en herramientas\"."));
       return;
     }
+    if (act === "herramienta") {
+      await upsertSession(from, userId, "WAITING_HERRAMIENTA", {});
+      fireAndForget(sendWhatsApp(from, "Decime la herramienta y su costo, ej: \"Amoladora 50000\" o \"Hormigonera 380000\"."));
+      return;
+    }
     if (act === "nueva_obra") {
       await upsertSession(from, userId, "WAITING_OBRA", {});
       fireAndForget(sendWhatsApp(from, "¿Cómo se llama la obra y en qué dirección está? Ej: \"Casa Pérez en Alta Gracia\""));
@@ -1264,6 +1270,45 @@ async function processMessage(body: unknown) {
         fireAndForget(sendWhatsApp(inc.from, "🤖 ¿De cuánto fue la inversión y en qué? Ej: \"Invertí 50000 en herramientas\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
+    }
+
+    /* [GADU-WA-WIZARD] Wizard de herramienta (WAITING_HERRAMIENTA): nombre + costo.
+       Crea el activo en data.assets ANTES de confirmar (mismo patrón blindado). */
+    let enWizardHerramienta = false;
+    try {
+      const sessHer = await getSession(normalizePhone(inc.from));
+      if (sessHer && sessHer.state === "WAITING_HERRAMIENTA") enWizardHerramienta = true;
+    } catch (e) {}
+    if (enWizardHerramienta) {
+      const tHer = String(inc.text || "").trim();
+      if (!tHer) {
+        fireAndForget(sendWhatsApp(inc.from, "🤖 Decime la herramienta y su costo, ej: \"Amoladora 50000\"."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      const mHer = tHer.match(/^(.+?)\s+([\d][\d.,]*)\s*$/);
+      if (mHer) {
+        const nombreRaw = String(mHer[1]).trim();
+        const costo = Number(String(mHer[2]).replace(/\./g, "").replace(",", "."));
+        let categoria = "Herramienta manual";
+        if (/el[eé]ctric|amoladora|sierra|rotomartillo|taladro|mezcladora/i.test(nombreRaw)) categoria = "Herramienta eléctrica";
+        else if (/hormigonera|m[aá]quina|maquinaria|equipo/i.test(nombreRaw)) categoria = "Equipo mayor";
+        else if (/cami[oó]n|veh[ií]culo|utilitario|auto/i.test(nombreRaw)) categoria = "Vehículo";
+        (data.assets || (data.assets = [])).unshift({
+          id: crypto.randomUUID(), name: nombreRaw, category: categoria,
+          purchaseDate: new Date().toISOString().slice(0, 10), cost: costo,
+          status: "operativo", supplierId: null, notes: "", maintenance: [],
+        });
+        await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+        });
+        await deleteSession(normalizePhone(inc.from));
+        fireAndForget(sendWhatsApp(inc.from, "✅ Herramienta registrada: " + nombreRaw + " (" + categoria + ") · $" + costo.toLocaleString("es-AR")));
+        return json({ ok: true, from: inc.from, reply: "herramienta guardada" });
+      }
+      fireAndForget(sendWhatsApp(inc.from, "🤖 Decime la herramienta y su costo, ej: \"Amoladora 50000\"."));
+      return json({ ok: true, from: inc.from, reply: "" });
     }
 
     /* [GADU-WA-WIZARD] Presupuesto (WAITING_PRESUPUESTO): la IA extrae cliente + ítems.
