@@ -27,14 +27,17 @@
       const w = S.data.works.find(wk => wk.id === x.workId);
       const prov = S.contactById(x.providerId);
       const hay = (x.description + ' ' + x.category + ' ' + (w ? w.name : '') + ' ' + (prov ? prov.name : '') + ' ' + (x.invoiceNumber || '')).toLowerCase();
-      return x.type === state.tab &&
+      const matchTab = state.tab === 'inversion'
+        ? x.expenseKind === 'inversion'
+        : (x.type === state.tab && x.expenseKind !== 'inversion');
+      return matchTab &&
         (state.cat === 'todas' || x.category === state.cat) &&
         (state.tab !== 'obra' || state.work === 'todas' || x.workId === state.work) &&
         (!q || hay.includes(q));
     });
   }
 
-  function cats() { return state.tab === 'obra' ? S.CATS_OBRA : S.CATS_GENERAL; }
+  function cats() { return state.tab === 'obra' ? S.CATS_OBRA : (state.tab === 'inversion' ? ['Inversion'] : S.CATS_GENERAL); }
 
   /* Deep link #/gastos?id=<uuid>: resalta y scrollea hasta ese gasto una sola vez */
   function handleDeepLink(view) {
@@ -44,8 +47,9 @@
       const id = decodeURIComponent(m[1]);
       /* Si el gasto está en la otra solapa, cambiarse a ella */
       const exp = S.data.expenses.find(x => x.id === id);
-      if (exp && exp.type && exp.type !== state.tab) {
-        state.tab = exp.type === 'obra' ? 'obra' : 'general';
+      const targetTab = exp && exp.expenseKind === 'inversion' ? 'inversion' : (exp && exp.type === 'obra' ? 'obra' : 'general');
+      if (exp && targetTab !== state.tab) {
+        state.tab = targetTab;
         view.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === state.tab));
         view.querySelector('#contentWrap').innerHTML = contentHTML();
         bindContent(view);
@@ -67,6 +71,7 @@
       '<div class="tabs page-tabs">' +
       '<button class="tab ' + (state.tab === 'obra' ? 'active' : '') + '" data-tab="obra">Gastos por obra</button>' +
       '<button class="tab ' + (state.tab === 'general' ? 'active' : '') + '" data-tab="general">Gastos generales / estructura</button>' +
+      '<button class="tab ' + (state.tab === 'inversion' ? 'active' : '') + '" data-tab="inversion">Inversiones</button>' +
       '</div>' +
       '<div id="contentWrap">' + contentHTML() + '</div>';
 
@@ -98,6 +103,7 @@
         : '') +
       '<button class="btn btn-soft btn-sm" id="btnCsv">' + UI.icon('download', 15) + 'Exportar CSV</button>' +
       '<div class="grow"></div>' +
+      '<button class="btn btn-soft-success" id="btnInv">' + UI.icon('plus', 16) + 'Cargar inversión</button>' +
       '<button class="btn ' + (state.tab === 'obra' ? 'btn-soft-danger' : 'btn-danger') + '" id="btnNew">' + UI.icon('plus', 16) + (state.tab === 'obra' ? 'Cargar gasto de obra' : 'Cargar gasto general') + '</button>' +
       '</div>' +
       batchBarHTML() +
@@ -121,6 +127,8 @@
     const fw = cw.querySelector('#fw');
     if (fw) fw.addEventListener('change', e => { state.work = e.target.value; updateList(cw); });
     cw.querySelector('#btnNew').addEventListener('click', () => openExpenseModal({ type: state.tab }));
+    const btnInv = cw.querySelector('#btnInv');
+    if (btnInv) btnInv.addEventListener('click', () => openExpenseModal({ expenseKind: 'inversion' }));
     cw.querySelector('#btnCsv').addEventListener('click', exportCSV);
     /* Borrado en lote: elimina todos los seleccionados y persiste en la nube */
     cw.querySelector('#batchDel').addEventListener('click', async () => {
@@ -187,8 +195,10 @@
           '<td class="muted">' + UI.fmtDate(x.date) + '</td>' +
           '<td>' + (state.tab === 'obra'
             ? '<strong>' + UI.escapeHtml(w ? w.name : '—') + '</strong>'
-            : UI.chip('General', 'violet', 'layers')) + '</td>' +
-          '<td>' + UI.chip(x.category || 'Otros', 'neutral') + '</td>' +
+            : (state.tab === 'inversion'
+              ? UI.chip('Inversión', 'success', 'trending-up')
+              : UI.chip('General', 'violet', 'layers'))) + '</td>' +
+          '<td>' + UI.chip(x.category || 'Otros', x.expenseKind === 'inversion' ? 'success' : 'neutral') + '</td>' +
           '<td>' + (x.employeeId
             ? '<strong>' + UI.escapeHtml(S.employeeName(S.employeeById(x.employeeId)) || '—') + '</strong> ' +
               UI.chip('Empleado', 'info') + (x.expenseKind === 'adelanto' ? ' ' + UI.chip('Adelanto', 'warning', 'zap') : '')
@@ -236,7 +246,7 @@
       const w = S.data.works.find(wk => wk.id === x.workId);
       const prov = S.contactById(x.providerId);
       const emp = x.employeeId ? S.employeeName(S.employeeById(x.employeeId)) : '';
-      rows.push([x.date, x.type === 'obra' ? 'Obra' : 'General', w ? w.name : '', x.category, x.employeeId ? emp + ' (empleado)' : (prov ? prov.name : ''), x.expenseKind === 'adelanto' ? 'Adelanto' : 'Sueldo / pago', x.description, x.invoiceNumber || '', x.paymentMethod || '', String(Number(x.amount) || 0)]);
+      rows.push([x.date, x.expenseKind === 'inversion' ? 'Inversión' : (x.type === 'obra' ? 'Obra' : 'General'), w ? w.name : '', x.category, x.employeeId ? emp + ' (empleado)' : (prov ? prov.name : ''), x.expenseKind === 'inversion' ? 'Inversión' : (x.expenseKind === 'adelanto' ? 'Adelanto' : 'Sueldo / pago'), x.description, x.invoiceNumber || '', x.paymentMethod || '', String(Number(x.amount) || 0)]);
     });
     UI.csv('gadu-gastos.csv', rows);
     UI.toast('CSV de gastos exportado');
@@ -278,17 +288,19 @@
     opts = opts || {};
     const exp = opts.expense || null;
     const isEdit = !!exp;
-    const type = exp ? exp.type : (opts.type || state.tab);
+    const isInv = !!(exp ? exp.expenseKind === 'inversion' : opts.expenseKind === 'inversion');
+    const type = exp ? exp.type : (isInv ? 'general' : (opts.type || state.tab));
     const cats = type === 'obra' ? S.CATS_OBRA : S.CATS_GENERAL;
-    const curCat = exp ? exp.category : (opts.category || cats[0]);
-    const catList = exp && exp.category && !cats.includes(exp.category) ? cats.concat([exp.category]) : cats;
+    const curCat = exp ? exp.category : (isInv ? 'Inversion' : (opts.category || cats[0]));
+    let catList = exp && exp.category && !cats.includes(exp.category) ? cats.concat([exp.category]) : cats;
+    if (isInv && !catList.includes('Inversion')) catList = catList.concat(['Inversion']);
     const catOpts = catList.map(c => '<option value="' + UI.escapeHtml(c) + '"' + (c === curCat ? ' selected' : '') + '>' + UI.escapeHtml(c) + '</option>').join('');
     const curMethod = exp && exp.paymentMethod ? exp.paymentMethod : S.METODOS[0];
     const methodList = (exp && exp.paymentMethod && !S.METODOS.includes(exp.paymentMethod) ? S.METODOS.concat([exp.paymentMethod]) : S.METODOS);
     const methodOpts = methodList.map(mt => '<option value="' + UI.escapeHtml(mt) + '"' + (mt === curMethod ? ' selected' : '') + '>' + UI.escapeHtml(mt) + '</option>').join('');
     const m = UI.openModal({
-      title: isEdit ? 'Editar gasto' : (type === 'obra' ? 'Cargar gasto de obra' : 'Cargar gasto general'),
-      subtitle: isEdit ? '' : (type === 'obra' ? 'Costo directo vinculado a una obra específica.' : 'Costo fijo u operativo de la empresa.'),
+      title: isEdit ? (isInv ? 'Editar inversión' : 'Editar gasto') : (isInv ? 'Cargar inversión' : (type === 'obra' ? 'Cargar gasto de obra' : 'Cargar gasto general')),
+      subtitle: isEdit ? '' : (isInv ? 'Capital destinado a generar retorno: máquina, herramientas, capital de trabajo.' : (type === 'obra' ? 'Costo directo vinculado a una obra específica.' : 'Costo fijo u operativo de la empresa.')),
       body:
         '<div class="grid-form">' +
         (type === 'obra'
@@ -375,7 +387,7 @@
         category: m.panel.querySelector('#fCat').value,
         providerId,
         employeeId,
-        expenseKind: employeeId ? m.panel.querySelector('#fKind').value : null,
+        expenseKind: isInv ? 'inversion' : (employeeId ? m.panel.querySelector('#fKind').value : null),
         description: desc,
         invoiceNumber: m.panel.querySelector('#fFact').value.trim(),
         paymentMethod: m.panel.querySelector('#fMethod').value,
