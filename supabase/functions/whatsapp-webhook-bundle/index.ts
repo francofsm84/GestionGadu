@@ -156,8 +156,22 @@ export function findWork(works: Array<Record<string, unknown>>, mention: string)
 }
 
 /* Palabras comunes -> categorias canonicas del store */
+/* Limpia prefijos comunes de un concepto: "pesos en papel de bano" -> "papel de bano" */
+function cleanConcept(raw: string): string {
+  let s = String(raw || "").trim();
+  let prev: string;
+  do {
+    prev = s;
+    s = s.replace(/^(?:pesos?|peso|monto|total|importe|en|de|por|para|el|la|los|las|un|una|unos|unas)\s+/i, "");
+  } while (s !== prev);
+  /* Limpiar signos de puntuacion al final: "hormigonera." -> "hormigonera" */
+  s = s.replace(/[.,;:!?\s]+$/g, "").trim();
+  return s;
+}
+
 export function normCategory(raw: string): string {
-  const f = flat(String(raw || ""));
+  const limpio = cleanConcept(raw);
+  const f = flat(limpio);
   if (!f) return "";
   if (/cemento|material|arena|ladrillo|hierro|pintura|yeso|cal|cer[aa]mic/.test(f)) return "Materiales";
   if (/nafta|gasoil|combustible|gas|diesel/.test(f)) return "Combustible";
@@ -169,7 +183,7 @@ export function normCategory(raw: string): string {
   if (/servicio|luz|agua|internet|tel[ee]fono|gas natural/.test(f)) return "Servicios";
   if (/subcontrat|contratista/.test(f)) return "Subcontratos";
   if (/cigarrillo|tabaco|ocio|entretenimiento|cine|juego|recreaci[oo]n|esparcimiento/.test(f)) return "Ocio";
-  return String(raw).trim();
+  return limpio;
 }
 
 /* Intencion local simple (fallback sin LLM): registra gastos e ingresos con
@@ -189,8 +203,8 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
     };
   }
 
-  /* 1) Gasto explicito: monto + "en/de" + descripcion ("Gaste 5000 criollos") */
-  let m = f.match(/gas(?:te|to|t[ee]|t[oo])\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:en|de)\s+(.+)/i);
+  /* 1) Gasto explicito: monto + (moneda opcional) + "en/de" + descripcion */
+  let m = f.match(/gas(?:te|to|t[ee]|t[oo])\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:(?:pesos?|peso|mangos?|lucas?|ars|usd|d[oo]lares)\s+)?(?:en|de)\s+(.+)/i);
   if (m && num(m[1]) > 0) {
     return { modulo: "gasto", campos: { monto: num(m[1]), categoria: String(m[2] || "").trim() } };
   }
@@ -205,8 +219,8 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
     return { modulo: "gasto", campos: { monto: num(m[2]), categoria: String(m[1] || "").trim() } };
   }
 
-  /* 4) Ingreso: "Cobre 50000 por la obra" / "Ingrese 80000 por la obra" */
-  m = f.match(/(?:cobr[ee]?|ingres[ee]?|cobro|ingreso)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:por|de)\s+(.+)/i);
+  /* 4) Ingreso: "Cobre 50000 por la obra" / "Ingrese 80000 pesos por la obra" */
+  m = f.match(/(?:cobr[ee]?|ingres[ee]?|cobro|ingreso)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:(?:pesos?|peso|mangos?|lucas?|ars|usd|d[oo]lares)\s+)?(?:por|de)\s+(.+)/i);
   if (m && num(m[1]) > 0) {
     return { modulo: "ingreso", campos: { monto: num(m[1]), concepto: String(m[2] || "").trim() } };
   }
@@ -214,6 +228,12 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
   m = f.match(/(?:cobr[ee]?|ingres[ee]?|cobro|ingreso)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s*$/i);
   if (m && num(m[1]) > 0) {
     return { modulo: "ingreso", campos: { monto: num(m[1]), concepto: "Cobro" } };
+  }
+
+  /* 4c) Inversion: "Inverti 50000 pesos en una maquina" / "Inversion de 10000 mangos en capital" */
+  m = f.match(/(?:invert[ii]|inversion|inversi[oo]n|invertir|compr[ee]\s+(?:para\s+)?invertir)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:(?:pesos?|peso|mangos?|lucas?|ars|usd|d[oo]lares)\s+)?(?:en|de)\s+(.+)/i);
+  if (m && num(m[1]) > 0) {
+    return { modulo: "inversion", campos: { monto: num(m[1]), categoria: String(m[2] || "").trim() } };
   }
 
   /* 5) Empleado: "Agrega un nuevo empleado Juan Carlos Maldonado" / "empleado. Jorge"
@@ -410,7 +430,7 @@ export function executeAction(
   const monto = Number(c.monto);
   if (action.modulo === "gasto") {
     if (!(monto > 0)) return { ok: false, missing: "el monto" };
-    const concepto = String(c.categoria || sourceText || "").trim().slice(0, 60) || "gasto";
+    const concepto = cleanConcept(String(c.categoria || sourceText || "")).slice(0, 60) || "gasto";
     const cat = normCategory(String(c.categoria || sourceText));
     if (!cat) return { ok: false, missing: "la categoria" };
     const montoFmt = monto.toLocaleString("es-AR");
@@ -431,6 +451,17 @@ export function executeAction(
       description: String(sourceText || "").slice(0, 200), invoiceNumber: "", paymentMethod: "", source: "whatsapp",
     } as unknown as Record<string, unknown>);
     return { ok: true, label: "Gasto registrado: $" + montoFmt + " en " + concepto + " (" + cat + ") en " + ob.label };
+  }
+  if (action.modulo === "inversion") {
+    if (!(monto > 0)) return { ok: false, missing: "el monto" };
+    const concepto = cleanConcept(String(c.categoria || sourceText || "")).slice(0, 60) || "inversion";
+    const montoFmt = monto.toLocaleString("es-AR");
+    (d.expenses || (d.expenses = [])).unshift({
+      id: idGen(), type: "general", workId: null, date: todayISO, amount: monto,
+      category: "Inversion", providerId: null, employeeId: null, expenseKind: "inversion",
+      description: String(sourceText || "").slice(0, 200), invoiceNumber: "", paymentMethod: "", source: "whatsapp",
+    } as unknown as Record<string, unknown>);
+    return { ok: true, label: "Inversion registrada: $" + montoFmt + " en " + concepto };
   }
   if (action.modulo === "ingreso") {
     if (!(monto > 0)) return { ok: false, missing: "el monto" };
@@ -939,6 +970,12 @@ export async function resolveIncomingText(payload: unknown): Promise<ResolvedInc
         return { from, text: "", imageFailed: true };
       }
       if (!text) {
+        /* La vision fallo. Si el usuario escribio un caption, usarlo como
+           red de seguridad para que el flujo normal de texto procese el gasto. */
+        if (caption && caption.trim()) {
+          console.warn("[GADU-WA-IMAGE] vision vacia, uso caption como fallback:", caption);
+          return { from, text: caption, mediaUrl };
+        }
         console.warn("[GADU-WA-IMAGE] analisis vacio para media", mediaId);
         return { from, text: "", imageFailed: true, mediaUrl };
       }
@@ -954,6 +991,11 @@ export async function resolveIncomingText(payload: unknown): Promise<ResolvedInc
           return { from, text: "Gasto de " + monto + " en " + concepto, mediaUrl };
         }
         console.warn("[GADU-WA-IMAGE] monto 0 -> no se pudo leer el monto del ticket");
+        /* Si hay caption (texto del usuario), usarlo como fallback */
+        if (caption && caption.trim()) {
+          console.warn("[GADU-WA-IMAGE] monto 0, uso caption como fallback:", caption);
+          return { from, text: caption, mediaUrl };
+        }
         return { from, text: "", imageNoMonto: true, mediaUrl };
       } catch (e) {
         /* No devolvio JSON: usar el texto crudo como fallback (flujo normal) */
@@ -1801,6 +1843,11 @@ async function handleButtonReply(from: string, buttonId: string) {
       fireAndForget(sendWhatsApp(from, "Dale, decime el monto y el concepto (ej: \"Gaste 5000 de nafta\" o \"5000 de cemento\")"));
       return;
     }
+    if (act === "inversion") {
+      await upsertSession(from, userId, "WAITING_INVERSION", {});
+      fireAndForget(sendWhatsApp(from, "De cuanto fue la inversion y en que? Ej: \"Inverti 50000 en herramientas\"."));
+      return;
+    }
     if (act === "nueva_obra") {
       await upsertSession(from, userId, "WAITING_OBRA", {});
       fireAndForget(sendWhatsApp(from, "Como se llama la obra y en que direccion esta? Ej: \"Casa Perez en Alta Gracia\""));
@@ -2092,6 +2139,7 @@ async function processMessage(body: unknown) {
           const opts = [
             { id: "action_nueva_obra", title: "Nueva Obra" },
             { id: "action_nuevo_gasto", title: "Cargar Gasto" },
+            { id: "action_inversion", title: "Registrar Inversion" },
             { id: "action_adelanto", title: "Pago / Adelanto" },
             { id: "action_presupuesto", title: "Presupuesto" },
             { id: "action_consulta", title: "Consultar Saldo" },
@@ -2214,6 +2262,52 @@ async function processMessage(body: unknown) {
         console.log("[GADU-WA-WIZARD] WAITING_GASTO cancelado, respuesta es:", localGasto.modulo);
       } else {
         fireAndForget(sendWhatsApp(inc.from, "[BOT] Decime el gasto, por ejemplo: \"Gaste 5000 de nafta\" o \"5000 de cemento\"."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+    }
+
+    /* [GADU-WA-WIZARD] Wizard de inversion (WAITING_INVERSION): captura monto + concepto
+       con localIntent y registra la inversion ANTES de la IA. */
+    let enWizardInversion = false;
+    try {
+      const sessInv = await getSession(normalizePhone(inc.from));
+      if (sessInv && sessInv.state === "WAITING_INVERSION") enWizardInversion = true;
+    } catch (e) {}
+    if (enWizardInversion) {
+      const txtInv = String(inc.text || "").trim();
+      if (!txtInv) {
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] De cuanto fue la inversion y en que? Ej: \"Inverti 50000 en herramientas\"."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      if (/^(cancelar|no|salir|abortar)$/i.test(txtInv)) {
+        await deleteSession(normalizePhone(inc.from));
+        fireAndForget(sendWhatsApp(inc.from, "OK, cancelado."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      const localInv = localIntent(inc.text);
+      if (localInv && localInv.modulo === "inversion") {
+        const resI = executeAction(data, localInv, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
+        if (resI.ok) {
+          await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+            method: "PATCH",
+            headers: { Prefer: "return=minimal" },
+            body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+          });
+          await deleteSession(normalizePhone(inc.from));
+          const reply = "OK " + resI.label;
+          fireAndForget(sendWhatsApp(inc.from, reply));
+          return json({ ok: true, from: inc.from, reply });
+        }
+        await deleteSession(normalizePhone(inc.from));
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] " + (resI.missing ? "Me falta " + resI.missing + "." : "No pude cargar la inversion.") + " Proba de nuevo: \"Inverti 50000 en herramientas\"."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      if (localInv && localInv.modulo && localInv.modulo !== "inversion") {
+        /* El usuario cambio de idea: cancelar el wizard y dejar que la IA lo resuelva */
+        await deleteSession(normalizePhone(inc.from));
+        console.log("[GADU-WA-WIZARD] WAITING_INVERSION cancelado, respuesta es:", localInv.modulo);
+      } else {
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] De cuanto fue la inversion y en que? Ej: \"Inverti 50000 en herramientas\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
     }
@@ -2417,7 +2511,7 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
     }
 
-    const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra"];
+    const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra", "inversion"];
     console.log("[GADU-WA-INTENT] texto a interpretar:", JSON.stringify(inc.text));
 
     const aiController = new AbortController();
@@ -2597,7 +2691,7 @@ async function processMessage(body: unknown) {
     }
 
     /* 4) Ejecutar la accion contable (gasto/ingreso) e impactar en app_data */
-    if (action && ["gasto", "ingreso", "empleado", "adelanto", "obra"].includes(action.modulo)) {
+    if (action && ["gasto", "ingreso", "empleado", "adelanto", "obra", "inversion"].includes(action.modulo)) {
       const res = executeAction(data, action, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
       if (res.ok) {
         /* Si el gasto vino de una FOTO de ticket, adjuntar el comprobante ANTES del PATCH
@@ -2639,13 +2733,14 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
     }
 
-      /* 5) Fallback inteligente: ofrecer opciones en lugar de mandar a la web */
+      /* 5) Fallback inteligente: lista interactiva (hasta 10 opciones) */
       const reply = aiReply || "[BOT] No estoy seguro de que queres hacer. Elegi una opcion [abajo]";
-      fireAndForget(sendWhatsAppButtons(inc.from, reply, [
-        { id: "fallback_gasto", title: "Cargar un Gasto" },
-        { id: "fallback_adelanto", title: "Cargar un Adelanto" },
-        { id: "fallback_humano", title: "Hablar con un humano" },
-      ]));
+      await sendWhatsAppList(inc.from, reply, [
+        { id: "action_nuevo_gasto", title: "Cargar un Gasto" },
+        { id: "action_inversion", title: "Registrar Inversion" },
+        { id: "action_adelanto", title: "Cargar un Adelanto" },
+        { id: "action_humano", title: "Hablar con un humano" },
+      ], { button: "Ver opciones", sectionTitle: "Opciones" });
       return json({ ok: true, from: inc.from, reply });
   } catch (error) {
     console.error("[GADU-WA-QUEUE-FIX] CRITICAL ERROR en processMessage:", error);
