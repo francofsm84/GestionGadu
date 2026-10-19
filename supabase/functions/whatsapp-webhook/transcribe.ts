@@ -241,11 +241,11 @@ async function geminiAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption
   }
   const model = Deno.env.get("GEMINI_MODEL") || "gemini-1.5-flash";
   const base64 = arrayBufferToBase64(buffer);
-  const prompt = "Leé la imagen con atención, incluso si está rotada o tiene letra pequeña. " +
-    "Buscá específicamente las palabras clave 'TOTAL', 'TOTAL A PAGAR' o 'IMPORTE' para extraer el monto. " +
-    "Devolvé ESTRICTAMENTE un JSON válido (sin markdown, sin comentarios) con esta estructura exacta: " +
-    '{"monto": <numero>, "concepto": "<que es>", "categoria": "<rubro>"}. ' +
-    'Si no podés leer el monto, devolvé {"monto": 0}. El texto que acompaña la imagen es: "' + (caption || "") + '".';
+  const prompt = "Eres un experto leyendo tickets. Lee la imagen con atención, incluso si está rotada o tiene letra pequeña. " +
+    "Busca la palabra 'TOTAL' (o 'TOTAL A PAGAR', 'IMPORTE') para extraer el monto. " +
+    "Devuelve SOLO un JSON válido (sin markdown, sin comentarios) con esta estructura exacta: " +
+    '{"monto": <numero>, "concepto": "<descripcion>", "categoria": "<rubro>"}. ' +
+    'Si no puedes leer el monto, devuelve {"monto": 0}. Texto que acompaña la imagen: "' + (caption || "") + '".';
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   console.log("[GADU-WA-IMAGE] gemini analizar imagen:", buffer.byteLength, "bytes · mime:", mimeType);
@@ -305,11 +305,11 @@ async function groqAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption: 
   try {
     const base64 = arrayBufferToBase64(buffer);
     const dataUrl = "data:" + norm + ";base64," + base64;
-    const prompt = "Leé la imagen con atención, incluso si está rotada o tiene letra pequeña. " +
-      "Buscá específicamente las palabras clave 'TOTAL', 'TOTAL A PAGAR' o 'IMPORTE' para extraer el monto. " +
-      "Devolvé ESTRICTAMENTE un JSON válido (sin markdown, sin comentarios) con esta estructura exacta: " +
-      '{"monto": <numero>, "concepto": "<que es>", "categoria": "<rubro>"}. ' +
-      'Si no podés leer el monto, devolvé {"monto": 0}. El texto que acompaña la imagen es: "' + (caption || "") + '".';
+    const prompt = "Eres un experto leyendo tickets. Lee la imagen con atención, incluso si está rotada o tiene letra pequeña. " +
+      "Busca la palabra 'TOTAL' (o 'TOTAL A PAGAR', 'IMPORTE') para extraer el monto. " +
+      "Devuelve SOLO un JSON válido (sin markdown, sin comentarios) con esta estructura exacta: " +
+      '{"monto": <numero>, "concepto": "<descripcion>", "categoria": "<rubro>"}. ' +
+      'Si no puedes leer el monto, devuelve {"monto": 0}. Texto que acompaña la imagen: "' + (caption || "") + '".';
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: { "Authorization": "Bearer " + apiKey, "Content-Type": "application/json" },

@@ -1556,6 +1556,12 @@ async function processMessage(body: unknown) {
     if (action && ["gasto", "ingreso", "empleado", "adelanto", "obra"].includes(action.modulo)) {
       const res = executeAction(data, action, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
       if (res.ok) {
+        /* Si el gasto vino de una FOTO de ticket, adjuntar el comprobante ANTES del PATCH
+           (si lo hacemos después, el receiptUrl no se persiste). */
+        if (action.modulo === "gasto" && inc.mediaUrl) {
+          const gastoNuevo = (data.expenses && data.expenses[0]) || null;
+          if (gastoNuevo) gastoNuevo.receiptUrl = inc.mediaUrl;
+        }
         const up = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
           method: "PATCH",
           headers: { Prefer: "return=minimal" },
@@ -1570,8 +1576,6 @@ async function processMessage(body: unknown) {
         if (action.modulo === "gasto") {
           const gasto = (data.expenses && data.expenses[0]) || null;
           if (gasto) {
-            /* Si el gasto vino de una FOTO de ticket, adjuntar el comprobante */
-            if (inc.mediaUrl) gasto.receiptUrl = inc.mediaUrl;
             const gastoId = String(gasto.id || "");
             const monto = Number(gasto.amount) || 0;
             const cat = String(gasto.category || "gasto");
