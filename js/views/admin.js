@@ -416,6 +416,7 @@
         '<button class="btn btn-soft btn-sm" data-ticket="' + t.id + '" data-reply="' + UI.escapeHtml(t.phone || '') + '" data-msg="' + UI.escapeHtml(t.message || '') + '" data-user="' + (t.user_id || '') + '">' + UI.icon('whatsapp', 14) + ' Responder</button>' +
         (t.user_id ? '<button class="btn btn-soft btn-sm" data-inspect="' + t.user_id + '" data-inspect-phone="' + UI.escapeHtml(t.phone || '') + '" title="Ver panel del usuario">' + UI.icon('eye', 14) + '</button>' : '') +
         (t.status !== 'closed' ? '<button class="btn btn-soft btn-sm" data-close-ticket="' + t.id + '">' + UI.icon('check', 14) + ' Resolver</button>' : '') +
+        (t.user_id && t.status !== 'closed' ? '<button class="btn btn-soft btn-sm" data-reactivate="' + t.user_id + '" title="Reactivar el bot para este usuario">' + UI.icon('play', 14) + ' Reactivar Bot</button>' : '') +
         '</div></div>' +
         '<p class="muted" style="margin:6px 0 0">' + UI.escapeHtml(t.message || '—') + '</p>' +
         '</div>';
@@ -436,6 +437,18 @@
         tabSoporte(body);
       } catch (e) {
         UI.toast('❌ No se pudo actualizar: ' + ((e && e.message) || e), 'error');
+      }
+    }));
+
+    /* Reactivar Bot: quita la pausa (is_paused=false) del usuario vía RPC */
+    body.querySelectorAll('[data-reactivate]').forEach(b => b.addEventListener('click', async () => {
+      const uid = b.dataset.reactivate;
+      try {
+        await G.api('POST', '/rpc/reactivar_bot', { p_user_id: uid });
+        UI.toast('✅ Bot reactivado para este usuario');
+        tabSoporte(body);
+      } catch (e) {
+        UI.toast('❌ No se pudo reactivar: ' + ((e && e.message) || e), 'error');
       }
     }));
 
