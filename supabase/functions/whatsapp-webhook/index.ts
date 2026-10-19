@@ -976,7 +976,7 @@ async function processMessage(body: unknown) {
 
     if (resolved.audioFailed) {
       console.warn("[GADU-WA-AUDIO] transcripción falló para", resolved.from);
-      fireAndForget(sendWhatsApp(resolved.from, "🤖 No pude escuchar el audio, ¿me lo escribís?"));
+      fireAndForget(sendWhatsApp(resolved.from, "🤖 No pude escuchar bien el audio. ¿Podés repetirlo o escribírmelo por texto?"));
       return;
     }
     if (resolved.imageFailed) {

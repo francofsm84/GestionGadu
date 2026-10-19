@@ -405,7 +405,14 @@ export async function resolveIncomingText(payload: unknown): Promise<ResolvedInc
         console.warn("[GADU-WA-AUDIO] transcripción vacía para media", mediaId);
         return { from, text: "", audioFailed: true };
       }
-      console.log("[GADU-WA-AUDIO] transcripción:", text);
+      /* Ruido / audio demasiado breve ("mmm", "eh", "ah") → pedir repetir,
+         en lugar de dejar que caiga al menú de fallback genérico. */
+      const limpio = String(text).replace(/[^a-záéíóúñ0-9\s]/gi, "").replace(/\s+/g, " ").trim();
+      if (limpio.length < 3 || /^(m+|h+|a+h+|e+h+|u+h+|mmm+|hmm|aja|jaja|jajaja|si|no)$/i.test(limpio)) {
+        console.warn("[GADU-WA-AUDIO] transcripción ruido/breve descartada:", JSON.stringify(text));
+        return { from, text: "", audioFailed: true };
+      }
+      console.log("[GADU-WA-AUDIO] texto transcrito (exacto):", JSON.stringify(text));
       return { from, text };
     }
 

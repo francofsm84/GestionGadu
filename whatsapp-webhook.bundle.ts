@@ -966,7 +966,14 @@ export async function resolveIncomingText(payload: unknown): Promise<ResolvedInc
         console.warn("[GADU-WA-AUDIO] transcripcion vacia para media", mediaId);
         return { from, text: "", audioFailed: true };
       }
-      console.log("[GADU-WA-AUDIO] transcripcion:", text);
+      /* Ruido / audio demasiado breve ("mmm", "eh", "ah") -> pedir repetir,
+         en lugar de dejar que caiga al menu de fallback generico. */
+      const limpio = String(text).replace(/[^a-zaeioun0-9\s]/gi, "").replace(/\s+/g, " ").trim();
+      if (limpio.length < 3 || /^(m+|h+|a+h+|e+h+|u+h+|mmm+|hmm|aja|jaja|jajaja|si|no)$/i.test(limpio)) {
+        console.warn("[GADU-WA-AUDIO] transcripcion ruido/breve descartada:", JSON.stringify(text));
+        return { from, text: "", audioFailed: true };
+      }
+      console.log("[GADU-WA-AUDIO] texto transcrito (exacto):", JSON.stringify(text));
       return { from, text };
     }
 
@@ -2092,7 +2099,7 @@ async function processMessage(body: unknown) {
 
     if (resolved.audioFailed) {
       console.warn("[GADU-WA-AUDIO] transcripcion fallo para", resolved.from);
-      fireAndForget(sendWhatsApp(resolved.from, "[BOT] No pude escuchar el audio, me lo escribis?"));
+      fireAndForget(sendWhatsApp(resolved.from, "[BOT] No pude escuchar bien el audio. Podes repetirlo o escribirmelo por texto?"));
       return;
     }
     if (resolved.imageFailed) {
