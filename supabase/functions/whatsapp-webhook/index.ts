@@ -1481,6 +1481,64 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply: "contacto guardado" });
     }
 
+    /* [GADU-WA-WIZARD] Empleado paso 1: oficio (WAITING_EMP_OFICIO) */
+    let enWizardEmpOficio = false;
+    let empOficioCtx: Record<string, unknown> = {};
+    try {
+      const sessEO = await getSession(normalizePhone(inc.from));
+      if (sessEO && sessEO.state === "WAITING_EMP_OFICIO") { enWizardEmpOficio = true; empOficioCtx = (sessEO.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardEmpOficio) {
+      const t = String(inc.text || "").trim();
+      if (!t) { fireAndForget(sendWhatsApp(inc.from, "🤖 ¿Cuál es su oficio? (ej. Albañil, Pintor, Plomero)")); return json({ ok: true, from: inc.from, reply: "" }); }
+      await upsertSession(inc.from, row.user_id, "WAITING_EMP_TARIFA", { nombre: empOficioCtx.nombre, oficio: t });
+      fireAndForget(sendWhatsApp(inc.from, "¿Cuánto cobra por hora? (ej. 1500)"));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* Empleado paso 2: tarifa por hora (WAITING_EMP_TARIFA) */
+    let enWizardEmpTarifa = false;
+    let empTarifaCtx: Record<string, unknown> = {};
+    try {
+      const sessET = await getSession(normalizePhone(inc.from));
+      if (sessET && sessET.state === "WAITING_EMP_TARIFA") { enWizardEmpTarifa = true; empTarifaCtx = (sessET.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardEmpTarifa) {
+      const t = String(inc.text || "").trim();
+      const tarifa = Number(t.replace(/\./g, "").replace(",", "."));
+      if (!tarifa || tarifa <= 0) { fireAndForget(sendWhatsApp(inc.from, "🤖 Eso no es un monto válido. ¿Cuánto cobra por hora?")); return json({ ok: true, from: inc.from, reply: "" }); }
+      await upsertSession(inc.from, row.user_id, "WAITING_EMP_TELEFONO", { nombre: empTarifaCtx.nombre, oficio: empTarifaCtx.oficio, tarifa });
+      fireAndForget(sendWhatsApp(inc.from, "¿Su teléfono / WhatsApp? (o escribí *omitir*)"));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* Empleado paso 3: teléfono → crear empleado (WAITING_EMP_TELEFONO) */
+    let enWizardEmpTelefono = false;
+    let empTelCtx: Record<string, unknown> = {};
+    try {
+      const sessEL = await getSession(normalizePhone(inc.from));
+      if (sessEL && sessEL.state === "WAITING_EMP_TELEFONO") { enWizardEmpTelefono = true; empTelCtx = (sessEL.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardEmpTelefono) {
+      const t = String(inc.text || "").trim();
+      const phone = /^omitir$/i.test(t) ? "" : t;
+      const parsed = formatProperName(String(empTelCtx.nombre || ""));
+      (data.employees || (data.employees = [])).push({
+        id: crypto.randomUUID(), firstName: parsed.firstName, lastName: parsed.lastName,
+        phone, role: String(empTelCtx.oficio || parsed.role || "empleado"),
+        hourlyRate: Number(empTelCtx.tarifa) || 0, paymentData: "", active: true, source: "whatsapp",
+      });
+      await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+      });
+      await deleteSession(normalizePhone(inc.from));
+      const nombreEmp = (parsed.firstName + " " + parsed.lastName).trim();
+      fireAndForget(sendWhatsApp(inc.from, "✅ Empleado registrado: " + nombreEmp + " (" + String(empTelCtx.oficio || "empleado") + ")" + (Number(empTelCtx.tarifa) ? " · $" + Number(empTelCtx.tarifa) + "/h" : "")));
+      return json({ ok: true, from: inc.from, reply: "empleado guardado" });
+    }
+
     /* [GADU-WA-EXPORT] Exportar gastos a Excel (comando "excel" / "exportar gastos") */
     if (/\b(excel|planilla|xlsx)\b/i.test(inc.text) || /exportar\s+(gastos|movimientos|todo|mis\s+datos)/i.test(inc.text)) {
       console.log("[GADU-WA-EXPORT] pedido de exportación:", inc.text);
@@ -1691,6 +1749,16 @@ async function processMessage(body: unknown) {
 
     /* 4) Ejecutar la acción contable (gasto/ingreso) e impactar en app_data */
     if (action && ["gasto", "ingreso", "empleado", "adelanto", "obra", "inversion"].includes(action.modulo)) {
+      /* [EMPLEADO multi-paso] Si hay nombre pero faltan oficio/tarifa/teléfono,
+         arrancar el wizard secuencial en lugar de crear un empleado incompleto. */
+      if (action.modulo === "empleado") {
+        const nombreEmp = String((action.campos || {}).nombre || "").trim();
+        if (nombreEmp) {
+          await upsertSession(inc.from, row.user_id, "WAITING_EMP_OFICIO", { nombre: nombreEmp });
+          fireAndForget(sendWhatsApp(inc.from, "Dale, ¿cuál es su oficio? (ej. Albañil, Pintor, Plomero)"));
+          return json({ ok: true, from: inc.from, reply: "" });
+        }
+      }
       const res = executeAction(data, action, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
       if (res.ok) {
         /* Si el gasto vino de una FOTO de ticket, adjuntar el comprobante ANTES del PATCH
