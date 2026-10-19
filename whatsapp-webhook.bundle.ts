@@ -2194,16 +2194,25 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
     }
 
-    /* 1b) Saludo -> SIEMPRE forzar el menu: borrar cualquier sesion vieja (wizard)
-       y desplegar la lista interactiva, sin importar el estado previo. */
+    /* 1b) Saludo -> forzar el menu SOLO si NO hay un wizard activo.
+       Si hay un wizard en curso, el saludo es una respuesta al formulario:
+       NO se resetea (prioridad absoluta de sesion) y el wizard lo captura. */
     const menuText = String(inc.text || "").trim().toLowerCase();
     /* Solo un saludo PURO (sin contenido extra) resetea y muestra el menu.
        Si el mensaje es "hola, quiero cargar un gasto...", NO lo trata como saludo:
        deja que el wizard/IA procese el contenido. */
     if (/^(hola|holis|holi|buenas|buen\s*d[ii]a|buenos\s*d[ii]as|menu|men[uu]|empezar|ayuda|help|inicio)\s*[.!?,]*$/.test(menuText)) {
-      try { await deleteSession(normalizePhone(inc.from)); } catch (e) { /* sin sesion: ok */ }
-      await showMainMenu(inc.from, "Hola! Hola Soy tu asistente GADU. Que queres hacer hoy?");
-      return json({ ok: true, from: inc.from });
+      let hasActiveWizard = false;
+      try {
+        const sessMenu = await getSession(normalizePhone(inc.from));
+        if (sessMenu && sessMenu.state && String(sessMenu.state).startsWith("WAITING_")) hasActiveWizard = true;
+      } catch (e) { /* sin sesion: no hay wizard */ }
+      if (!hasActiveWizard) {
+        try { await deleteSession(normalizePhone(inc.from)); } catch (e) { /* sin sesion: ok */ }
+        await showMainMenu(inc.from, "Hola! Hola Soy tu asistente GADU. Que queres hacer hoy?");
+        return json({ ok: true, from: inc.from });
+      }
+      /* Hay wizard activo: NO hacemos return; el flujo continua y el wizard captura el texto. */
     }
 
     /* 2) Usuario vinculado: busca por linkedPhone/phone (app_data) y por la
