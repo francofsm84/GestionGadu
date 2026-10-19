@@ -15,12 +15,13 @@ let s = fs.readFileSync(dir + 'core.ts', 'utf8') + '\n\n'
       + fs.readFileSync(dir + 'queue.ts', 'utf8') + '\n\n'
       + index;
 
-// 1) Acentos y puntuación española → escapes Unicode
+// 1) Acentos y puntuación española → texto ASCII plano (SIN escapes \u, para
+//    evitar problemas de parseo en el editor de Supabase)
 const accents = {
-  'á': '\\u00e1', 'é': '\\u00e9', 'í': '\\u00ed', 'ó': '\\u00f3', 'ú': '\\u00fa', 'ñ': '\\u00f1', 'ü': '\\u00fc',
-  'Á': '\\u00c1', 'É': '\\u00c9', 'Í': '\\u00cd', 'Ó': '\\u00d3', 'Ú': '\\u00da', 'Ñ': '\\u00d1', 'Ü': '\\u00dc',
-  '¿': '\\u00bf', '¡': '\\u00a1', '°': '\\u00b0', '·': '\\u00b7', '–': '\\u2013', '—': '\\u2014',
-  '→': '\\u2192', '…': '\\u2026', '•': '\\u2022', '✓': '\\u2713', '≠': '\\u2260',
+  'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ñ': 'n', 'ü': 'u',
+  'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U', 'Ñ': 'N', 'Ü': 'U',
+  '¿': '', '¡': '', '°': '', '·': ' ', '–': '-', '—': '-',
+  '→': '->', '…': '...', '•': '-', '✓': 'OK', '≠': '!=',
 };
 for (const [k, v] of Object.entries(accents)) s = s.split(k).join(v);
 
