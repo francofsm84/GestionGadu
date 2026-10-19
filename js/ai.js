@@ -545,7 +545,7 @@
     return deduped.join(' ');
   }
 
-  /* Limpia el dictado antes de enviar */
+  /* Limpia la entrada de texto antes de enviar (sin dictado por voz) */
   function cleanInput(s) { return removeRepeatedPhrases(s); }
 
   /* Mensaje final listo para enviar: limpieza + tope de longitud (anti-consultas gigantes) */

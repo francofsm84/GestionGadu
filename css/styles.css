@@ -962,7 +962,6 @@ body.no-session .app { display: none; }
 .ai-foot .input { flex: 1; min-width: 0; }
 .ai-send { flex: none; width: 40px; height: 40px; border: none; border-radius: 50%; background: var(--primary); color: var(--on-primary); font-size: 18px; cursor: pointer; display: grid; place-items: center; touch-action: manipulation; }
 .ai-send:hover { filter: brightness(1.06); }
-.ai-mic { flex: none; width: 38px; height: 38px; border: 1px solid var(--border); background: var(--surface-2); border-radius: 10px; cursor: pointer; font-size: 18px; display: grid; place-items: center; }
 /* Widgets interactivos dentro del chat del asistente (inputs + confirmación) */
 .ai-widget { margin-top: 8px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border); }
 .ai-widget-head { font-size: 13.5px; margin-bottom: 8px; color: var(--text); }
@@ -973,15 +972,11 @@ body.no-session .app { display: none; }
 .ai-form { display: flex; flex-direction: column; gap: 8px; }
 .ai-field { display: flex; flex-direction: column; gap: 4px; }
 .ai-field-label { font-size: 12px; color: var(--muted); }
-.ai-mic:hover { border-color: var(--primary); }
-.ai-mic-on { color: #ef4444; border-color: #ef4444; animation: ai-pulse 1s ease-in-out infinite; }
-@keyframes ai-pulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239,68,68,.4); } 50% { transform: scale(1.12); box-shadow: 0 0 0 6px rgba(239,68,68,0); } }
 @media (max-width: 768px) {
   /* Burbuja flotante compacta y discreta en móvil: no tapa los botones de
      acción (editar/borrar) de las tablas y tarjetas */
   .ai-fab { right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: 46px; height: 46px; opacity: .9; }
   .ai-panel { width: calc(100vw - 24px); height: calc(100dvh - 92px); max-height: calc(100dvh - 92px); bottom: calc(74px + env(safe-area-inset-bottom, 0px)); right: 12px; left: 12px; margin: auto; }
-  .ai-mic { width: 60px; height: 60px; font-size: 24px; }
   .ai-voice-sel { max-width: 96px; }   /* selector de voz compacto en móvil */
   .ai-fab-tip { right: 92px; bottom: calc(30px + env(safe-area-inset-bottom, 0px)); max-width: 200px; }
   /* Espacio inferior para que el botón flotante no tape las tarjetas */
