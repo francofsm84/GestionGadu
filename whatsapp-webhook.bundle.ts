@@ -2435,12 +2435,7 @@ async function processMessage(body: unknown) {
     if (enWizardInversion) {
       const txtInv = String(inc.text || "").trim();
       if (!txtInv) {
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] De cuanto fue la inversion y en que? Ej: \"Inverti 50000 en herramientas\"."));
-        return json({ ok: true, from: inc.from, reply: "" });
-      }
-      if (/^(cancelar|no|salir|abortar)$/i.test(txtInv)) {
-        await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "OK, cancelado."));
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] De cuanto fue la inversion? (ej. 50000)"));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       const localInv = localIntent(inc.text);
@@ -2453,22 +2448,56 @@ async function processMessage(body: unknown) {
             body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
           });
           await deleteSession(normalizePhone(inc.from));
-          const reply = "OK " + resI.label;
-          fireAndForget(sendWhatsApp(inc.from, reply));
-          return json({ ok: true, from: inc.from, reply });
+          fireAndForget(sendWhatsApp(inc.from, "OK " + resI.label));
+          return json({ ok: true, from: inc.from, reply: "OK " + resI.label });
         }
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] " + (resI.missing ? "Me falta " + resI.missing + "." : "No pude cargar la inversion.") + " Proba de nuevo: \"Inverti 50000 en herramientas\"."));
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] " + (resI.missing ? "Me falta " + resI.missing + "." : "No pude cargar la inversion.")));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       if (localInv && localInv.modulo && localInv.modulo !== "inversion") {
-        /* El usuario cambio de idea: cancelar el wizard y dejar que la IA lo resuelva */
         await deleteSession(normalizePhone(inc.from));
         console.log("[GADU-WA-WIZARD] WAITING_INVERSION cancelado, respuesta es:", localInv.modulo);
       } else {
+        /* Monto suelto? -> guardar monto y pedir concepto (multi-paso) */
+        const mSuelto = txtInv.match(/^\$?\s*([\d][\d.,]*)\s*$/);
+        if (mSuelto) {
+          const monto = Number(String(mSuelto[1]).replace(/\./g, "").replace(",", "."));
+          if (monto > 0) {
+            await upsertSession(inc.from, row.user_id, "WAITING_INVERSION_CONCEPTO", { monto });
+            fireAndForget(sendWhatsApp(inc.from, "En que invertiste? (ej. herramientas, maquina, capital de trabajo)"));
+            return json({ ok: true, from: inc.from, reply: "" });
+          }
+        }
         fireAndForget(sendWhatsApp(inc.from, "[BOT] De cuanto fue la inversion y en que? Ej: \"Inverti 50000 en herramientas\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
+    }
+
+    /* Inversion paso 2: concepto -> guardar (WAITING_INVERSION_CONCEPTO) */
+    let enWizardInvConcepto = false;
+    let invConcCtx: Record<string, unknown> = {};
+    try {
+      const sessIC = await getSession(normalizePhone(inc.from));
+      if (sessIC && sessIC.state === "WAITING_INVERSION_CONCEPTO") { enWizardInvConcepto = true; invConcCtx = (sessIC.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardInvConcepto) {
+      const t = String(inc.text || "").trim();
+      if (!t) { fireAndForget(sendWhatsApp(inc.from, "[BOT] En que invertiste?")); return json({ ok: true, from: inc.from, reply: "" }); }
+      const actionI = { modulo: "inversion", campos: { monto: invConcCtx.monto, categoria: t } };
+      const resI = executeAction(data, actionI, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
+      if (resI.ok) {
+        await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+        });
+        await deleteSession(normalizePhone(inc.from));
+        fireAndForget(sendWhatsApp(inc.from, "OK " + resI.label));
+        return json({ ok: true, from: inc.from, reply: "OK " + resI.label });
+      }
+      fireAndForget(sendWhatsApp(inc.from, "[BOT] No pude cargar la inversion."));
+      return json({ ok: true, from: inc.from, reply: "" });
     }
 
     /* [GADU-WA-WIZARD] Wizard de herramienta (WAITING_HERRAMIENTA): nombre + costo.
@@ -2656,15 +2685,62 @@ async function processMessage(body: unknown) {
             body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
           });
           await deleteSession(normalizePhone(inc.from));
-          const reply = "OK " + res.label;
-          fireAndForget(sendWhatsApp(inc.from, reply));
-          return json({ ok: true, from: inc.from, reply });
+          fireAndForget(sendWhatsApp(inc.from, "OK " + res.label));
+          return json({ ok: true, from: inc.from, reply: "OK " + res.label });
         }
         await deleteSession(normalizePhone(inc.from));
         fireAndForget(sendWhatsApp(inc.from, res.notFound || "[BOT] No pude cargarlo. Proba: \"Adelanto de Hugo de 12000\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
+      /* Solo el nombre -> pedir monto (multi-paso) */
+      if (parsed && parsed.nombre) {
+        await upsertSession(inc.from, row.user_id, "WAITING_ADVANCE_MONTO", { empleado: parsed.nombre });
+        fireAndForget(sendWhatsApp(inc.from, "De cuanto es el adelanto? (ej. 12000)"));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
       fireAndForget(sendWhatsApp(inc.from, "$ A que empleado y de cuanto es el adelanto? Ej: \"Hugo de 12000\"."));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* Adelanto paso 2: monto -> obra (WAITING_ADVANCE_MONTO) */
+    let enWizardAdvMonto = false;
+    let advMontoCtx: Record<string, unknown> = {};
+    try {
+      const sessAM = await getSession(normalizePhone(inc.from));
+      if (sessAM && sessAM.state === "WAITING_ADVANCE_MONTO") { enWizardAdvMonto = true; advMontoCtx = (sessAM.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardAdvMonto) {
+      const t = String(inc.text || "").trim();
+      const monto = Number(t.replace(/\./g, "").replace(",", "."));
+      if (!monto || monto <= 0) { fireAndForget(sendWhatsApp(inc.from, "[BOT] Eso no es un monto valido. De cuanto es el adelanto?")); return json({ ok: true, from: inc.from, reply: "" }); }
+      await upsertSession(inc.from, row.user_id, "WAITING_ADVANCE_OBRA", { empleado: advMontoCtx.empleado, monto });
+      fireAndForget(sendWhatsApp(inc.from, "A que obra corresponde? (escribi *general* si no sabes)"));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* Adelanto paso 3: obra -> guardar (WAITING_ADVANCE_OBRA) */
+    let enWizardAdvObra = false;
+    let advObraCtx: Record<string, unknown> = {};
+    try {
+      const sessAO = await getSession(normalizePhone(inc.from));
+      if (sessAO && sessAO.state === "WAITING_ADVANCE_OBRA") { enWizardAdvObra = true; advObraCtx = (sessAO.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardAdvObra) {
+      const t = String(inc.text || "").trim();
+      const esGeneral = /^(general|sin asignar|sin obra)$/i.test(t);
+      const actionA = { modulo: "adelanto", campos: { empleado: advObraCtx.empleado, monto: advObraCtx.monto, obra: esGeneral ? "" : t } };
+      const res = executeAction(data, actionA, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
+      if (res.ok) {
+        await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+        });
+        await deleteSession(normalizePhone(inc.from));
+        fireAndForget(sendWhatsApp(inc.from, "OK " + res.label));
+        return json({ ok: true, from: inc.from, reply: "OK " + res.label });
+      }
+      fireAndForget(sendWhatsApp(inc.from, res.notFound || "[BOT] No pude cargarlo."));
       return json({ ok: true, from: inc.from, reply: "" });
     }
 
