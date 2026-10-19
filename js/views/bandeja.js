@@ -80,6 +80,11 @@
       '<thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th class="num">Monto</th><th style="min-width:300px">Asignar</th></tr></thead>' +
       '<tbody>' +
       (list.map(x => {
+        const cats = Array.from(new Set((S.CATS_OBRA || []).concat(S.CATS_GENERAL || []).concat([x.category]).filter(Boolean)));
+        const catOpts =
+          '<select class="select" data-cat="' + x.id + '" style="max-width:160px">' +
+            cats.map(c => '<option value="' + UI.escapeHtml(c) + '"' + (c === x.category ? ' selected' : '') + '>' + UI.escapeHtml(c) + '</option>').join('') +
+          '</select>';
         const wOpts =
           '<select class="select" data-sel="' + x.id + '" style="max-width:180px">' +
             '<option value="">— Asignar a obra —</option>' +
@@ -91,8 +96,10 @@
           '<td>' + UI.escapeHtml(x.description || '') + (x.receiptUrl ? ' <button class="icon-btn sm" data-ticket="' + UI.escapeHtml(x.receiptUrl) + '" title="Ver ticket">' + UI.icon('camera', 14) + '</button>' : '') + '</td>' +
           '<td class="num neg"><b>−' + UI.fmtMoney(x.amount) + '</b></td>' +
           '<td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' +
+            catOpts +
             wOpts +
             '<button class="btn btn-ghost btn-sm" data-general="' + x.id + '">Gasto General</button>' +
+            '<button class="icon-btn sm" data-edit="' + x.id + '" title="Editar completo">' + UI.icon('edit', 15) + '</button>' +
           '</div></td></tr>';
       }).join('') ||
       '<tr><td colspan="5">' + UI.emptyState('inbox', 'No hay gastos sin asignar', 'Los gastos que cargues por WhatsApp sin obra van a aparecer acá.') + '</td></tr>') +
@@ -105,6 +112,24 @@
     UI.on(wrap, '[data-ticket]', 'click', e => {
       const url = e.target.closest('[data-ticket]').dataset.ticket;
       openTicket(url);
+    });
+    /* Cambiar categoría inline */
+    UI.on(wrap, '[data-cat]', 'change', async e => {
+      const id = e.target.dataset.cat;
+      const category = e.target.value;
+      if (!category) return;
+      S.update('expenses', id, { category });
+      await persistir();
+      UI.toast('Categoría actualizada');
+      G.router.refresh();
+    });
+    /* Editar completo: abre el modal de gasto con todos los campos */
+    UI.on(wrap, '[data-edit]', 'click', e => {
+      const id = e.target.closest('[data-edit]').dataset.edit;
+      const x = S.data.expenses.find(exp => exp.id === id);
+      if (x && G.actions && typeof G.actions.expense === 'function') {
+        G.actions.expense({ expense: x });
+      }
     });
     /* Asignar a obra */
     UI.on(wrap, '[data-sel]', 'change', async e => {
