@@ -444,7 +444,7 @@ function money(n: unknown): string {
   return "$" + Math.round(Number(n) || 0).toLocaleString("es-AR");
 }
 function flatStr(s: unknown): string {
-  return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return String(s || "").toLowerCase().normalize("NFD").split("").filter((c: string) => { const n = c.charCodeAt(0); return n < 768 || n > 879; }).join("");
 }
 function resolveFecha(raw: string): string {
   const r = String(raw || "hoy").toLowerCase();

@@ -71,8 +71,7 @@ export function matchVerificationCode(text: string): string | null {
      sea robusta ante la codificación del texto que llega de Meta. */
   const flatText = String(text || "")
     .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+    .normalize("NFD").split("").filter((c: string) => { const n = c.charCodeAt(0); return n < 768 || n > 879; }).join("");
   const m = flatText.match(/codigo(?:\s+de\s+verificacion)?:?\s*([a-z0-9]{6})/i);
   return m ? m[1].toUpperCase() : null;
 }
@@ -82,8 +81,7 @@ export function matchVerificationCode(text: string): string | null {
 export function matchLicenseCode(text: string): string | null {
   const flatText = String(text || "")
     .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+    .normalize("NFD").split("").filter((c: string) => { const n = c.charCodeAt(0); return n < 768 || n > 879; }).join("");
   const m = flatText.match(/\bgadu[- ]?([a-z0-9]{6})\b/i);
   return m ? "GADU-" + m[1].toUpperCase() : null;
 }
@@ -139,7 +137,7 @@ export function workLabel(w: Record<string, unknown> | null | undefined): string
 }
 
 function flat(s: string): string {
-  return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return String(s || "").toLowerCase().normalize("NFD").split("").filter((c: string) => { const n = c.charCodeAt(0); return n < 768 || n > 879; }).join("");
 }
 
 export function findWork(works: Array<Record<string, unknown>>, mention: string): Record<string, unknown> | null {
