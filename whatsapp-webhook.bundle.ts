@@ -2255,6 +2255,19 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from });
     }
 
+    /* 2e) CANCELAR: en CUALQUIER wizard activo, la palabra "cancelar" limpia la
+       sesion y vuelve al menu principal. Se revisa antes de los wizards/IA. */
+    if (/^(cancelar|cancela|salir|abortar|no quiero|nada)\s*[.!?]*$/i.test(String(inc.text || "").trim())) {
+      try {
+        const sessCancel = await getSession(normalizePhone(inc.from));
+        if (sessCancel && sessCancel.state) {
+          await deleteSession(normalizePhone(inc.from));
+          await showMainMenu(inc.from, " Operacion cancelada. En que te ayudo?");
+          return json({ ok: true, from: inc.from, reply: "cancelado" });
+        }
+      } catch (e) { /* sin sesion: seguimos normal */ }
+    }
+
     /* 3) Mismo motor que el chat web: ai-assistant en modo servidor.
        Esperamos la respuesta de la IA con un timeout de seguridad de 10s.
        Recien si la IA FALLA (o tarda mas de 10s) caemos al fallback local. */

@@ -2538,6 +2538,7 @@
     resetFlows();   // limpieza TOTAL: wizard, submenús y confirmaciones colgadas
     wizardBubble('✋ Operación cancelada. Si querés retomarla, decime de nuevo qué cargar.');
     if (op) rememberTurn('asistente', 'cancelado ' + op.modulo);
+    addGreeting();   // regresar al menú principal de opciones (botonera de reposo)
   }
   function askContinueOrCancel() {
     const op = pendingOp;
