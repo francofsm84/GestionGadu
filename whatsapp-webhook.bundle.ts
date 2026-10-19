@@ -1445,18 +1445,28 @@ async function findUserId(from: string): Promise<string | null> {
    perdiendo el estado (p. ej. WAITING_CONTACT) y cayendo al fallback. */
 async function getSession(phone: string) {
   const r = await rest("whatsapp_sessions?phone_number=eq." + encodeURIComponent(normalizePhone(phone)) + "&limit=1", { method: "GET" });
-  const rows = (await r.json().catch(() => [])) as Array<{ state: string; context: Record<string, unknown> }>;
+  const rows = (await r.json().catch(() => [])) as Array<{ state: string; context: Record<string, unknown>; is_paused?: boolean; paused_until?: string }>;
   return (Array.isArray(rows) && rows.length) ? rows[0] : null;
 }
 async function upsertSession(phone: string, userId: string, state: string, context: Record<string, unknown>) {
   await rest("whatsapp_sessions", {
     method: "POST",
     headers: { Prefer: "resolution=merge-duplicates" },
-    body: JSON.stringify({ phone_number: normalizePhone(phone), user_id: userId, state, context, updated_at: new Date().toISOString() }),
+    body: JSON.stringify({ phone_number: normalizePhone(phone), user_id: userId, state, context, is_paused: false, updated_at: new Date().toISOString() }),
   });
 }
 async function deleteSession(phone: string) {
   await rest("whatsapp_sessions?phone_number=eq." + encodeURIComponent(normalizePhone(phone)), { method: "DELETE" });
+}
+
+/* Pausa/Reanuda el bot para un telefono (flag is_paused en whatsapp_sessions).
+   Mientras esta pausado, processMessage corta y no responde automaticamente. */
+async function setPaused(phone: string, paused: boolean) {
+  await rest("whatsapp_sessions?phone_number=eq." + encodeURIComponent(normalizePhone(phone)), {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({ is_paused: paused, paused_until: paused ? new Date().toISOString() : null, updated_at: new Date().toISOString() }),
+  });
 }
 
 /* El usuario tiene un ticket de soporte ABIERTO? Devuelve el ticket (id + messages)
@@ -1932,9 +1942,11 @@ async function handleButtonReply(from: string, buttonId: string) {
           body: JSON.stringify({ user_id: userId, phone: from, message: "Solicitud de soporte desde WhatsApp", status: "open" }),
         });
       } catch (e) {}
+      /* Pausar el bot: mientras is_paused=true, processMessage NO responde automaticamente */
+      await upsertSession(from, userId, "PAUSED", {});
+      await setPaused(from, true);
       fireAndForget(notifyAdminNewTicket(from));   // avisar al admin por WhatsApp
       fireAndForget(sendWhatsApp(from, "OK Tu pedido fue enviado. Un asesor de GADU te contactara por este medio a la brevedad."));
-      await deleteSession(normalizePhone(from));
       return;
     }
     console.warn("[GADU-WA-MENU] accion desconocida:", act);
@@ -2209,6 +2221,16 @@ async function processMessage(body: unknown) {
     }
     const row = rowsData[0];
     const data = row.data || {};
+
+    /* 2c) Pausa por soporte humano: si is_paused=true, el bot NO responde
+       automaticamente (corta antes de cualquier wizard/IA/fallback). */
+    try {
+      const sessPause = await getSession(normalizePhone(inc.from));
+      if (sessPause && sessPause.is_paused) {
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] Un asesor de GADU esta revisando tu caso, aguarda un momento."));
+        return json({ ok: true, from: inc.from, reply: "pausado" });
+      }
+    } catch (e) { /* sin sesion: seguimos normal */ }
 
     /* 2d) RESTAURAR: recuperar el ultimo registro de la papelera */
     if (String(inc.text || "").trim().toUpperCase() === "RESTAURAR") {

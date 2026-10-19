@@ -52,6 +52,7 @@ MAPEO DE CAMPOS POR MODULO:
 - INGRESO: "monto" = numero, "concepto" = adelanto/certificacion/cobro, "obra" = obra si la nombra.
 - INVERSION: si el usuario dice "inverti", "inversion" o "invertir" + un monto + un concepto (ej. "Inverti 50000 en una maquina", "Inversion de 10000 en capital de trabajo"), la intencion es modulo="inversion" (NO es un gasto comun). "monto" = numero, "categoria" = concepto.
 - JORNADA: "empleado" = nombre del empleado, "horas" = numero, "obra" = obra si la nombra.
+- DIFERENCIACION (CRITICO): Si el usuario dice "Gaste 5000 en la obra X", la accion es modulo="gasto" y la obra es SOLO una referencia (NO crees una obra nueva). Si el usuario dice "Crear obra X" / "Nueva obra X", la accion es modulo="obra". NUNCA mezcles ambas intenciones ni crees una obra a partir de un gasto.
 - MONEDA / RELLENO: ignora las palabras de moneda o relleno entre el numero y el concepto ("pesos", "peso", "mangos", "lucas", "ARS", "USD", "$"). Ej: "Inverti 170000 pesos en clavos" -> monto=170000, categoria="clavos". NUNCA incluyas "pesos" ni "mangos" dentro de la categoria.
 
 - GASTO SIN VERBO: si el usuario escribe un NUMERO seguido de "de" y un concepto (ej. "45678 de nafta", "5000 de cemento"), asumi que es un GASTO. Extrae "monto" = el numero y "categoria" = el concepto. No preguntes.
