@@ -367,8 +367,7 @@
       '<div class="ai-head"><span class="ai-head-logo"><img src="' + AVATAR_SRC + '" alt="" class="ai-avatar"></span>' +
       '<div class="ai-head-txt"><strong>Asistente GADU</strong><span class="muted small" id="aiSub">Te guío paso a paso</span></div>' +
       '<select class="ai-voice-sel" id="aiVoiceSel" title="Voz de lectura" aria-label="Voz de lectura"></select>' +
-      '<button class="icon-btn sm" id="aiMin" title="Minimizar (queda la burbuja flotante)" aria-label="Minimizar">' + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>' + '</button>' +
-      '<button class="icon-btn sm" id="aiClose">' + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>' + '</button></div>' +
+      '</div>' +
       '<div class="ai-log" id="aiLog"></div>' +
       '<div class="ai-foot">' +
       '<input class="input" id="aiInput" placeholder="Escribí tu mensaje…">' +
@@ -475,10 +474,6 @@
       wizardAdvance(v);
     });
     document.getElementById('aiFab').addEventListener('click', toggle);
-    document.getElementById('aiClose').addEventListener('click', () => setOpen(false));
-    /* Minimizar: contrae el chat dejando solo la burbuja flotante; al tocarla
-       se restaura el panel con el historial intacto. */
-    document.getElementById('aiMin').addEventListener('click', () => setOpen(false));
     document.getElementById('aiSend').addEventListener('click', send);
     input.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
     addGreeting();
