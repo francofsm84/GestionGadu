@@ -2824,7 +2824,7 @@ async function processMessage(body: unknown) {
           console.error("[whatsapp-webhook] fallo impactar el movimiento:", up.status);
           return json({ ok: false, error: "no se pudo guardar el movimiento" });
         }
-        let reply = (aiReply ? aiReply + "\n\n" : "") + "OK " + res.label;
+        let reply = "OK " + res.label;
         /* Deep link + notificacion push: enlazar al gasto recien creado */
         if (action.modulo === "gasto") {
           const gasto = (data.expenses && data.expenses[0]) || null;
@@ -2843,7 +2843,7 @@ async function processMessage(body: unknown) {
         }
         return json({ ok: true, from: inc.from, reply });
       }
-      const reply = aiReply || (res.notFound ? res.notFound : "[BOT] Me falta " + (res.missing || "un dato") + " para cargarlo. Decimelo por aca.");
+      const reply = res.notFound ? res.notFound : "[BOT] Me falta " + (res.missing || "un dato") + " para cargarlo. Decimelo por aca.";
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
     }
