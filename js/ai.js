@@ -120,6 +120,13 @@
   /* Modo dinámico según la vista actual: #/admin → COO Virtual · resto → Capataz Digital */
   function currentMode() { return location.hash.indexOf('#/admin') === 0 ? 'admin' : 'usuario'; }
   function isAdminMode() { return currentMode() === 'admin'; }
+  /* Clave de contexto (modo + obra activa). Detecta si el usuario entró/salió de
+     una vista de obra para refrescar el saludo y la botonera. */
+  function contextKey() {
+    const admin = isAdminMode();
+    const ctx = admin ? null : currentWorkContext();
+    return (admin ? 'admin' : 'usuario') + '|' + (ctx ? ctx.id : 'global');
+  }
 
   /* Registra la última obra/cliente tratado para el contexto de sesión */
   function setFocus(mod, campos) {
@@ -855,7 +862,7 @@
   function toggle() { setOpen(document.getElementById('aiPanel').hidden); }
 
   function refreshGreeting() {
-    if (builtMode === currentMode()) return;
+    if (builtMode === contextKey()) return;
     log.innerHTML = '';
     addGreeting();
   }
@@ -1020,7 +1027,7 @@
       { k: 'herramientas', e: '🛠️', l: 'Herramientas' },
     ];
     const admin = isAdminMode();
-    builtMode = admin ? 'admin' : 'usuario';
+    builtMode = contextKey();
     const sub = document.getElementById('aiSub');
     if (sub) sub.textContent = admin ? 'COO Virtual · gestión SaaS' : 'Capataz Digital · te guío';
 
