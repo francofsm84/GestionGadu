@@ -241,11 +241,11 @@ async function geminiAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption
   }
   const model = Deno.env.get("GEMINI_MODEL") || "gemini-1.5-flash";
   const base64 = arrayBufferToBase64(buffer);
-  const prompt = "Analiza esta imagen y el texto que la acompaña: '" + (caption || "") + "'. " +
-    "Si es un ticket o comprobante, extrae el monto total, el proveedor y el concepto. " +
-    "Si es un producto, identifica qué es y el monto mencionado en el texto. " +
-    "Devolvé un string estructurado para registrar un gasto: 'Gasto de [Monto] en [Concepto]'. " +
-    "Si no es ni ticket ni producto, describí brevemente lo que ves.";
+  const prompt = "Leé la imagen con atención, incluso si está rotada o tiene letra pequeña. " +
+    "Buscá específicamente las palabras clave 'TOTAL', 'TOTAL A PAGAR' o 'IMPORTE' para extraer el monto. " +
+    "Devolvé ESTRICTAMENTE un JSON válido (sin markdown, sin comentarios) con esta estructura exacta: " +
+    '{"monto": <numero>, "concepto": "<que es>", "categoria": "<rubro>"}. ' +
+    'Si no podés leer el monto, devolvé {"monto": 0}. El texto que acompaña la imagen es: "' + (caption || "") + '".';
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   console.log("[GADU-WA-IMAGE] gemini analizar imagen:", buffer.byteLength, "bytes · mime:", mimeType);
@@ -305,10 +305,11 @@ async function groqAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption: 
   try {
     const base64 = arrayBufferToBase64(buffer);
     const dataUrl = "data:" + norm + ";base64," + base64;
-    const prompt = "Analiza esta imagen y el texto que la acompaña: '" + (caption || "") + "'. " +
-      "Si es un ticket o comprobante, extrae el monto total, el proveedor y el concepto. " +
-      "Si es un producto, identifica qué es y el monto mencionado en el texto. " +
-      "Devolvé un string estructurado para registrar un gasto: 'Gasto de [Monto] en [Concepto]'.";
+    const prompt = "Leé la imagen con atención, incluso si está rotada o tiene letra pequeña. " +
+      "Buscá específicamente las palabras clave 'TOTAL', 'TOTAL A PAGAR' o 'IMPORTE' para extraer el monto. " +
+      "Devolvé ESTRICTAMENTE un JSON válido (sin markdown, sin comentarios) con esta estructura exacta: " +
+      '{"monto": <numero>, "concepto": "<que es>", "categoria": "<rubro>"}. ' +
+      'Si no podés leer el monto, devolvé {"monto": 0}. El texto que acompaña la imagen es: "' + (caption || "") + '".';
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: { "Authorization": "Bearer " + apiKey, "Content-Type": "application/json" },
@@ -356,6 +357,7 @@ export interface ResolvedIncoming {
   text: string;
   audioFailed?: boolean;
   imageFailed?: boolean;
+  imageNoMonto?: boolean;
   mediaUrl?: string;
 }
 
@@ -433,7 +435,22 @@ export async function resolveIncomingText(payload: unknown): Promise<ResolvedInc
         return { from, text: "", imageFailed: true, mediaUrl };
       }
       console.log("[GADU-WA-IMAGE] análisis:", text, "· mediaUrl:", mediaUrl ? mediaUrl.slice(0, 80) : "(sin subir)");
-      return { from, text, mediaUrl };
+      /* El modelo devuelve JSON {monto, concepto, categoria}. Parsearlo:
+         - monto > 0 → construir texto de gasto natural (lo categoriza el flujo normal)
+         - monto === 0 → el ticket se leyó pero no se pudo extraer el monto */
+      try {
+        const parsed = JSON.parse(String(text).replace(/```json|```/g, "").trim());
+        const monto = Number(parsed && parsed.monto);
+        if (monto > 0) {
+          const concepto = String((parsed && parsed.concepto) || caption || "gasto").slice(0, 60);
+          return { from, text: "Gasto de " + monto + " en " + concepto, mediaUrl };
+        }
+        console.warn("[GADU-WA-IMAGE] monto 0 → no se pudo leer el monto del ticket");
+        return { from, text: "", imageNoMonto: true, mediaUrl };
+      } catch (e) {
+        /* No devolvió JSON: usar el texto crudo como fallback (flujo normal) */
+        return { from, text, mediaUrl };
+      }
     }
 
     return null;

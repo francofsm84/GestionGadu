@@ -944,6 +944,11 @@ async function processMessage(body: unknown) {
       fireAndForget(sendWhatsApp(resolved.from, "🤖 No pude leer la imagen, ¿me escribís el gasto?"));
       return;
     }
+    if (resolved.imageNoMonto) {
+      console.warn("[GADU-WA-IMAGE] no se pudo leer el monto del ticket para", resolved.from);
+      fireAndForget(sendWhatsApp(resolved.from, "🤖 No pude leer el monto del ticket. ¿Podrías escribirme cuánto gastaste?"));
+      return;
+    }
     const inc = { from: resolved.from, text: resolved.text, mediaUrl: resolved.mediaUrl || "" };
     console.log("[whatsapp-webhook] from=" + inc.from + " text=" + JSON.stringify(inc.text));
     console.log("[DEBUG] Remitente detectado: " + inc.from);
