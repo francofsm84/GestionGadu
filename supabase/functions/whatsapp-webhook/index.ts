@@ -285,6 +285,24 @@ async function sendWhatsAppList(
   return res.ok;
 }
 
+/* Menú principal unificado (lista interactiva, hasta 10 filas) */
+const MENU_OPTS = [
+  { id: "action_nueva_obra", title: "Nueva Obra" },
+  { id: "action_nuevo_gasto", title: "Cargar Gasto" },
+  { id: "action_inversion", title: "Registrar Inversión" },
+  { id: "action_adelanto", title: "Pago / Adelanto" },
+  { id: "action_presupuesto", title: "Presupuesto" },
+  { id: "action_consulta", title: "Consultar Saldo" },
+  { id: "action_contacto", title: "Nuevo Contacto / Directorio" },
+  { id: "action_humano", title: "Hablar con humano" },
+];
+
+/* Envía el saludo/cabecera + la lista interactiva del menú principal */
+async function showMainMenu(from: string, header: string): Promise<void> {
+  fireAndForget(sendWhatsApp(from, header));
+  await sendWhatsAppList(from, "Elegí una opción 👇", MENU_OPTS, { button: "Ver opciones", sectionTitle: "Menú" });
+}
+
 /* Busca el user_id por teléfono (variantes con/sin 9, con/sin +) */
 async function findUserId(from: string): Promise<string | null> {
   const fromCandidates = [...new Set([from, normalizePhone(from), "+" + normalizePhone(from)])];
@@ -1042,28 +1060,13 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
     }
 
-    /* 1b) Menú principal unificado: saludo + lista de opciones (igual que la web).
-       Solo si el texto es un saludo/palabra clave y NO está en medio de un wizard. */
+    /* 1b) Saludo → SIEMPRE forzar el menú: borrar cualquier sesión vieja (wizard)
+       y desplegar la lista interactiva, sin importar el estado previo. */
     const menuText = String(inc.text || "").trim().toLowerCase();
     if (/^(hola|holis|holi|buenas|buen\s*d[ií]a|buenos\s*d[ií]as|menu|men[uú]|empezar|ayuda|help|inicio)\b/.test(menuText)) {
-      try {
-        const sessMenu = await getSession(normalizePhone(inc.from));
-        if (!sessMenu || !sessMenu.state) {
-          const opts = [
-            { id: "action_nueva_obra", title: "Nueva Obra" },
-            { id: "action_nuevo_gasto", title: "Cargar Gasto" },
-            { id: "action_inversion", title: "Registrar Inversión" },
-            { id: "action_adelanto", title: "Pago / Adelanto" },
-            { id: "action_presupuesto", title: "Presupuesto" },
-            { id: "action_consulta", title: "Consultar Saldo" },
-            { id: "action_contacto", title: "Nuevo Contacto / Directorio" },
-            { id: "action_humano", title: "Hablar con humano" },
-          ];
-          fireAndForget(sendWhatsApp(inc.from, "¡Hola! 👋 Soy tu asistente GADU. ¿Qué querés hacer hoy?"));
-          await sendWhatsAppList(inc.from, "Elegí una opción 👇", opts, { button: "Ver opciones", sectionTitle: "Menú" });
-          return json({ ok: true, from: inc.from });
-        }
-      } catch (e) { /* si no hay sesión, seguimos normal */ }
+      try { await deleteSession(normalizePhone(inc.from)); } catch (e) { /* sin sesión: ok */ }
+      await showMainMenu(inc.from, "¡Hola! 👋 Soy tu asistente GADU. ¿Qué querés hacer hoy?");
+      return json({ ok: true, from: inc.from });
     }
 
     /* 2) Usuario vinculado: busca por linkedPhone/phone (app_data) y por la
@@ -1646,14 +1649,9 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
     }
 
-      /* 5) Fallback inteligente: lista interactiva (hasta 10 opciones) */
-      const reply = aiReply || "🤖 No estoy seguro de qué querés hacer. Elegí una opción 👇";
-      await sendWhatsAppList(inc.from, reply, [
-        { id: "action_nuevo_gasto", title: "Cargar un Gasto" },
-        { id: "action_inversion", title: "Registrar Inversión" },
-        { id: "action_adelanto", title: "Cargar un Adelanto" },
-        { id: "action_humano", title: "Hablar con un humano" },
-      ], { button: "Ver opciones", sectionTitle: "Opciones" });
+      /* 5) Fallback: desplegar el menú principal unificado (misma lista) */
+      const reply = aiReply || "🤖 No estoy seguro de qué querés hacer.";
+      await showMainMenu(inc.from, reply);
       return json({ ok: true, from: inc.from, reply });
   } catch (error) {
     console.error("[GADU-WA-QUEUE-FIX] CRITICAL ERROR en processMessage:", error);
