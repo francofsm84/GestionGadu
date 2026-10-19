@@ -1843,6 +1843,11 @@ async function handleButtonReply(from: string, buttonId: string) {
       fireAndForget(sendWhatsApp(from, "Dale, decime el monto y el concepto (ej: \"Gaste 5000 de nafta\" o \"5000 de cemento\")"));
       return;
     }
+    if (act === "inversion") {
+      await upsertSession(from, userId, "WAITING_INVERSION", {});
+      fireAndForget(sendWhatsApp(from, "De cuanto fue la inversion y en que? Ej: \"Inverti 50000 en herramientas\"."));
+      return;
+    }
     if (act === "nueva_obra") {
       await upsertSession(from, userId, "WAITING_OBRA", {});
       fireAndForget(sendWhatsApp(from, "Como se llama la obra y en que direccion esta? Ej: \"Casa Perez en Alta Gracia\""));
@@ -2134,6 +2139,7 @@ async function processMessage(body: unknown) {
           const opts = [
             { id: "action_nueva_obra", title: "Nueva Obra" },
             { id: "action_nuevo_gasto", title: "Cargar Gasto" },
+            { id: "action_inversion", title: "Registrar Inversion" },
             { id: "action_adelanto", title: "Pago / Adelanto" },
             { id: "action_presupuesto", title: "Presupuesto" },
             { id: "action_consulta", title: "Consultar Saldo" },
@@ -2256,6 +2262,52 @@ async function processMessage(body: unknown) {
         console.log("[GADU-WA-WIZARD] WAITING_GASTO cancelado, respuesta es:", localGasto.modulo);
       } else {
         fireAndForget(sendWhatsApp(inc.from, "[BOT] Decime el gasto, por ejemplo: \"Gaste 5000 de nafta\" o \"5000 de cemento\"."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+    }
+
+    /* [GADU-WA-WIZARD] Wizard de inversion (WAITING_INVERSION): captura monto + concepto
+       con localIntent y registra la inversion ANTES de la IA. */
+    let enWizardInversion = false;
+    try {
+      const sessInv = await getSession(normalizePhone(inc.from));
+      if (sessInv && sessInv.state === "WAITING_INVERSION") enWizardInversion = true;
+    } catch (e) {}
+    if (enWizardInversion) {
+      const txtInv = String(inc.text || "").trim();
+      if (!txtInv) {
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] De cuanto fue la inversion y en que? Ej: \"Inverti 50000 en herramientas\"."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      if (/^(cancelar|no|salir|abortar)$/i.test(txtInv)) {
+        await deleteSession(normalizePhone(inc.from));
+        fireAndForget(sendWhatsApp(inc.from, "OK, cancelado."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      const localInv = localIntent(inc.text);
+      if (localInv && localInv.modulo === "inversion") {
+        const resI = executeAction(data, localInv, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
+        if (resI.ok) {
+          await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+            method: "PATCH",
+            headers: { Prefer: "return=minimal" },
+            body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+          });
+          await deleteSession(normalizePhone(inc.from));
+          const reply = "OK " + resI.label;
+          fireAndForget(sendWhatsApp(inc.from, reply));
+          return json({ ok: true, from: inc.from, reply });
+        }
+        await deleteSession(normalizePhone(inc.from));
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] " + (resI.missing ? "Me falta " + resI.missing + "." : "No pude cargar la inversion.") + " Proba de nuevo: \"Inverti 50000 en herramientas\"."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      if (localInv && localInv.modulo && localInv.modulo !== "inversion") {
+        /* El usuario cambio de idea: cancelar el wizard y dejar que la IA lo resuelva */
+        await deleteSession(normalizePhone(inc.from));
+        console.log("[GADU-WA-WIZARD] WAITING_INVERSION cancelado, respuesta es:", localInv.modulo);
+      } else {
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] De cuanto fue la inversion y en que? Ej: \"Inverti 50000 en herramientas\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
     }
@@ -2681,13 +2733,14 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
     }
 
-      /* 5) Fallback inteligente: ofrecer opciones en lugar de mandar a la web */
+      /* 5) Fallback inteligente: lista interactiva (hasta 10 opciones) */
       const reply = aiReply || "[BOT] No estoy seguro de que queres hacer. Elegi una opcion [abajo]";
-      fireAndForget(sendWhatsAppButtons(inc.from, reply, [
-        { id: "fallback_gasto", title: "Cargar un Gasto" },
-        { id: "fallback_adelanto", title: "Cargar un Adelanto" },
-        { id: "fallback_humano", title: "Hablar con un humano" },
-      ]));
+      await sendWhatsAppList(inc.from, reply, [
+        { id: "action_nuevo_gasto", title: "Cargar un Gasto" },
+        { id: "action_inversion", title: "Registrar Inversion" },
+        { id: "action_adelanto", title: "Cargar un Adelanto" },
+        { id: "action_humano", title: "Hablar con un humano" },
+      ], { button: "Ver opciones", sectionTitle: "Opciones" });
       return json({ ok: true, from: inc.from, reply });
   } catch (error) {
     console.error("[GADU-WA-QUEUE-FIX] CRITICAL ERROR en processMessage:", error);
