@@ -228,6 +228,12 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
     return { modulo: "ingreso", campos: { monto: num(m[1]), concepto: "Cobro" } };
   }
 
+  /* 4c) Inversion: "Inverti 50000 en una maquina" / "Inversion de 10000 en capital" */
+  m = f.match(/(?:invert[ii]|inversion|inversi[oo]n|invertir)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:en|de)\s+(.+)/i);
+  if (m && num(m[1]) > 0) {
+    return { modulo: "inversion", campos: { monto: num(m[1]), categoria: String(m[2] || "").trim() } };
+  }
+
   /* 5) Empleado: "Agrega un nuevo empleado Juan Carlos Maldonado" / "empleado. Jorge"
         Extrae el nombre y, si detecta un oficio conocido al final, lo separa como rol
         (red de seguridad si la IA no responde). */
@@ -443,6 +449,17 @@ export function executeAction(
       description: String(sourceText || "").slice(0, 200), invoiceNumber: "", paymentMethod: "", source: "whatsapp",
     } as unknown as Record<string, unknown>);
     return { ok: true, label: "Gasto registrado: $" + montoFmt + " en " + concepto + " (" + cat + ") en " + ob.label };
+  }
+  if (action.modulo === "inversion") {
+    if (!(monto > 0)) return { ok: false, missing: "el monto" };
+    const concepto = cleanConcept(String(c.categoria || sourceText || "")).slice(0, 60) || "inversion";
+    const montoFmt = monto.toLocaleString("es-AR");
+    (d.expenses || (d.expenses = [])).unshift({
+      id: idGen(), type: "general", workId: null, date: todayISO, amount: monto,
+      category: "Inversion", providerId: null, employeeId: null, expenseKind: "inversion",
+      description: String(sourceText || "").slice(0, 200), invoiceNumber: "", paymentMethod: "", source: "whatsapp",
+    } as unknown as Record<string, unknown>);
+    return { ok: true, label: "Inversion registrada: $" + montoFmt + " en " + concepto };
   }
   if (action.modulo === "ingreso") {
     if (!(monto > 0)) return { ok: false, missing: "el monto" };
@@ -2440,7 +2457,7 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
     }
 
-    const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra"];
+    const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra", "inversion"];
     console.log("[GADU-WA-INTENT] texto a interpretar:", JSON.stringify(inc.text));
 
     const aiController = new AbortController();
@@ -2620,7 +2637,7 @@ async function processMessage(body: unknown) {
     }
 
     /* 4) Ejecutar la accion contable (gasto/ingreso) e impactar en app_data */
-    if (action && ["gasto", "ingreso", "empleado", "adelanto", "obra"].includes(action.modulo)) {
+    if (action && ["gasto", "ingreso", "empleado", "adelanto", "obra", "inversion"].includes(action.modulo)) {
       const res = executeAction(data, action, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
       if (res.ok) {
         /* Si el gasto vino de una FOTO de ticket, adjuntar el comprobante ANTES del PATCH

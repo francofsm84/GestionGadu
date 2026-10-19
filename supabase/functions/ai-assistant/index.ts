@@ -50,6 +50,7 @@ MAPEO DE CAMPOS POR MÓDULO:
 - OBRA: "nombre" = nombre de la obra, "ubicacion" = ciudad/barrio, "presupuesto" = monto total.
 - GASTO: "monto" = número, "categoria" = concepto (nafta, cemento, flete, etc.), "obra" = obra si la nombra.
 - INGRESO: "monto" = número, "concepto" = adelanto/certificación/cobro, "obra" = obra si la nombra.
+- INVERSIÓN: si el usuario dice "invertí", "inversión" o "invertir" + un monto + un concepto (ej. "Invertí 50000 en una máquina", "Inversión de 10000 en capital de trabajo"), la intención es modulo="inversion" (NO es un gasto común). "monto" = número, "categoria" = concepto.
 - JORNADA: "empleado" = nombre del empleado, "horas" = número, "obra" = obra si la nombra.
 
 - GASTO SIN VERBO: si el usuario escribe un NÚMERO seguido de "de" y un concepto (ej. "45678 de nafta", "5000 de cemento"), asumí que es un GASTO. Extraé "monto" = el número y "categoria" = el concepto. No preguntes.
@@ -121,7 +122,7 @@ function tools() {
       parameters: {
         type: "OBJECT",
         properties: {
-          modulo: { type: "STRING", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada", "adelanto", "consulta", "presupuesto_pdf", "asistencia"], description: "Qué formulario abrir. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = presupuesto en PDF. 'asistencia' = registrar horas trabajadas de empleados." },
+          modulo: { type: "STRING", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "inversion", "jornada", "adelanto", "consulta", "presupuesto_pdf", "asistencia"], description: "Qué formulario abrir. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = presupuesto en PDF. 'asistencia' = registrar horas trabajadas de empleados." },
           campos: {
             type: "OBJECT",
             description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol, cliente, obra, empleado, monto, concepto, categoria, horas, ubicacion, presupuesto, query_type, target, items (solo con modulo='presupuesto_pdf').",
@@ -187,7 +188,7 @@ function toolsOpenAI() {
       parameters: {
         type: "object",
         properties: {
-          modulo: { type: "string", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "jornada", "adelanto", "consulta", "presupuesto_pdf", "asistencia"], description: "Qué formulario abrir. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = presupuesto en PDF. 'asistencia' = registrar horas trabajadas de empleados." },
+          modulo: { type: "string", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "inversion", "jornada", "adelanto", "consulta", "presupuesto_pdf", "asistencia"], description: "Qué formulario abrir. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = presupuesto en PDF. 'asistencia' = registrar horas trabajadas de empleados." },
           campos: {
             type: "object",
             description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol, cliente, obra, empleado, monto, concepto, categoria, horas, ubicacion, presupuesto, query_type, target, items (solo con modulo='presupuesto_pdf').",
