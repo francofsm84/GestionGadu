@@ -2350,13 +2350,63 @@ async function processMessage(body: unknown) {
         return json({ ok: true, from: inc.from, reply: "" });
       }
       if (localGasto && localGasto.modulo && localGasto.modulo !== "gasto") {
-        /* El usuario cambio de idea: cancelar el wizard y dejar que la IA lo resuelva */
         await deleteSession(normalizePhone(inc.from));
         console.log("[GADU-WA-WIZARD] WAITING_GASTO cancelado, respuesta es:", localGasto.modulo);
       } else {
+        /* Monto suelto? -> guardar monto y pedir categoria (multi-paso) */
+        const mSuelto = String(inc.text || "").trim().match(/^\$?\s*([\d][\d.,]*)\s*$/);
+        if (mSuelto) {
+          const monto = Number(String(mSuelto[1]).replace(/\./g, "").replace(",", "."));
+          if (monto > 0) {
+            await upsertSession(inc.from, row.user_id, "WAITING_GASTO_CATEGORIA", { monto });
+            fireAndForget(sendWhatsApp(inc.from, "Que concepto o categoria? (ej. nafta, cemento, flete)"));
+            return json({ ok: true, from: inc.from, reply: "" });
+          }
+        }
         fireAndForget(sendWhatsApp(inc.from, "[BOT] Decime el gasto, por ejemplo: \"Gaste 5000 de nafta\" o \"5000 de cemento\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
+    }
+
+    /* Gasto paso 2: categoria (WAITING_GASTO_CATEGORIA) */
+    let enWizardGastoCat = false;
+    let gastoCatCtx: Record<string, unknown> = {};
+    try {
+      const sessGC = await getSession(normalizePhone(inc.from));
+      if (sessGC && sessGC.state === "WAITING_GASTO_CATEGORIA") { enWizardGastoCat = true; gastoCatCtx = (sessGC.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardGastoCat) {
+      const t = String(inc.text || "").trim();
+      if (!t) { fireAndForget(sendWhatsApp(inc.from, "[BOT] Que concepto o categoria?")); return json({ ok: true, from: inc.from, reply: "" }); }
+      await upsertSession(inc.from, row.user_id, "WAITING_GASTO_OBRA", { monto: gastoCatCtx.monto, categoria: t });
+      fireAndForget(sendWhatsApp(inc.from, "A que obra corresponde? (escribi *general* si es un gasto general)"));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* Gasto paso 3: obra -> guardar (WAITING_GASTO_OBRA) */
+    let enWizardGastoObra = false;
+    let gastoObraCtx: Record<string, unknown> = {};
+    try {
+      const sessGO = await getSession(normalizePhone(inc.from));
+      if (sessGO && sessGO.state === "WAITING_GASTO_OBRA") { enWizardGastoObra = true; gastoObraCtx = (sessGO.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardGastoObra) {
+      const t = String(inc.text || "").trim();
+      const esGeneral = /^(general|sin asignar|sin obra)$/i.test(t);
+      const actionG = { modulo: "gasto", campos: { monto: gastoObraCtx.monto, categoria: gastoObraCtx.categoria, obra: esGeneral ? "" : t } };
+      const resG = executeAction(data, actionG, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
+      if (resG.ok) {
+        await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+        });
+        await deleteSession(normalizePhone(inc.from));
+        fireAndForget(sendWhatsApp(inc.from, "OK " + resG.label));
+        return json({ ok: true, from: inc.from, reply: "OK " + resG.label });
+      }
+      fireAndForget(sendWhatsApp(inc.from, "[BOT] No pude guardar el gasto. Proba de nuevo."));
+      return json({ ok: true, from: inc.from, reply: "" });
     }
 
     /* [GADU-WA-WIZARD] Wizard de inversion (WAITING_INVERSION): captura monto + concepto
@@ -2440,8 +2490,53 @@ async function processMessage(body: unknown) {
         fireAndForget(sendWhatsApp(inc.from, "OK Herramienta registrada: " + nombreRaw + " (" + categoria + ")   $" + costo.toLocaleString("es-AR")));
         return json({ ok: true, from: inc.from, reply: "herramienta guardada" });
       }
-      fireAndForget(sendWhatsApp(inc.from, "[BOT] Decime la herramienta y su costo, ej: \"Amoladora 50000\"."));
+      /* Solo nombre -> pedir categoria (multi-paso) */
+      await upsertSession(inc.from, row.user_id, "WAITING_HERRAMIENTA_CATEGORIA", { nombre: tHer });
+      fireAndForget(sendWhatsApp(inc.from, "Que tipo de herramienta es? (Herramienta electrica, Herramienta manual, Maquinaria, Equipo mayor, Vehiculo)"));
       return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* Herramienta paso 2: categoria (WAITING_HERRAMIENTA_CATEGORIA) */
+    let enWizardHerCat = false;
+    let herCatCtx: Record<string, unknown> = {};
+    try {
+      const sessHC = await getSession(normalizePhone(inc.from));
+      if (sessHC && sessHC.state === "WAITING_HERRAMIENTA_CATEGORIA") { enWizardHerCat = true; herCatCtx = (sessHC.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardHerCat) {
+      const t = String(inc.text || "").trim();
+      if (!t) { fireAndForget(sendWhatsApp(inc.from, "[BOT] Que tipo de herramienta es?")); return json({ ok: true, from: inc.from, reply: "" }); }
+      await upsertSession(inc.from, row.user_id, "WAITING_HERRAMIENTA_COSTO", { nombre: herCatCtx.nombre, categoria: t });
+      fireAndForget(sendWhatsApp(inc.from, "Cuanto costo? (ej. 50000)"));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* Herramienta paso 3: costo -> guardar (WAITING_HERRAMIENTA_COSTO) */
+    let enWizardHerCosto = false;
+    let herCostoCtx: Record<string, unknown> = {};
+    try {
+      const sessHK = await getSession(normalizePhone(inc.from));
+      if (sessHK && sessHK.state === "WAITING_HERRAMIENTA_COSTO") { enWizardHerCosto = true; herCostoCtx = (sessHK.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardHerCosto) {
+      const t = String(inc.text || "").trim();
+      const costo = Number(t.replace(/\./g, "").replace(",", "."));
+      if (!costo || costo <= 0) { fireAndForget(sendWhatsApp(inc.from, "[BOT] Eso no es un monto valido. Cuanto costo?")); return json({ ok: true, from: inc.from, reply: "" }); }
+      const nombreRaw = String(herCostoCtx.nombre || "");
+      const categoria = String(herCostoCtx.categoria || "Herramienta manual");
+      (data.assets || (data.assets = [])).unshift({
+        id: crypto.randomUUID(), name: nombreRaw, category: categoria,
+        purchaseDate: new Date().toISOString().slice(0, 10), cost: costo,
+        status: "operativo", supplierId: null, notes: "", maintenance: [],
+      });
+      await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+      });
+      await deleteSession(normalizePhone(inc.from));
+      fireAndForget(sendWhatsApp(inc.from, "OK Herramienta registrada: " + nombreRaw + " (" + categoria + ")   $" + costo.toLocaleString("es-AR")));
+      return json({ ok: true, from: inc.from, reply: "herramienta guardada" });
     }
 
     /* [GADU-WA-WIZARD] Presupuesto (WAITING_PRESUPUESTO): la IA extrae cliente + items.
