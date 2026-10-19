@@ -1,12 +1,12 @@
 /* ============================================================
-   GADU Â· NÃºcleo del conector de WhatsApp (lÃ³gica pura, testeable)
+   GADU \u00b7 N\u00facleo del conector de WhatsApp (l\u00f3gica pura, testeable)
    Sin imports de Deno: lo consumen index.ts (Edge Function) y
    los tests de Node.
    ============================================================ */
 
 export interface Incoming {
-  from: string;   // telÃ©fono normalizado (solo dÃ­gitos)
-  text: string;   // texto o transcripciÃ³n de la nota de voz
+  from: string;   // tel\u00e9fono normalizado (solo d\u00edgitos)
+  text: string;   // texto o transcripci\u00f3n de la nota de voz
 }
 
 /* Acepta tanto el payload simple de un puente ({from, text}) como el
@@ -21,9 +21,9 @@ export function parseIncoming(payload: unknown): Incoming | null {
     const value = entry?.changes?.[0]?.value as Record<string, unknown>;
     const msg = (value?.messages as Array<Record<string, unknown>>)?.[0];
     if (!msg) return null;
-    /* Emisor: contacts[0].wa_id â†’ messages[0].from â†’ metadata.display_phone_number.
-       El payload de prueba de Meta trae el nÃºmero en messages[0].from (y a veces
-       contacts vacÃ­o); metadata.display_phone_number es el nÃºmero del BOT (Ãºltimo recurso). */
+    /* Emisor: contacts[0].wa_id \u2192 messages[0].from \u2192 metadata.display_phone_number.
+       El payload de prueba de Meta trae el n\u00famero en messages[0].from (y a veces
+       contacts vac\u00edo); metadata.display_phone_number es el n\u00famero del BOT (\u00faltimo recurso). */
     const from = String(
       (msg.from as string | undefined)
       || (value?.contacts as Array<Record<string, unknown>>)?.[0]?.wa_id
@@ -33,22 +33,22 @@ export function parseIncoming(payload: unknown): Incoming | null {
     if (msg.type === "text") {
       text = String((msg.text as Record<string, unknown>)?.body || "");
     } else if (msg.type === "voice" || msg.type === "audio") {
-      /* La transcripciÃ³n llega del proveedor/puente (requisito del flujo) */
+      /* La transcripci\u00f3n llega del proveedor/puente (requisito del flujo) */
       text = String((msg.transcription as Record<string, unknown>)?.text || "");
     }
     if (!String(text).trim()) return null;
-    /* `from` = dÃ­gitos exactos del wa_id (SIN insertar el 9): es el nÃºmero que
-       Meta espera en el campo `to` de la respuesta. La normalizaciÃ³n con 9 se
-       aplica aparte en phoneMatches para la comparaciÃ³n contra app_data. */
+    /* `from` = d\u00edgitos exactos del wa_id (SIN insertar el 9): es el n\u00famero que
+       Meta espera en el campo `to` de la respuesta. La normalizaci\u00f3n con 9 se
+       aplica aparte en phoneMatches para la comparaci\u00f3n contra app_data. */
     return { from: rawDigits(from), text: String(text).trim() };
   } catch (_e) {
     return null;
   }
 }
 
-/* Extrae SOLO el telÃ©fono del remitente (sÃ­ncrono, sin transcripciÃ³n).
+/* Extrae SOLO el tel\u00e9fono del remitente (s\u00edncrono, sin transcripci\u00f3n).
    Se usa para rutear la cola: el texto se resuelve aparte con
-   resolveIncomingText (que sÃ­ transcribe audio). */
+   resolveIncomingText (que s\u00ed transcribe audio). */
 export function extractFrom(payload: unknown): string {
   try {
     const p = (payload || {}) as Record<string, any>;
@@ -61,14 +61,14 @@ export function extractFrom(payload: unknown): string {
   }
 }
 
-/* Extrae el cÃ³digo de verificaciÃ³n del mensaje.
-   Soporta el formato actual del botÃ³n "Vincular WhatsApp" ("CÃ³digo: 99DKFR",
-   alfanumÃ©rico) y el formato histÃ³rico ("cÃ³digo de verificaciÃ³n: 123456").
-   Devuelve el cÃ³digo SIEMPRE en mayÃºsculas para comparar de forma estable. */
+/* Extrae el c\u00f3digo de verificaci\u00f3n del mensaje.
+   Soporta el formato actual del bot\u00f3n "Vincular WhatsApp" ("C\u00f3digo: 99DKFR",
+   alfanum\u00e9rico) y el formato hist\u00f3rico ("c\u00f3digo de verificaci\u00f3n: 123456").
+   Devuelve el c\u00f3digo SIEMPRE en may\u00fasculas para comparar de forma estable. */
 export function matchVerificationCode(text: string): string | null {
-  /* CÃ³digo de EXACTAMENTE 6 caracteres alfanumÃ©ricos. Se aplanan los
-     acentos ANTES de matchear (cÃ³digo â†’ codigo) para que la comparaciÃ³n
-     sea robusta ante la codificaciÃ³n del texto que llega de Meta. */
+  /* C\u00f3digo de EXACTAMENTE 6 caracteres alfanum\u00e9ricos. Se aplanan los
+     acentos ANTES de matchear (c\u00f3digo \u2192 codigo) para que la comparaci\u00f3n
+     sea robusta ante la codificaci\u00f3n del texto que llega de Meta. */
   const flatText = String(text || "")
     .toLowerCase()
     .normalize("NFD")
@@ -77,8 +77,8 @@ export function matchVerificationCode(text: string): string | null {
   return m ? m[1].toUpperCase() : null;
 }
 
-/* Detecta un cÃ³digo de licencia con formato "GADU-XXXXXX" (6 alfanumÃ©ricos).
-   Tolera mayÃºsculas/minÃºsculas, espacios y guiones. Devuelve SIEMPRE en MAYÃšSCULAS. */
+/* Detecta un c\u00f3digo de licencia con formato "GADU-XXXXXX" (6 alfanum\u00e9ricos).
+   Tolera may\u00fasculas/min\u00fasculas, espacios y guiones. Devuelve SIEMPRE en MAY\u00daSCULAS. */
 export function matchLicenseCode(text: string): string | null {
   const flatText = String(text || "")
     .toLowerCase()
@@ -90,24 +90,24 @@ export function matchLicenseCode(text: string): string | null {
 
 export function normalizePhone(p: unknown): string {
   let d = rawDigits(p);
-  /* Argentina (54): canonicaliza al formato SIN el "9" de mÃ³vil.
-     "5493547469000" (13 dÃ­gitos) â†’ "543547469000" (12 dÃ­gitos).
-     AsÃ­ "549â€¦", "54â€¦" y "+54â€¦" (con o sin el 9) siempre comparan igual
-     contra el telÃ©fono guardado en app_data. */
+  /* Argentina (54): canonicaliza al formato SIN el "9" de m\u00f3vil.
+     "5493547469000" (13 d\u00edgitos) \u2192 "543547469000" (12 d\u00edgitos).
+     As\u00ed "549\u2026", "54\u2026" y "+54\u2026" (con o sin el 9) siempre comparan igual
+     contra el tel\u00e9fono guardado en app_data. */
   if (d.startsWith("549") && d.length === 13) {
     d = "54" + d.slice(3);
   }
   return d;
 }
 
-/* DÃ­gitos exactos, sin la heurÃ­stica del 9: se usa para el `to` del envÃ­o a
-   Meta (debe ser el wa_id EXACTO que Meta reportÃ³ como remitente). */
+/* D\u00edgitos exactos, sin la heur\u00edstica del 9: se usa para el `to` del env\u00edo a
+   Meta (debe ser el wa_id EXACTO que Meta report\u00f3 como remitente). */
 export function rawDigits(p: unknown): string {
   return String(p == null ? "" : p).replace(/\D/g, "");
 }
 
 /* `to` para Meta en cuentas de PRUEBA de Argentina: descarta el "9" saliente
-   de mÃ³vil. "5493547469000" (13 dÃ­gitos) â†’ "543547469000" (12 dÃ­gitos).
+   de m\u00f3vil. "5493547469000" (13 d\u00edgitos) \u2192 "543547469000" (12 d\u00edgitos).
    En sandbox de Meta a veces el destinatario permitido se registra SIN el 9. */
 export function toMetaPhone(p: unknown): string {
   let d = rawDigits(p);
@@ -117,12 +117,12 @@ export function toMetaPhone(p: unknown): string {
   return d;
 }
 
-/* El telÃ©fono del perfil debe coincidir con el remitente (Ãºltimos 9 dÃ­gitos).
-   Sin telÃ©fono guardado en el perfil, el cÃ³digo por sÃ­ solo vincula. */
+/* El tel\u00e9fono del perfil debe coincidir con el remitente (\u00faltimos 9 d\u00edgitos).
+   Sin tel\u00e9fono guardado en el perfil, el c\u00f3digo por s\u00ed solo vincula. */
 export function phoneMatches(profilePhone: unknown, sender: unknown): boolean {
   const a = normalizePhone(profilePhone);
   const b = normalizePhone(sender);
-  if (!a || !b) return !a;   // sin telÃ©fono en perfil â†’ true; sin remitente â†’ false
+  if (!a || !b) return !a;   // sin tel\u00e9fono en perfil \u2192 true; sin remitente \u2192 false
   return b.endsWith(a.slice(-9)) || a.endsWith(b.slice(-9));
 }
 
@@ -150,70 +150,70 @@ export function findWork(works: Array<Record<string, unknown>>, mention: string)
   const partial = works.find(w => {
     const lbl = flat(workLabel(w));
     if (lbl.length >= 3 && (fm.includes(lbl) || lbl.includes(fm))) return true;
-    /* Coincidencia por palabras (misma lÃ³gica del chat web): "la obra de pablo"
+    /* Coincidencia por palabras (misma l\u00f3gica del chat web): "la obra de pablo"
        resuelve a "casa pablo" por el prefijo de una palabra del nombre */
     return fm.split(/\s+/).some(word => word.length >= 5 && lbl.split(/\s+/).some(p => p.startsWith(word)));
   });
   return partial || null;
 }
 
-/* Palabras comunes â†’ categorÃ­as canÃ³nicas del store */
+/* Palabras comunes \u2192 categor\u00edas can\u00f3nicas del store */
 export function normCategory(raw: string): string {
   const f = flat(String(raw || ""));
   if (!f) return "";
-  if (/cemento|material|arena|ladrillo|hierro|pintura|yeso|cal|cer[aÃ¡]mic/.test(f)) return "Materiales";
+  if (/cemento|material|arena|ladrillo|hierro|pintura|yeso|cal|cer[a\u00e1]mic/.test(f)) return "Materiales";
   if (/nafta|gasoil|combustible|gas|diesel/.test(f)) return "Combustible";
-  if (/flete|cami[oÃ³]n|transporte|acarreo/.test(f)) return "Fletes";
+  if (/flete|cami[o\u00f3]n|transporte|acarreo/.test(f)) return "Fletes";
   if (/comida|almuerzo|vianda|asado|bebida|cafe|desayuno|merienda|pan|empanada|picada/.test(f)) return "Comidas";
-  if (/mano de obra|jornal|pe[oÃ³]n|ayudante|oficial/.test(f)) return "Mano de obra";
-  if (/herramienta|equipo|m[aÃ¡]quina|alquiler/.test(f)) return "Herramientas / Equipamiento";
-  if (/seguro|art|p[oÃ³]liza/.test(f)) return "Seguros";
-  if (/servicio|luz|agua|internet|tel[eÃ©]fono|gas natural/.test(f)) return "Servicios";
+  if (/mano de obra|jornal|pe[o\u00f3]n|ayudante|oficial/.test(f)) return "Mano de obra";
+  if (/herramienta|equipo|m[a\u00e1]quina|alquiler/.test(f)) return "Herramientas / Equipamiento";
+  if (/seguro|art|p[o\u00f3]liza/.test(f)) return "Seguros";
+  if (/servicio|luz|agua|internet|tel[e\u00e9]fono|gas natural/.test(f)) return "Servicios";
   if (/subcontrat|contratista/.test(f)) return "Subcontratos";
-  if (/cigarrillo|tabaco|ocio|entretenimiento|cine|juego|recreaci[oÃ³]n|esparcimiento/.test(f)) return "Ocio";
+  if (/cigarrillo|tabaco|ocio|entretenimiento|cine|juego|recreaci[o\u00f3]n|esparcimiento/.test(f)) return "Ocio";
   return String(raw).trim();
 }
 
-/* IntenciÃ³n local simple (fallback sin LLM): registra gastos e ingresos con
-   frases naturales, por si el motor de IA no estÃ¡ disponible o falla la auth
-   servidorâ†’servidor. Ej.: "GastÃ© 15000 en bolsas de cemento" Â·
-   "IngresÃ© 80000 por la obra de Pablo". */
+/* Intenci\u00f3n local simple (fallback sin LLM): registra gastos e ingresos con
+   frases naturales, por si el motor de IA no est\u00e1 disponible o falla la auth
+   servidor\u2192servidor. Ej.: "Gast\u00e9 15000 en bolsas de cemento" \u00b7
+   "Ingres\u00e9 80000 por la obra de Pablo". */
 export function localIntent(text: string): { modulo: string; campos?: Record<string, unknown>; reply?: string } | null {
   const f = flat(String(text || "")).trim();
   if (!f) return null;
   const num = (s: string) => Number(s.replace(/\./g, "").replace(",", "."));
 
-  /* 0) Saludo â†’ intent de saludo (respuesta directa, sin acciÃ³n contable) */
-  if (/^(hola|holis|holi|buenas|buen\s*d[iÃ­]a|buenos\s*d[iÃ­]as|que\s*tal|c[oÃ³]mo\s+(est[aÃ¡]s|est[aÃ¡]n|va)|hey|alo)\b/.test(f)) {
+  /* 0) Saludo \u2192 intent de saludo (respuesta directa, sin acci\u00f3n contable) */
+  if (/^(hola|holis|holi|buenas|buen\s*d[i\u00ed]a|buenos\s*d[i\u00ed]as|que\s*tal|c[o\u00f3]mo\s+(est[a\u00e1]s|est[a\u00e1]n|va)|hey|alo)\b/.test(f)) {
     return {
       modulo: "saludo",
-      reply: "Â¡Hola! ðŸ‘‹ Soy GADU, tu asistente de obra. PodÃ©s cargarme gastos o ingresos por acÃ¡, por ejemplo:\nâ€¢ \"GastÃ© 15000 en cemento\"\nâ€¢ \"CobrÃ© 50000 por la obra\"\n\nÂ¿En quÃ© te ayudo?",
+      reply: "\u00a1Hola! Hola Soy GADU, tu asistente de obra. Pod\u00e9s cargarme gastos o ingresos por ac\u00e1, por ejemplo:\n\u2022 \"Gast\u00e9 15000 en cemento\"\n\u2022 \"Cobr\u00e9 50000 por la obra\"\n\n\u00bfEn qu\u00e9 te ayudo?",
     };
   }
 
-  /* 1) Gasto explÃ­cito: monto + "en/de" + descripciÃ³n ("GastÃ© 5000 criollos") */
-  let m = f.match(/gas(?:te|to|t[eÃ©]|t[oÃ³])\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:en|de)\s+(.+)/i);
+  /* 1) Gasto expl\u00edcito: monto + "en/de" + descripci\u00f3n ("Gast\u00e9 5000 criollos") */
+  let m = f.match(/gas(?:te|to|t[e\u00e9]|t[o\u00f3])\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:en|de)\s+(.+)/i);
   if (m && num(m[1]) > 0) {
     return { modulo: "gasto", campos: { monto: num(m[1]), categoria: String(m[2] || "").trim() } };
   }
-  /* 2) Gasto explÃ­cito: monto + descripciÃ³n sin preposiciÃ³n ("Gasto 1000 prueba") */
-  m = f.match(/gas(?:te|to|t[eÃ©]|t[oÃ³])\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+([a-zÃ¡Ã©Ã­Ã³ÃºÃ±].*)/i);
+  /* 2) Gasto expl\u00edcito: monto + descripci\u00f3n sin preposici\u00f3n ("Gasto 1000 prueba") */
+  m = f.match(/gas(?:te|to|t[e\u00e9]|t[o\u00f3])\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1].*)/i);
   if (m && num(m[1]) > 0) {
     return { modulo: "gasto", campos: { monto: num(m[1]), categoria: String(m[2] || "").trim() } };
   }
-  /* 3) Gasto explÃ­cito: descripciÃ³n + monto al final ("Gasto flete 15000") */
-  m = f.match(/gas(?:te|to|t[eÃ©]|t[oÃ³])\s+(.+?)\s+([\d][\d.,]*)\s*$/i);
+  /* 3) Gasto expl\u00edcito: descripci\u00f3n + monto al final ("Gasto flete 15000") */
+  m = f.match(/gas(?:te|to|t[e\u00e9]|t[o\u00f3])\s+(.+?)\s+([\d][\d.,]*)\s*$/i);
   if (m && num(m[2]) > 0) {
     return { modulo: "gasto", campos: { monto: num(m[2]), categoria: String(m[1] || "").trim() } };
   }
 
-  /* 4) Ingreso: "CobrÃ© 50000 por la obra" / "IngresÃ© 80000 por la obra" */
-  m = f.match(/(?:cobr[eÃ©]?|ingres[eÃ©]?|cobro|ingreso)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:por|de)\s+(.+)/i);
+  /* 4) Ingreso: "Cobr\u00e9 50000 por la obra" / "Ingres\u00e9 80000 por la obra" */
+  m = f.match(/(?:cobr[e\u00e9]?|ingres[e\u00e9]?|cobro|ingreso)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:por|de)\s+(.+)/i);
   if (m && num(m[1]) > 0) {
     return { modulo: "ingreso", campos: { monto: num(m[1]), concepto: String(m[2] || "").trim() } };
   }
-  /* 4b) Ingreso solo monto: "Ingreso de 30000" / "CobrÃ© 30000" */
-  m = f.match(/(?:cobr[eÃ©]?|ingres[eÃ©]?|cobro|ingreso)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s*$/i);
+  /* 4b) Ingreso solo monto: "Ingreso de 30000" / "Cobr\u00e9 30000" */
+  m = f.match(/(?:cobr[e\u00e9]?|ingres[e\u00e9]?|cobro|ingreso)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s*$/i);
   if (m && num(m[1]) > 0) {
     return { modulo: "ingreso", campos: { monto: num(m[1]), concepto: "Cobro" } };
   }
@@ -238,7 +238,7 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
     }
     return { nombre, rol: "" };
   };
-  m = f.match(/(?:agreg[aÃ¡]|agrega|alta|sumar|crear|contratar)\s+(?:un\s+)?(?:nuevo\s+)?empleado[\s.,;:]+(.+)/i);
+  m = f.match(/(?:agreg[a\u00e1]|agrega|alta|sumar|crear|contratar)\s+(?:un\s+)?(?:nuevo\s+)?empleado[\s.,;:]+(.+)/i);
   if (m && String(m[1] || "").trim()) {
     const sp = separarEmpleado(m[1]);
     return { modulo: "empleado", campos: { nombre: sp.nombre, rol: sp.rol } };
@@ -249,22 +249,22 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
     return { modulo: "empleado", campos: { nombre: sp.nombre, rol: sp.rol } };
   }
 
-  /* 6) Adelanto: "Carga adelanto de 25000 a Luis Ãlamo" */
+  /* 6) Adelanto: "Carga adelanto de 25000 a Luis \u00c1lamo" */
   m = f.match(/(?:adelanto|anticipo)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:a|para)\s+(.+)/i);
   if (m && num(m[1]) > 0) return { modulo: "adelanto", campos: { monto: num(m[1]), empleado: String(m[2] || "").trim() } };
 
-  /* 7) Obra: "Nueva obra PÃ©rez en Alta Gracia" */
+  /* 7) Obra: "Nueva obra P\u00e9rez en Alta Gracia" */
   m = f.match(/(?:nueva\s+obra|crear\s+obra|obra\s+nueva)\s+(.+?)(?:\s+en\s+(.+))?$/i);
   if (m && String(m[1] || "").trim()) return { modulo: "obra", campos: { nombre: String(m[1] || "").trim(), ubicacion: String(m[2] || "").trim() } };
 
-  /* 7b) Gasto SIN verbo: "45678 de nafta" / "5000 de cemento" (nÃºmero + "de" + concepto) */
+  /* 7b) Gasto SIN verbo: "45678 de nafta" / "5000 de cemento" (n\u00famero + "de" + concepto) */
   m = f.match(/^([\d][\d.,]*)\s+de\s+(.+)/i);
   if (m && num(m[1]) > 0) {
     return { modulo: "gasto", campos: { monto: num(m[1]), categoria: String(m[2] || "").trim() } };
   }
 
-  /* 8) Gasto implÃ­cito SIN la palabra "gasto": "Flete 15000" / "Nafta 8000" */
-  m = f.match(/^([a-zÃ¡Ã©Ã­Ã³ÃºÃ±][a-zÃ¡Ã©Ã­Ã³ÃºÃ±0-9\s]{1,40}?)\s+([\d][\d.,]*)\s*$/i);
+  /* 8) Gasto impl\u00edcito SIN la palabra "gasto": "Flete 15000" / "Nafta 8000" */
+  m = f.match(/^([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1][a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00f10-9\s]{1,40}?)\s+([\d][\d.,]*)\s*$/i);
   if (m && num(m[2]) > 0) {
     return { modulo: "gasto", campos: { monto: num(m[2]), categoria: String(m[1] || "").trim() } };
   }
@@ -272,14 +272,14 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
   return null;
 }
 
-/* Detecta la intenciÃ³n de "adelanto" y extrae nombre + monto (tolera "12000p").
-   "Adelanto de Hugo pereyra de 12000p" â†’ { nombre: "hugo pereyra", monto: 12000 }
-   "Adelanto" â†’ { nombre: "", monto: 0 } (para arrancar el wizard paso a paso) */
+/* Detecta la intenci\u00f3n de "adelanto" y extrae nombre + monto (tolera "12000p").
+   "Adelanto de Hugo pereyra de 12000p" \u2192 { nombre: "hugo pereyra", monto: 12000 }
+   "Adelanto" \u2192 { nombre: "", monto: 0 } (para arrancar el wizard paso a paso) */
 export function detectAdvanceIntent(text: string): { nombre: string; monto: number } | null {
   const f = flat(String(text || "")).trim();
   if (!/(?:adelanto|anticipo)/i.test(f)) return null;
 
-  // monto: nÃºmero, tolerando "p"/"pe"/"pesos" pegada al final ("12000p")
+  // monto: n\u00famero, tolerando "p"/"pe"/"pesos" pegada al final ("12000p")
   const mMonto = f.match(/([\d][\d.,]*)\s*(?:p|pe|pesos|peso)?(?=\s|$)/i);
   const monto = mMonto ? Number(mMonto[1].replace(/\./g, "").replace(",", ".")) : 0;
 
@@ -288,7 +288,7 @@ export function detectAdvanceIntent(text: string): { nombre: string; monto: numb
     .replace(/adelanto|anticipo/gi, " ")
     .replace(/\b(?:de|del|a|para|al|le)\b/gi, " ")
     .replace(/[\d][\d.,]*\s*(?:p|pe|pesos|peso)?/gi, " ")
-    .replace(/[^\wÃ¡Ã©Ã­Ã³ÃºÃ±ÃÃ‰ÃÃ“ÃšÃ‘\s]/g, " ")
+    .replace(/[^\w\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1\u00c1\u00c9\u00cd\u00d3\u00da\u00d1\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -296,10 +296,10 @@ export function detectAdvanceIntent(text: string): { nombre: string; monto: numb
 }
 
 /* Parsea la respuesta del wizard de adelanto sin la palabra "adelanto":
-   "Hugo de 12000" â†’ { nombre: "Hugo", monto: 12000 } */
+   "Hugo de 12000" \u2192 { nombre: "Hugo", monto: 12000 } */
 export function parseAdvanceNameAmount(text: string): { nombre: string; monto: number } | null {
   const f = String(text || "").trim();
-  const m = f.match(/^([a-zÃ¡Ã©Ã­Ã³ÃºÃ±][a-zÃ¡Ã©Ã­Ã³ÃºÃ±\s.'-]{2,40}?)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s*(?:p|pe|pesos|peso)?\s*$/i);
+  const m = f.match(/^([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1][a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1\s.'-]{2,40}?)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s*(?:p|pe|pesos|peso)?\s*$/i);
   if (!m) return null;
   const monto = Number(m[2].replace(/\./g, "").replace(",", "."));
   if (!(monto > 0)) return null;
@@ -310,12 +310,12 @@ export interface ExecResult {
   ok: boolean;
   label?: string;
   missing?: string;      // dato faltante para pedirlo por chat
-  unsupported?: string;  // mÃ³dulo que el conector no ejecuta (lo responde la IA)
-  pendingWork?: boolean; // se guardÃ³ sin obra: el webhook debe preguntar "Â¿a quÃ© obra?"
+  unsupported?: string;  // m\u00f3dulo que el conector no ejecuta (lo responde la IA)
+  pendingWork?: boolean; // se guard\u00f3 sin obra: el webhook debe preguntar "\u00bfa qu\u00e9 obra?"
   notFound?: string;     // mensaje cuando la entidad nombrada no existe (ej. empleado)
 }
 
-/* Contexto compacto de la cuenta (mismo espÃ­ritu que context() del chat web) */
+/* Contexto compacto de la cuenta (mismo esp\u00edritu que context() del chat web) */
 export function buildContext(data: Record<string, unknown>): string {
   const d = (data || {}) as Record<string, Array<Record<string, unknown>>>;
   let s = "";
@@ -330,7 +330,7 @@ export function buildContext(data: Record<string, unknown>): string {
   return s.trim();
 }
 
-/* DesambiguaciÃ³n de "adelanto de [Nombre]": Â¿cliente (cobro anticipado) o empleado (adelanto)?
+/* Desambiguaci\u00f3n de "adelanto de [Nombre]": \u00bfcliente (cobro anticipado) o empleado (adelanto)?
    Devuelve { kind: "cliente" | "empleado" | "desconocido", id, nombre }. */
 export function resolveAdvanceTarget(data: Record<string, unknown>, nombre: string): { kind: string; id?: string; nombre: string } {
   const d = (data || {}) as Record<string, Array<Record<string, unknown>>>;
@@ -343,29 +343,29 @@ export function resolveAdvanceTarget(data: Record<string, unknown>, nombre: stri
 }
 
 /* Normaliza el texto del empleado: quita relleno ("agrega", "nuevo", "se llama"),
-   separa el oficio/rol (parÃ©ntesis o al final) y deja el nombre en Title Case.
-   "agrega un empleado nuevo. se llama juan rodriguez albaÃ±il" â†’ { firstName:"Juan", lastName:"Rodriguez", role:"AlbaÃ±il" } */
+   separa el oficio/rol (par\u00e9ntesis o al final) y deja el nombre en Title Case.
+   "agrega un empleado nuevo. se llama juan rodriguez alba\u00f1il" \u2192 { firstName:"Juan", lastName:"Rodriguez", role:"Alba\u00f1il" } */
 export function formatProperName(raw: string): { firstName: string; lastName: string; role: string } {
-  const title = (str: string) => str.toLowerCase().replace(/(^|\s)([a-zÃ¡Ã©Ã­Ã³ÃºÃ±])/g, (_m: string, p1: string, p2: string) => p1 + p2.toUpperCase());
+  const title = (str: string) => str.toLowerCase().replace(/(^|\s)([a-z\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1])/g, (_m: string, p1: string, p2: string) => p1 + p2.toUpperCase());
 
   let s = String(raw || "").toLowerCase()
-    .replace(/[.,;:!?Â¿Â¡()]/g, ' ')
+    .replace(/[.,;:!?\u00bf\u00a1()]/g, ' ')
     .replace(/\s+/g, ' ').trim();
 
-  // 1) Quitar relleno tÃ­pico del dictado por WhatsApp
-  s = s.replace(/\b(?:agrega|agregÃ¡|agregar|alta|crear|crea|nuevo|nueva|un|una|empleado|trabajador|se\s+llama|llamado|llamada|me\s+llamo|quiero\s+(?:agregar|cargar)|cargar)\b/g, ' ')
+  // 1) Quitar relleno t\u00edpico del dictado por WhatsApp
+  s = s.replace(/\b(?:agrega|agreg\u00e1|agregar|alta|crear|crea|nuevo|nueva|un|una|empleado|trabajador|se\s+llama|llamado|llamada|me\s+llamo|quiero\s+(?:agregar|cargar)|cargar)\b/g, ' ')
     .replace(/\s+/g, ' ').trim();
 
-  // 2) Rol entre parÃ©ntesis al final (ej. "juan perez (albaÃ±il)")
+  // 2) Rol entre par\u00e9ntesis al final (ej. "juan perez (alba\u00f1il)")
   let role = '';
   const m = s.match(/\(([^)]+)\)\s*$/);
   if (m) { role = m[1].trim(); s = s.slice(0, m.index).trim(); }
 
-  // 3) Rol al final sin parÃ©ntesis (oficios conocidos)
+  // 3) Rol al final sin par\u00e9ntesis (oficios conocidos)
   if (!role) {
     const ROLES = [
-      'maestro mayor de obra', 'peon de albaÃ±il', 'peon de albanil', 'oficial albaÃ±il', 'oficial albanil',
-      'oficial electricista', 'oficial plomero', 'albaÃ±il', 'albanil', 'electricista', 'plomero',
+      'maestro mayor de obra', 'peon de alba\u00f1il', 'peon de albanil', 'oficial alba\u00f1il', 'oficial albanil',
+      'oficial electricista', 'oficial plomero', 'alba\u00f1il', 'albanil', 'electricista', 'plomero',
       'pintor', 'carpintero', 'ayudante', 'oficial', 'herrero', 'gasista', 'yesero', 'tornero',
     ];
     for (const r of ROLES) {
@@ -383,9 +383,9 @@ export function formatProperName(raw: string): { firstName: string; lastName: st
   return { firstName, lastName, role };
 }
 
-/* Ejecuta la acciÃ³n del motor sobre los datos del usuario (misma lÃ³gica
+/* Ejecuta la acci\u00f3n del motor sobre los datos del usuario (misma l\u00f3gica
    que el wizard del chat web: solo guarda con los campos obligatorios).
-   No toca nada si falta un dato: devuelve quÃ© falta para preguntarlo. */
+   No toca nada si falta un dato: devuelve qu\u00e9 falta para preguntarlo. */
 export function executeAction(
   data: Record<string, unknown>,
   action: { modulo: string; campos?: Record<string, unknown> },
@@ -414,11 +414,11 @@ export function executeAction(
     if (!(monto > 0)) return { ok: false, missing: "el monto" };
     const concepto = String(c.categoria || sourceText || "").trim().slice(0, 60) || "gasto";
     const cat = normCategory(String(c.categoria || sourceText));
-    if (!cat) return { ok: false, missing: "la categorÃ­a" };
+    if (!cat) return { ok: false, missing: "la categor\u00eda" };
     const montoFmt = monto.toLocaleString("es-AR");
     const ob = resolveObra();
     if (ob.missing) {
-      /* Quick Capture: sin obra â†’ se guarda "sin asignar" (workId null). */
+      /* Quick Capture: sin obra \u2192 se guarda "sin asignar" (workId null). */
       (d.expenses || (d.expenses = [])).unshift({
         id: idGen(), type: "general", workId: null, date: todayISO, amount: monto,
         category: cat, providerId: null, employeeId: null, expenseKind: null,
@@ -436,10 +436,10 @@ export function executeAction(
   }
   if (action.modulo === "ingreso") {
     if (!(monto > 0)) return { ok: false, missing: "el monto" };
-    const concepto = ["Adelanto", "CertificaciÃ³n", "Cobro"].find(x => flat(String(c.concepto || "")).includes(flat(x))) || "Cobro";
+    const concepto = ["Adelanto", "Certificaci\u00f3n", "Cobro"].find(x => flat(String(c.concepto || "")).includes(flat(x))) || "Cobro";
     const ob = resolveObra();
     const esAdelanto = concepto === "Adelanto";
-    /* Solo los "adelantos" de cliente pueden quedar sin obra (se pregunta despuÃ©s) */
+    /* Solo los "adelantos" de cliente pueden quedar sin obra (se pregunta despu\u00e9s) */
     if (ob.missing && !esAdelanto) return { ok: false, missing: ob.missing };
     /* Cliente (si se nombra): buscar en el directorio para guardar su clientId */
     let clientId: string | null = null;
@@ -456,7 +456,7 @@ export function executeAction(
     } as unknown as Record<string, unknown>);
     const label = concepto === "Adelanto" && clientName
       ? "Ingreso de $" + monto + " (Adelanto) del cliente " + clientName + " guardado"
-      : "Ingreso de $" + monto + " (" + concepto + ") en " + ob.label + " âœ“";
+      : "Ingreso de $" + monto + " (" + concepto + ") en " + ob.label + " \u2713";
     return { ok: true, label, pendingWork: !!(esAdelanto && ob.missing) };
   }
   if (action.modulo === "empleado") {
@@ -468,7 +468,7 @@ export function executeAction(
       id: idGen(), firstName, lastName, phone: "", role: rol || "empleado", active: true, source: "whatsapp",
     } as unknown as Record<string, unknown>);
     const nombre = (firstName + " " + lastName).trim();
-    return { ok: true, label: "Empleado '" + nombre + "'" + (rol ? " (" + rol + ")" : "") + " agregado correctamente âœ“" };
+    return { ok: true, label: "Empleado '" + nombre + "'" + (rol ? " (" + rol + ")" : "") + " agregado correctamente \u2713" };
   }
 
   if (action.modulo === "adelanto") {
@@ -481,7 +481,7 @@ export function executeAction(
       flat(String((e.firstName || "") + " " + (e.lastName || "")).trim()).includes(flat(empleadoRaw))
     );
     if (!emp) {
-      return { ok: false, notFound: "No encontrÃ© a ese empleado en tu lista. Â¿QuerÃ©s crearlo primero?" };
+      return { ok: false, notFound: "No encontr\u00e9 a ese empleado en tu lista. \u00bfQuer\u00e9s crearlo primero?" };
     }
     const nombreEmp = String((emp.firstName || "") + " " + (emp.lastName || "")).trim();
     (d.expenses || (d.expenses = [])).unshift({
@@ -489,7 +489,7 @@ export function executeAction(
       category: "Adelanto", providerId: null, employeeId: String(emp.id || ""), expenseKind: "adelanto",
       description: "Adelanto a " + nombreEmp, invoiceNumber: "", paymentMethod: "Efectivo", source: "whatsapp",
     } as unknown as Record<string, unknown>);
-    return { ok: true, label: "Adelanto de $" + montoAd + " a " + nombreEmp + " registrado âœ“" };
+    return { ok: true, label: "Adelanto de $" + montoAd + " a " + nombreEmp + " registrado \u2713" };
   }
 
   if (action.modulo === "obra") {
@@ -498,23 +498,23 @@ export function executeAction(
     (d.works || (d.works = [])).unshift({
       id: idGen(), nombre: nombreObra, ubicacion: String(c.ubicacion || ""), status: "activa", source: "whatsapp",
     } as unknown as Record<string, unknown>);
-    return { ok: true, label: "Obra '" + nombreObra + "' creada âœ“" };
+    return { ok: true, label: "Obra '" + nombreObra + "' creada \u2713" };
   }
 
-  /* MÃ³dulos con wizard complejo: los responde la IA guiando a la app web */
+  /* M\u00f3dulos con wizard complejo: los responde la IA guiando a la app web */
   return { ok: false, unsupported: action.modulo };
 }
 
 
 // ============================================================
-// GADU Â· Transcribir notas de voz de WhatsApp con Gemini
-// Flujo: media_id â†’ URL (Graph API) â†’ descarga â†’ base64 â†’ Gemini â†’ texto
-// El texto resultante se inyecta en la lÃ³gica normal de texto.
+// GADU \u00b7 Transcribir notas de voz de WhatsApp con Gemini
+// Flujo: media_id \u2192 URL (Graph API) \u2192 descarga \u2192 base64 \u2192 Gemini \u2192 texto
+// El texto resultante se inyecta en la l\u00f3gica normal de texto.
 // ============================================================
 
 const API_VERSION = "v21.0";
 
-/* Convierte ArrayBuffer â†’ base64 sin reventar el stack (en chunks) */
+/* Convierte ArrayBuffer \u2192 base64 sin reventar el stack (en chunks) */
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = "";
@@ -529,8 +529,8 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
    Gemini solo acepta el tipo simple (ej. "audio/ogg"). */
 function normalizeMime(raw: string): string {
   const m = String(raw || "").split(";")[0].trim().toLowerCase();
-  if (m === "audio/opus") return "audio/ogg";       // Opus sin contenedor â†’ ogg
-  if (!m.startsWith("audio/")) return "audio/ogg";   // desconocido â†’ ogg por defecto
+  if (m === "audio/opus") return "audio/ogg";       // Opus sin contenedor \u2192 ogg
+  if (!m.startsWith("audio/")) return "audio/ogg";   // desconocido \u2192 ogg por defecto
   return m;
 }
 
@@ -547,13 +547,13 @@ async function getMediaUrl(mediaId: string): Promise<string> {
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      console.error("[GADU-WA-AUDIO] getMediaUrl fallÃ³:", res.status, body);
+      console.error("[GADU-WA-AUDIO] getMediaUrl fall\u00f3:", res.status, body);
       throw new Error("getMediaUrl HTTP " + res.status);
     }
     const j = await res.json();
     const url = String((j as { url?: string }).url || "");
     if (!url) throw new Error("getMediaUrl sin url");
-    console.log("[GADU-WA-AUDIO] âœ… URL del media obtenida:", url.slice(0, 80) + "â€¦");
+    console.log("[GADU-WA-AUDIO] OK URL del media obtenida:", url.slice(0, 80) + "\u2026");
     return url;
   } catch (e) {
     console.error("[GADU-WA-CRITICAL-FIX] getMediaUrl timeout/error:", e);
@@ -574,7 +574,7 @@ async function downloadMedia(url: string): Promise<{ buffer: ArrayBuffer; mimeTy
     /* Si la URL no viene firmada (401/403), reintentar con el token de WhatsApp */
     if (res.status === 401 || res.status === 403) {
       const token = Deno.env.get("WHATSAPP_TOKEN") || "";
-      console.warn("[GADU-WA-MEDIA] descarga 401/403 â†’ reintentando con Authorization");
+      console.warn("[GADU-WA-MEDIA] descarga 401/403 \u2192 reintentando con Authorization");
       res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: controller.signal });
     }
     if (!res.ok) {
@@ -584,7 +584,7 @@ async function downloadMedia(url: string): Promise<{ buffer: ArrayBuffer; mimeTy
     const buffer = await res.arrayBuffer();
     const rawMime = res.headers.get("content-type") || "application/octet-stream";
     const mimeType = String(rawMime).split(";")[0].trim().toLowerCase();
-    console.log("[GADU-WA-MEDIA] âœ… media descargado:", buffer.byteLength, "bytes Â· mime:", mimeType, "(raw:", rawMime + ")");
+    console.log("[GADU-WA-MEDIA] OK media descargado:", buffer.byteLength, "bytes \u00b7 mime:", mimeType, "(raw:", rawMime + ")");
     return { buffer, mimeType };
   } catch (e) {
     console.error("[GADU-WA-CRITICAL-FIX] downloadMedia timeout/error:", e);
@@ -603,7 +603,7 @@ async function geminiTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<
   }
   const model = Deno.env.get("GEMINI_MODEL") || "gemini-1.5-flash";
   const base64 = arrayBufferToBase64(buffer);
-  console.log("[GADU-WA-AUDIO] gemini transcribir:", buffer.byteLength, "bytes Â· mime:", mimeType, "Â· model:", model);
+  console.log("[GADU-WA-AUDIO] gemini transcribir:", buffer.byteLength, "bytes \u00b7 mime:", mimeType, "\u00b7 model:", model);
   /* Timeout de 8s: si Gemini tarda, abortamos y liberamos la cola. */
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
@@ -616,7 +616,7 @@ async function geminiTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<
         body: JSON.stringify({
           contents: [{
             parts: [
-              { text: "TranscribÃ­ el audio de WhatsApp. RespondÃ© SOLO con el texto transcrito, sin comentarios." },
+              { text: "Transcrib\u00ed el audio de WhatsApp. Respond\u00e9 SOLO con el texto transcrito, sin comentarios." },
               { inline_data: { mime_type: mimeType, data: base64 } },
             ],
           }],
@@ -626,13 +626,13 @@ async function geminiTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<
     );
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      console.error("[GADU-WA-AUDIO] geminiTranscribe fallÃ³ Â· HTTP", res.status, "Â· body:", body.slice(0, 400));
+      console.error("[GADU-WA-AUDIO] geminiTranscribe fall\u00f3 \u00b7 HTTP", res.status, "\u00b7 body:", body.slice(0, 400));
       return "";
     }
     const j = await res.json();
     const text = j?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    if (text) console.log("[GADU-WA-AUDIO] âœ… transcripciÃ³n Gemini:", text.slice(0, 80));
-    else console.warn("[GADU-WA-AUDIO] Gemini respondiÃ³ 200 pero sin texto:", JSON.stringify(j).slice(0, 200));
+    if (text) console.log("[GADU-WA-AUDIO] OK transcripci\u00f3n Gemini:", text.slice(0, 80));
+    else console.warn("[GADU-WA-AUDIO] Gemini respondi\u00f3 200 pero sin texto:", JSON.stringify(j).slice(0, 200));
     return String(text).trim();
   } catch (e) {
     console.error("[GADU-WA-AUDIO] geminiTranscribe timeout/error:", e);
@@ -650,12 +650,12 @@ async function groqTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<st
     return "";
   }
   const norm = normalizeMime(mimeType);
-  console.log("[GADU-WA-GROQ] transcribir audio:", buffer.byteLength, "bytes Â· mime:", norm, "Â· model: whisper-large-v3-turbo");
+  console.log("[GADU-WA-GROQ] transcribir audio:", buffer.byteLength, "bytes \u00b7 mime:", norm, "\u00b7 model: whisper-large-v3-turbo");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
     const form = new FormData();
-    /* ExtensiÃ³n derivada del MIME real (mp4/m4a/wav/ogg) para que Groq
+    /* Extensi\u00f3n derivada del MIME real (mp4/m4a/wav/ogg) para que Groq
        infiera el formato correcto. WhatsApp manda opus en ogg o AAC en mp4. */
     const ext = norm.includes("mp4") ? "mp4" : (norm.includes("m4a") ? "m4a" : (norm.includes("wav") ? "wav" : "ogg"));
     form.append("file", new Blob([buffer], { type: norm }), "audio." + ext);
@@ -668,12 +668,12 @@ async function groqTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<st
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      console.warn("[GADU-WA-GROQ] transcripciÃ³n fallÃ³ Â· HTTP", res.status, "Â· body:", body.slice(0, 400));
+      console.warn("[GADU-WA-GROQ] transcripci\u00f3n fall\u00f3 \u00b7 HTTP", res.status, "\u00b7 body:", body.slice(0, 400));
       return "";
     }
     const j = await res.json();
     const text = String((j as { text?: string }).text || "").trim();
-    if (text) console.log("[GADU-WA-GROQ] âœ… transcripciÃ³n:", text.slice(0, 80));
+    if (text) console.log("[GADU-WA-GROQ] OK transcripci\u00f3n:", text.slice(0, 80));
     else console.warn("[GADU-WA-GROQ] 200 pero sin text:", JSON.stringify(j).slice(0, 200));
     return text;
   } catch (e) {
@@ -706,8 +706,8 @@ function normalizeImageMime(raw: string): string {
   return "image/jpeg";
 }
 
-/* Sube el media (imagen de ticket) a Supabase Storage y devuelve la URL pÃºblica.
-   Bucket: gadu_tickets Â· ruta: gadu_tickets/<userId>/whatsapp/<ts>.<ext> */
+/* Sube el media (imagen de ticket) a Supabase Storage y devuelve la URL p\u00fablica.
+   Bucket: gadu_tickets \u00b7 ruta: gadu_tickets/<userId>/whatsapp/<ts>.<ext> */
 async function uploadMediaToStorage(buffer: ArrayBuffer, mimeType: string, userId: string): Promise<string> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -730,7 +730,7 @@ async function uploadMediaToStorage(buffer: ArrayBuffer, mimeType: string, userI
       body: new Uint8Array(buffer),
     });
     if (!res.ok) {
-      console.error("[GADU-WA-IMAGE] subida a Storage fallÃ³:", res.status, await res.text().catch(() => ""));
+      console.error("[GADU-WA-IMAGE] subida a Storage fall\u00f3:", res.status, await res.text().catch(() => ""));
       return "";
     }
     return supabaseUrl + "/storage/v1/object/public/" + path;
@@ -749,14 +749,14 @@ async function geminiAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption
   }
   const model = Deno.env.get("GEMINI_MODEL") || "gemini-1.5-flash";
   const base64 = arrayBufferToBase64(buffer);
-  const prompt = "Analiza esta imagen y el texto que la acompaÃ±a: '" + (caption || "") + "'. " +
-    "Si es un ticket o comprobante, extrae el monto total, el proveedor y el concepto. " +
-    "Si es un producto, identifica quÃ© es y el monto mencionado en el texto. " +
-    "DevolvÃ© un string estructurado para registrar un gasto: 'Gasto de [Monto] en [Concepto]'. " +
-    "Si no es ni ticket ni producto, describÃ­ brevemente lo que ves.";
+  const prompt = "Eres un experto leyendo tickets. Lee la imagen con atenci\u00f3n, incluso si est\u00e1 rotada o tiene letra peque\u00f1a. " +
+    "Busca la palabra 'TOTAL' (o 'TOTAL A PAGAR', 'IMPORTE') para extraer el monto. " +
+    "Devuelve SOLO un JSON v\u00e1lido (sin markdown, sin comentarios) con esta estructura exacta: " +
+    '{"monto": <numero>, "concepto": "<descripcion>", "categoria": "<rubro>"}. ' +
+    'Si no puedes leer el monto, devuelve {"monto": 0}. Texto que acompa\u00f1a la imagen: "' + (caption || "") + '".';
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
-  console.log("[GADU-WA-IMAGE] gemini analizar imagen:", buffer.byteLength, "bytes Â· mime:", mimeType);
+  console.log("[GADU-WA-IMAGE] gemini analizar imagen:", buffer.byteLength, "bytes \u00b7 mime:", mimeType);
   try {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
@@ -776,13 +776,13 @@ async function geminiAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption
     );
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      console.error("[GADU-WA-IMAGE] geminiAnalyzeImage fallÃ³ Â· HTTP", res.status, "Â· body:", body.slice(0, 400));
+      console.error("[GADU-WA-IMAGE] geminiAnalyzeImage fall\u00f3 \u00b7 HTTP", res.status, "\u00b7 body:", body.slice(0, 400));
       return "";
     }
     const j = await res.json();
     const text = j?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    if (text) console.log("[GADU-WA-IMAGE] âœ… anÃ¡lisis Gemini:", text.slice(0, 80));
-    else console.warn("[GADU-WA-IMAGE] Gemini respondiÃ³ 200 pero sin texto:", JSON.stringify(j).slice(0, 200));
+    if (text) console.log("[GADU-WA-IMAGE] OK an\u00e1lisis Gemini:", text.slice(0, 80));
+    else console.warn("[GADU-WA-IMAGE] Gemini respondi\u00f3 200 pero sin texto:", JSON.stringify(j).slice(0, 200));
     return String(text).trim();
   } catch (e) {
     console.error("[GADU-WA-IMAGE] geminiAnalyzeImage timeout/error:", e);
@@ -793,7 +793,7 @@ async function geminiAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption
 }
 
 /* Analiza una imagen con Groq Vision. Devuelve "" si falla.
-   Modelo vigente de visiÃ³n Groq: meta-llama/llama-4-scout-17b-16e-instruct
+   Modelo vigente de visi\u00f3n Groq: meta-llama/llama-4-scout-17b-16e-instruct
    (llama-3.2-11b-vision-preview y qwen/qwen3.8-27b quedaron deprecados). */
 async function groqAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption: string): Promise<string> {
   const apiKey = Deno.env.get("GROQ_API_KEY") || "";
@@ -802,10 +802,10 @@ async function groqAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption: 
     return "";
   }
   const norm = normalizeImageMime(mimeType);
-  console.log("[GADU-WA-GROQ] analizar imagen:", buffer.byteLength, "bytes Â· mime:", norm, "Â· model: meta-llama/llama-4-scout-17b-16e-instruct");
-  /* Groq: las imÃ¡genes mayores a ~20MB se rechazan con 400 â†’ cortamos antes */
+  console.log("[GADU-WA-GROQ] analizar imagen:", buffer.byteLength, "bytes \u00b7 mime:", norm, "\u00b7 model: meta-llama/llama-4-scout-17b-16e-instruct");
+  /* Groq: las im\u00e1genes mayores a ~20MB se rechazan con 400 \u2192 cortamos antes */
   if (buffer.byteLength > 20 * 1024 * 1024) {
-    console.warn("[GADU-WA-GROQ] imagen excede 20MB:", buffer.byteLength, "bytes â†’ no se envÃ­a a Groq");
+    console.warn("[GADU-WA-GROQ] imagen excede 20MB:", buffer.byteLength, "bytes \u2192 no se env\u00eda a Groq");
     return "";
   }
   const controller = new AbortController();
@@ -813,10 +813,11 @@ async function groqAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption: 
   try {
     const base64 = arrayBufferToBase64(buffer);
     const dataUrl = "data:" + norm + ";base64," + base64;
-    const prompt = "Analiza esta imagen y el texto que la acompaÃ±a: '" + (caption || "") + "'. " +
-      "Si es un ticket o comprobante, extrae el monto total, el proveedor y el concepto. " +
-      "Si es un producto, identifica quÃ© es y el monto mencionado en el texto. " +
-      "DevolvÃ© un string estructurado para registrar un gasto: 'Gasto de [Monto] en [Concepto]'.";
+    const prompt = "Eres un experto leyendo tickets. Lee la imagen con atenci\u00f3n, incluso si est\u00e1 rotada o tiene letra peque\u00f1a. " +
+      "Busca la palabra 'TOTAL' (o 'TOTAL A PAGAR', 'IMPORTE') para extraer el monto. " +
+      "Devuelve SOLO un JSON v\u00e1lido (sin markdown, sin comentarios) con esta estructura exacta: " +
+      '{"monto": <numero>, "concepto": "<descripcion>", "categoria": "<rubro>"}. ' +
+      'Si no puedes leer el monto, devuelve {"monto": 0}. Texto que acompa\u00f1a la imagen: "' + (caption || "") + '".';
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: { "Authorization": "Bearer " + apiKey, "Content-Type": "application/json" },
@@ -836,12 +837,12 @@ async function groqAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption: 
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      console.warn("[GADU-WA-GROQ] visiÃ³n fallÃ³ Â· HTTP", res.status, "Â· body:", body.slice(0, 400));
+      console.warn("[GADU-WA-GROQ] visi\u00f3n fall\u00f3 \u00b7 HTTP", res.status, "\u00b7 body:", body.slice(0, 400));
       return "";
     }
     const j = await res.json();
     const text = String(j?.choices?.[0]?.message?.content || "").trim();
-    if (text) console.log("[GADU-WA-GROQ] âœ… visiÃ³n:", text.slice(0, 80));
+    if (text) console.log("[GADU-WA-GROQ] OK visi\u00f3n:", text.slice(0, 80));
     else console.warn("[GADU-WA-GROQ] 200 pero sin contenido:", JSON.stringify(j).slice(0, 200));
     return text;
   } catch (e) {
@@ -864,13 +865,14 @@ export interface ResolvedIncoming {
   text: string;
   audioFailed?: boolean;
   imageFailed?: boolean;
+  imageNoMonto?: boolean;
   mediaUrl?: string;
 }
 
-/* Resuelve el texto del mensaje entrante: texto plano O transcripciÃ³n de audio.
-   - null â†’ no es un mensaje vÃ¡lido (o no hay texto/media)
-   - { from, text } â†’ texto resuelto (texto plano o audio transcrito)
-   - { from, text: "", audioFailed: true } â†’ era audio pero fallÃ³ la transcripciÃ³n */
+/* Resuelve el texto del mensaje entrante: texto plano O transcripci\u00f3n de audio.
+   - null \u2192 no es un mensaje v\u00e1lido (o no hay texto/media)
+   - { from, text } \u2192 texto resuelto (texto plano o audio transcrito)
+   - { from, text: "", audioFailed: true } \u2192 era audio pero fall\u00f3 la transcripci\u00f3n */
 export async function resolveIncomingText(payload: unknown): Promise<ResolvedIncoming | null> {
   try {
     const p = (payload || {}) as Record<string, any>;
@@ -893,7 +895,7 @@ export async function resolveIncomingText(payload: unknown): Promise<ResolvedInc
       return text ? { from, text } : null;
     }
 
-    // Audio / voz â†’ transcribir
+    // Audio / voz \u2192 transcribir
     if (msg.type === "audio" || msg.type === "voice") {
       const mediaId = String(msg.audio?.id || msg.voice?.id || "");
       if (!mediaId) return null;
@@ -902,27 +904,27 @@ export async function resolveIncomingText(payload: unknown): Promise<ResolvedInc
       try {
         text = await transcribeMedia(mediaId);
       } catch (e) {
-        console.error("[GADU-WA-CRITICAL-FIX] transcribeMedia fallÃ³:", e);
+        console.error("[GADU-WA-CRITICAL-FIX] transcribeMedia fall\u00f3:", e);
         return { from, text: "", audioFailed: true };
       }
       if (!text) {
-        console.warn("[GADU-WA-AUDIO] transcripciÃ³n vacÃ­a para media", mediaId);
+        console.warn("[GADU-WA-AUDIO] transcripci\u00f3n vac\u00eda para media", mediaId);
         return { from, text: "", audioFailed: true };
       }
-      console.log("[GADU-WA-AUDIO] transcripciÃ³n:", text);
+      console.log("[GADU-WA-AUDIO] transcripci\u00f3n:", text);
       return { from, text };
     }
 
-    // Imagen (ticket) â†’ analizar con Gemini Vision + caption
+    // Imagen (ticket) \u2192 analizar con Gemini Vision + caption
     if (msg.type === "image") {
       const mediaId = String(msg.image?.id || "");
       const caption = String(msg.image?.caption || "");
       if (!mediaId) return null;
-      console.log("[GADU-WA-IMAGE] imagen detectada, media_id:", mediaId, "Â· caption:", caption);
+      console.log("[GADU-WA-IMAGE] imagen detectada, media_id:", mediaId, "\u00b7 caption:", caption);
       let text = "";
       let mediaUrl = "";
       try {
-        /* Descargamos una sola vez: con el buffer hacemos el anÃ¡lisis Gemini
+        /* Descargamos una sola vez: con el buffer hacemos el an\u00e1lisis Gemini
            Y subimos el comprobante a Storage. */
         const url = await getMediaUrl(mediaId);
         const { buffer, mimeType } = await downloadMedia(url);
@@ -933,15 +935,30 @@ export async function resolveIncomingText(payload: unknown): Promise<ResolvedInc
           console.warn("[GADU-WA-IMAGE] no se pudo subir el comprobante:", e);
         }
       } catch (e) {
-        console.error("[GADU-WA-CRITICAL-FIX] analyzeImage fallÃ³:", e);
+        console.error("[GADU-WA-CRITICAL-FIX] analyzeImage fall\u00f3:", e);
         return { from, text: "", imageFailed: true };
       }
       if (!text) {
-        console.warn("[GADU-WA-IMAGE] anÃ¡lisis vacÃ­o para media", mediaId);
+        console.warn("[GADU-WA-IMAGE] an\u00e1lisis vac\u00edo para media", mediaId);
         return { from, text: "", imageFailed: true, mediaUrl };
       }
-      console.log("[GADU-WA-IMAGE] anÃ¡lisis:", text, "Â· mediaUrl:", mediaUrl ? mediaUrl.slice(0, 80) : "(sin subir)");
-      return { from, text, mediaUrl };
+      console.log("[GADU-WA-IMAGE] an\u00e1lisis:", text, "\u00b7 mediaUrl:", mediaUrl ? mediaUrl.slice(0, 80) : "(sin subir)");
+      /* El modelo devuelve JSON {monto, concepto, categoria}. Parsearlo:
+         - monto > 0 \u2192 construir texto de gasto natural (lo categoriza el flujo normal)
+         - monto === 0 \u2192 el ticket se ley\u00f3 pero no se pudo extraer el monto */
+      try {
+        const parsed = JSON.parse(String(text).replace(/```json|```/g, "").trim());
+        const monto = Number(parsed && parsed.monto);
+        if (monto > 0) {
+          const concepto = String((parsed && parsed.concepto) || caption || "gasto").slice(0, 60);
+          return { from, text: "Gasto de " + monto + " en " + concepto, mediaUrl };
+        }
+        console.warn("[GADU-WA-IMAGE] monto 0 \u2192 no se pudo leer el monto del ticket");
+        return { from, text: "", imageNoMonto: true, mediaUrl };
+      } catch (e) {
+        /* No devolvi\u00f3 JSON: usar el texto crudo como fallback (flujo normal) */
+        return { from, text, mediaUrl };
+      }
     }
 
     return null;
@@ -953,9 +970,9 @@ export async function resolveIncomingText(payload: unknown): Promise<ResolvedInc
 
 
 // ============================================================
-// GADU Â· Cola FIFO de mensajes WhatsApp (anti rÃ¡fagas)
+// GADU \u00b7 Cola FIFO de mensajes WhatsApp (anti r\u00e1fagas)
 // Cada webhook entrante se guarda inmediatamente y se procesa
-// en orden (FIFO) por telÃ©fono, evitando perder mensajes cuando
+// en orden (FIFO) por tel\u00e9fono, evitando perder mensajes cuando
 // el usuario escribe varios seguidos en pocos segundos.
 // ============================================================
 
@@ -981,7 +998,7 @@ export async function enqueueMessage(
 }
 
 /* Reclama el siguiente mensaje pendiente (FIFO). Marca 'processing' en la
-   misma operaciÃ³n para minimizar que dos drains concurrentes lo dupliquen. */
+   misma operaci\u00f3n para minimizar que dos drains concurrentes lo dupliquen. */
 export async function claimNext(
   rest: (path: string, opts?: Record<string, unknown>) => Promise<Response>,
   phone: string,
@@ -1002,8 +1019,8 @@ export async function claimNext(
   return up.ok ? item : null;
 }
 
-/* Libera mensajes 'processing' que quedaron huÃ©rfanos (crash) hace mÃ¡s de 3 min.
-   Los devuelve a 'pending' para que se reintenten. Devuelve cuÃ¡ntos liberÃ³. */
+/* Libera mensajes 'processing' que quedaron hu\u00e9rfanos (crash) hace m\u00e1s de 3 min.
+   Los devuelve a 'pending' para que se reintenten. Devuelve cu\u00e1ntos liber\u00f3. */
 export async function resetStaleProcessing(
   rest: (path: string, opts?: Record<string, unknown>) => Promise<Response>,
 ): Promise<number> {
@@ -1035,8 +1052,8 @@ export async function markFailed(
   rest: (path: string, opts?: Record<string, unknown>) => Promise<Response>,
   id: number,
 ): Promise<void> {
-  /* Reintentos: si aÃºn no llegÃ³ a 3 intentos, devolver a 'pending' para que se
-     vuelva a reclamar en el prÃ³ximo drain; reciÃ©n al 3er intento pasa a 'failed'. */
+  /* Reintentos: si a\u00fan no lleg\u00f3 a 3 intentos, devolver a 'pending' para que se
+     vuelva a reclamar en el pr\u00f3ximo drain; reci\u00e9n al 3er intento pasa a 'failed'. */
   const r = await rest("whatsapp_queue?id=eq." + id + "&select=attempts", { method: "GET" });
   const rows = (await r.json().catch(() => [])) as Array<{ attempts: number }>;
   const attempts = (rows && rows[0] && rows[0].attempts) || 0;
@@ -1057,23 +1074,23 @@ export async function markFailed(
 
 
 // ============================================================
-// GADU Â· Conector de WhatsApp (Supabase Edge Function)
+// GADU \u00b7 Conector de WhatsApp (Supabase Edge Function)
 // Ruta: /functions/v1/whatsapp-webhook
 // Recibe mensajes de texto o notas de voz (ya transcritas) de
 // usuarios vinculados y los procesa con el MISMO motor del chat
-// web (ai-assistant â†’ action â†’ app_data). El chat flotante de la
+// web (ai-assistant \u2192 action \u2192 app_data). El chat flotante de la
 // web sigue funcionando independiente: este conector solo agrega
 // el canal omnicanal.
 //
-// Variables de entorno (secrets de Supabase â€” NO commitear en el repo):
-//   SUPABASE_URL Â· SUPABASE_ANON_KEY Â· SUPABASE_SERVICE_ROLE_KEY
-//   WHATSAPP_TOKEN        â†’ token de acceso de Meta Cloud API
-//   WHATSAPP_PHONE_ID     â†’ Phone Number ID de Meta (del bot de prueba)
-//   WHATSAPP_WABA_ID      â†’ WhatsApp Business Account ID (referencia)
-//   WHATSAPP_VERIFY_TOKEN â†’ token de verificaciÃ³n del webhook (GET hub.verify_token)
-//   NÃºmero de prueba del bot: 15556643689 (+1 555 664-3689)
+// Variables de entorno (secrets de Supabase \u2014 NO commitear en el repo):
+//   SUPABASE_URL \u00b7 SUPABASE_ANON_KEY \u00b7 SUPABASE_SERVICE_ROLE_KEY
+//   WHATSAPP_TOKEN        \u2192 token de acceso de Meta Cloud API
+//   WHATSAPP_PHONE_ID     \u2192 Phone Number ID de Meta (del bot de prueba)
+//   WHATSAPP_WABA_ID      \u2192 WhatsApp Business Account ID (referencia)
+//   WHATSAPP_VERIFY_TOKEN \u2192 token de verificaci\u00f3n del webhook (GET hub.verify_token)
+//   N\u00famero de prueba del bot: 15556643689 (+1 555 664-3689)
 //
-// CÃ³mo cargarlos (NO en archivos versionados):
+// C\u00f3mo cargarlos (NO en archivos versionados):
 //   supabase secrets set \
 //     WHATSAPP_TOKEN="<TOKEN>" \
 //     WHATSAPP_PHONE_ID="1360123317189034" \
@@ -1114,13 +1131,13 @@ function fireAndForget(p: Promise<unknown>) {
   p.catch(e => console.error("[GADU-WA-CRITICAL-FIX] async error:", e));
 }
 
-/* ConfiguraciÃ³n de Supabase (lectura LAZY por request: el runtime inyecta
-   las variables por peticiÃ³n, no siempre disponibles a nivel de mÃ³dulo) */
+/* Configuraci\u00f3n de Supabase (lectura LAZY por request: el runtime inyecta
+   las variables por petici\u00f3n, no siempre disponibles a nivel de m\u00f3dulo) */
 function supabaseUrl() { return Deno.env.get("SUPABASE_URL") || ""; }
 function serviceKey() { return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""; }
 function anonKey() { return Deno.env.get("SUPABASE_ANON_KEY") || ""; }
 
-/* Dispara una notificaciÃ³n push (fire-and-forget; nunca bloquea ni tira) */
+/* Dispara una notificaci\u00f3n push (fire-and-forget; nunca bloquea ni tira) */
 function firePush(userId: string, title: string, message: string, url: string) {
   fireAndForget((async () => {
     try {
@@ -1132,7 +1149,7 @@ function firePush(userId: string, title: string, message: string, url: string) {
         },
         body: JSON.stringify({ user_id: userId, title, message, url }),
       });
-      if (!res.ok) console.warn("[GADU-WA-PUSH] send-push respondiÃ³:", res.status);
+      if (!res.ok) console.warn("[GADU-WA-PUSH] send-push respondi\u00f3:", res.status);
     } catch (e) {
       console.warn("[GADU-WA-PUSH] error:", e);
     }
@@ -1140,7 +1157,7 @@ function firePush(userId: string, title: string, message: string, url: string) {
 }
 
 /* Verifica la firma HMAC-SHA256 de Meta (X-Hub-Signature-256).
-   ComparaciÃ³n en tiempo constante para evitar timing attacks. */
+   Comparaci\u00f3n en tiempo constante para evitar timing attacks. */
 async function verifyMetaSignature(rawBody: string, secret: string, signatureHeader: string): Promise<boolean> {
   try {
     const enc = new TextEncoder();
@@ -1191,8 +1208,8 @@ async function rest(path: string, opts: Record<string, unknown> = {}) {
   return await fetchWithTimeout(supabaseUrl() + "/rest/v1/" + path, { ...opts, headers } as RequestInit);
 }
 
-/* EnvÃ­o de la respuesta al usuario por WhatsApp (Meta Cloud API).
-   Sin token configurado, la respuesta viaja en el body del webhook (Ãºtil
+/* Env\u00edo de la respuesta al usuario por WhatsApp (Meta Cloud API).
+   Sin token configurado, la respuesta viaja en el body del webhook (\u00fatil
    para puentes propios o pruebas). */
 async function sendWhatsApp(to: string, text: string) {
   const token = Deno.env.get("WHATSAPP_TOKEN") || "";
@@ -1201,10 +1218,10 @@ async function sendWhatsApp(to: string, text: string) {
   console.log("[DEBUG] Destinatario (to): " + to);
   console.log("[DEBUG] phone_number_id usado para enviar: " + phoneId);
   if (!token || !phoneId) {
-    console.log("[whatsapp-webhook] sin WHATSAPP_TOKEN/WHATSAPP_PHONE_ID â†’ respuesta en body");
+    console.log("[whatsapp-webhook] sin WHATSAPP_TOKEN/WHATSAPP_PHONE_ID \u2192 respuesta en body");
     return false;
   }
-  /* Destinatario normalizado para cuentas de prueba AR (549â€¦ â†’ 54â€¦ sin el 9) */
+  /* Destinatario normalizado para cuentas de prueba AR (549\u2026 \u2192 54\u2026 sin el 9) */
   const toNormalized = toMetaPhone(to);
   const body = {
     messaging_product: "whatsapp",
@@ -1212,7 +1229,7 @@ async function sendWhatsApp(to: string, text: string) {
     type: "text",
     text: { body: text },
   };
-  /* Log detallado del payload exacto que se envÃ­a a Meta (incluye el `to` y la versiÃ³n) */
+  /* Log detallado del payload exacto que se env\u00eda a Meta (incluye el `to` y la versi\u00f3n) */
   console.log("[whatsapp-webhook] sendWhatsApp payload (", apiVersion, "):", JSON.stringify(body));
   const res = await fetchWithTimeout(`https://graph.facebook.com/${apiVersion}/${phoneId}/messages`, {
     method: "POST",
@@ -1225,18 +1242,18 @@ async function sendWhatsApp(to: string, text: string) {
       console.warn(
         "[whatsapp-webhook] Meta 131030: el destinatario",
         to,
-        "NO estÃ¡ en la lista de permitidos del bot de prueba. Agregalo en Meta for Developers â†’ WhatsApp â†’ Test numbers.",
+        "NO est\u00e1 en la lista de permitidos del bot de prueba. Agregalo en Meta for Developers \u2192 WhatsApp \u2192 Test numbers.",
       );
     } else {
-      console.error("[whatsapp-webhook] Meta Graph API fallÃ³:", res.status, respText);
+      console.error("[whatsapp-webhook] Meta Graph API fall\u00f3:", res.status, respText);
     }
   } else {
-    console.log("[whatsapp-webhook] Meta Graph API respondiÃ³:", res.status, respText);
+    console.log("[whatsapp-webhook] Meta Graph API respondi\u00f3:", res.status, respText);
   }
   return res.ok;
 }
 
-/* EnvÃ­a un mensaje interactivo con hasta 3 botones de respuesta (obras) */
+/* Env\u00eda un mensaje interactivo con hasta 3 botones de respuesta (obras) */
 async function sendWhatsAppButtons(
   to: string,
   text: string,
@@ -1271,13 +1288,13 @@ async function sendWhatsAppButtons(
     body: JSON.stringify(body),
   });
   const respText = await res.text().catch(() => "");
-  if (!res.ok) console.error("[GADU-WA-BUTTONS] Meta fallÃ³:", res.status, respText);
+  if (!res.ok) console.error("[GADU-WA-BUTTONS] Meta fall\u00f3:", res.status, respText);
   else console.log("[GADU-WA-BUTTONS] Meta OK:", res.status);
   return res.ok;
 }
 
-/* EnvÃ­a un mensaje interactivo de tipo "list" (hasta 10 filas).
-   Cada fila usa un id estable; `description` y los rÃ³tulos son configurables. */
+/* Env\u00eda un mensaje interactivo de tipo "list" (hasta 10 filas).
+   Cada fila usa un id estable; `description` y los r\u00f3tulos son configurables. */
 async function sendWhatsAppList(
   to: string,
   text: string,
@@ -1307,7 +1324,7 @@ async function sendWhatsAppList(
           rows: works.slice(0, 10).map(w => ({
             id: w.id,
             title: w.title.slice(0, 24),
-            description: w.description || "Seleccionar opciÃ³n",
+            description: w.description || "Seleccionar opci\u00f3n",
           })),
         }],
       },
@@ -1320,12 +1337,12 @@ async function sendWhatsAppList(
     body: JSON.stringify(body),
   });
   const respText = await res.text().catch(() => "");
-  if (!res.ok) console.error("[GADU-WA-LIST] Meta fallÃ³:", res.status, respText);
+  if (!res.ok) console.error("[GADU-WA-LIST] Meta fall\u00f3:", res.status, respText);
   else console.log("[GADU-WA-LIST] Meta OK:", res.status);
   return res.ok;
 }
 
-/* Busca el user_id por telÃ©fono (variantes con/sin 9, con/sin +) */
+/* Busca el user_id por tel\u00e9fono (variantes con/sin 9, con/sin +) */
 async function findUserId(from: string): Promise<string | null> {
   const fromCandidates = [...new Set([from, normalizePhone(from), "+" + normalizePhone(from)])];
   for (const phone of fromCandidates) {
@@ -1344,10 +1361,10 @@ async function findUserId(from: string): Promise<string | null> {
 }
 
 /* Sesiones del wizard (tabla whatsapp_sessions).
-   IMPORTANTE: normalizamos el telÃ©fono SIEMPRE (canonical 54 sin "9") para que
+   IMPORTANTE: normalizamos el tel\u00e9fono SIEMPRE (canonical 54 sin "9") para que
    upsertSession/deleteSession (que reciben el `from` crudo de los botones) y
    getSession (que recibe normalizePhone desde processMessage) apunten a la MISMA
-   clave. Antes, un botÃ³n guardaba "549â€¦" (con 9) y el wizard leÃ­a "54â€¦" (sin 9),
+   clave. Antes, un bot\u00f3n guardaba "549\u2026" (con 9) y el wizard le\u00eda "54\u2026" (sin 9),
    perdiendo el estado (p. ej. WAITING_CONTACT) y cayendo al fallback. */
 async function getSession(phone: string) {
   const r = await rest("whatsapp_sessions?phone_number=eq." + encodeURIComponent(normalizePhone(phone)) + "&limit=1", { method: "GET" });
@@ -1365,8 +1382,8 @@ async function deleteSession(phone: string) {
   await rest("whatsapp_sessions?phone_number=eq." + encodeURIComponent(normalizePhone(phone)), { method: "DELETE" });
 }
 
-/* Â¿El usuario tiene un ticket de soporte ABIERTO? Devuelve el ticket (id + messages)
-   o null. Mientras estÃ© abierto, el bot NO responde automÃ¡ticamente. */
+/* \u00bfEl usuario tiene un ticket de soporte ABIERTO? Devuelve el ticket (id + messages)
+   o null. Mientras est\u00e9 abierto, el bot NO responde autom\u00e1ticamente. */
 async function getOpenSupportTicket(phone: string): Promise<{ id: number; messages: Array<{ role: string; text: string; at: string }> } | null> {
   try {
     const r = await rest(
@@ -1399,7 +1416,7 @@ async function appendSupportMessage(phone: string, text: string): Promise<void> 
   }
 }
 
-/* NÃºmero personal del administrador (Franco) que recibe la alerta de nuevos tickets */
+/* N\u00famero personal del administrador (Franco) que recibe la alerta de nuevos tickets */
 const ADMIN_WHATSAPP = Deno.env.get("ADMIN_WHATSAPP") || "5493547469000";
 
 /* Avisa al administrador por WhatsApp cuando se crea un nuevo ticket de soporte */
@@ -1413,7 +1430,7 @@ async function notifyAdminNewTicket(phone: string): Promise<void> {
       messaging_product: "whatsapp",
       to: ADMIN_WHATSAPP,
       type: "text",
-      text: { body: "ðŸ”” Nueva solicitud de soporte de " + phone + ". RevisÃ¡ el panel para responder." },
+      text: { body: "[alerta] Nueva solicitud de soporte de " + phone + ". Revis\u00e1 el panel para responder." },
     };
     const res = await fetchWithTimeout(`https://graph.facebook.com/${apiVersion}/${phoneId}/messages`, {
       method: "POST",
@@ -1427,7 +1444,7 @@ async function notifyAdminNewTicket(phone: string): Promise<void> {
   }
 }
 
-/* Al pedir obra: SELECT obras activas (LIMIT 3) y envÃ­a botones */
+/* Al pedir obra: SELECT obras activas (LIMIT 3) y env\u00eda botones */
 async function askForWork(phone: string, userId: string, data: Record<string, any>) {
   const activeWorks = (data.works || []).filter((w: any) => w.status === "activa");
 
@@ -1438,7 +1455,7 @@ async function askForWork(phone: string, userId: string, data: Record<string, an
     }));
     buttons.push({ id: "assign_general", title: "Gasto General" });
     await upsertSession(phone, userId, "WAITING_WORK", {});
-    await sendWhatsAppButtons(phone, "Â¿A quÃ© obra asignamos el gasto?", buttons);
+    await sendWhatsAppButtons(phone, "\u00bfA qu\u00e9 obra asignamos el gasto?", buttons);
     return;
   }
 
@@ -1449,12 +1466,12 @@ async function askForWork(phone: string, userId: string, data: Record<string, an
     }));
     works.push({ id: "assign_general", title: "Gasto General" });
     await upsertSession(phone, userId, "WAITING_WORK", {});
-    await sendWhatsAppList(phone, "Â¿A quÃ© obra asignamos el gasto?", works);
+    await sendWhatsAppList(phone, "\u00bfA qu\u00e9 obra asignamos el gasto?", works);
     return;
   }
 
   await upsertSession(phone, userId, "WAITING_WORK", {});
-  await sendWhatsAppButtons(phone, "No tenÃ©s obras activas. Â¿Lo dejamos como Gasto General?", [
+  await sendWhatsAppButtons(phone, "No ten\u00e9s obras activas. \u00bfLo dejamos como Gasto General?", [
     { id: "assign_general", title: "Gasto General" },
   ]);
 }
@@ -1506,32 +1523,32 @@ function findWorkByName(data: Record<string, any>, target: string): Record<strin
 }
 function queryBalanceWork(data: Record<string, any>, target: string): string {
   const w = findWorkByName(data, target);
-  if (!w) return "ðŸ¤– No encontrÃ© esa obra.";
+  if (!w) return "[BOT] No encontr\u00e9 esa obra.";
   const cobrado = (data.incomes || []).filter((i: any) => i.workId === w.id).reduce((s: number, i: any) => s + (Number(i.amount) || 0), 0);
   const gastos = (data.expenses || []).filter((e: any) => e.type === "obra" && e.workId === w.id).reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
-  return "ðŸ“Š El saldo de la obra *" + (w.name || w.nombre || "sin nombre") + "* es de *" + money(cobrado - gastos) + "* (Cobrado: " + money(cobrado) + ", Gastos: " + money(gastos) + ")";
+  return "[metricas] El saldo de la obra *" + (w.name || w.nombre || "sin nombre") + "* es de *" + money(cobrado - gastos) + "* (Cobrado: " + money(cobrado) + ", Gastos: " + money(gastos) + ")";
 }
 function queryExpensesWeek(data: Record<string, any>): string {
   const cutoff = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
   const list = (data.expenses || []).filter((e: any) => String(e.date || "") >= cutoff);
-  if (!list.length) return "ðŸ’° No tenÃ©s gastos en los Ãºltimos 7 dÃ­as.";
+  if (!list.length) return "$ No ten\u00e9s gastos en los \u00faltimos 7 d\u00edas.";
   const total = list.reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
-  const detalle = list.slice(0, 5).map((e: any) => "Â· " + (e.category || e.description || "gasto") + ": " + money(e.amount)).join("\n");
-  return "ðŸ’° Gastaste *" + money(total) + "* en los Ãºltimos 7 dÃ­as (" + list.length + " gastos):\n" + detalle;
+  const detalle = list.slice(0, 5).map((e: any) => "\u00b7 " + (e.category || e.description || "gasto") + ": " + money(e.amount)).join("\n");
+  return "$ Gastaste *" + money(total) + "* en los \u00faltimos 7 d\u00edas (" + list.length + " gastos):\n" + detalle;
 }
 function queryAttendanceToday(data: Record<string, any>): string {
   const hoy = new Date().toISOString().slice(0, 10);
   const att = (data.attendance || []).filter((a: any) => String(a.date || "").slice(0, 10) === hoy && a.status !== "ausente");
-  if (!att.length) return "ðŸ‘· Hoy no registraste jornadas.";
+  if (!att.length) return "[empleado] Hoy no registraste jornadas.";
   const names = att.map((a: any) => {
     const emp = (data.employees || []).find((e: any) => e.id === a.employeeId);
     return emp ? ((emp.firstName || "") + " " + (emp.lastName || "")).trim() : "empleado";
   });
-  return "ðŸ‘· Hoy trabajaron: *" + names.join(", ") + "*";
+  return "[empleado] Hoy trabajaron: *" + names.join(", ") + "*";
 }
 function queryPendingSalaries(data: Record<string, any>, target: string): string {
   const emps = (data.employees || []) as Array<Record<string, any>>;
-  if (!emps.length) return "ðŸ¤– No tenÃ©s empleados cargados.";
+  if (!emps.length) return "[BOT] No ten\u00e9s empleados cargados.";
   const t = String(target || "").toLowerCase();
   const emp = (t && emps.find((e) => String((e.firstName || "") + " " + (e.lastName || "")).toLowerCase().includes(t))) || emps[0];
   const nombre = ((emp.firstName || "") + " " + (emp.lastName || "")).trim();
@@ -1547,10 +1564,10 @@ function queryPendingSalaries(data: Record<string, any>, target: string): string
   const adelantos = pays.filter((x: any) => x.expenseKind === "adelanto").reduce((s: number, x: any) => s + (Number(x.amount) || 0), 0);
 
   const deuda = generado - (pagado + adelantos);
-  return "ðŸ’¸ *" + nombre + "*: TrabajÃ³ " + horas + " hs. GenerÃ³ " + money(generado) + ". Pagado/Adelantado " + money(pagado + adelantos) + ". *Saldo pendiente: " + money(deuda) + "*";
+  return "$ *" + nombre + "*: Trabaj\u00f3 " + horas + " hs. Gener\u00f3 " + money(generado) + ". Pagado/Adelantado " + money(pagado + adelantos) + ". *Saldo pendiente: " + money(deuda) + "*";
 }
 
-/* ===== Presupuesto en PDF (pdf-lib) + envÃ­o de documentos ===== */
+/* ===== Presupuesto en PDF (pdf-lib) + env\u00edo de documentos ===== */
 interface BudgetItem { descripcion: string; cantidad: number; precio: number }
 
 async function generateBudgetPDF(budgetData: { cliente: string; items: BudgetItem[] }): Promise<Uint8Array> {
@@ -1563,15 +1580,15 @@ async function generateBudgetPDF(budgetData: { cliente: string; items: BudgetIte
   const drawHeader = () => {
     const { height } = page.getSize();
     page.drawText("PRESUPUESTO GADU", { x: 50, y: height - 60, size: 22, font: fontBold, color: rgb(0.06, 0.09, 0.13) });
-    page.drawText("GADU Construye Â· Tu gestiÃ³n, perfecta", { x: 50, y: height - 82, size: 11, font: font, color: rgb(0.39, 0.45, 0.55) });
+    page.drawText("GADU Construye \u00b7 Tu gesti\u00f3n, perfecta", { x: 50, y: height - 82, size: 11, font: font, color: rgb(0.39, 0.45, 0.55) });
     page.drawText("Fecha: " + hoy, { x: 400, y: height - 60, size: 10, font: font, color: rgb(0.39, 0.45, 0.55) });
-    page.drawText("Cliente: " + (budgetData.cliente || "â€”"), { x: 50, y: height - 118, size: 13, font: fontBold, color: rgb(0.06, 0.09, 0.13) });
+    page.drawText("Cliente: " + (budgetData.cliente || "\u2014"), { x: 50, y: height - 118, size: 13, font: fontBold, color: rgb(0.06, 0.09, 0.13) });
   };
 
   drawHeader();
   let y = 841.89 - 158;
   const cols = { desc: 50, cant: 330, prec: 400, total: 470 };
-  page.drawText("DescripciÃ³n", { x: cols.desc, y, size: 10, font: fontBold, color: rgb(0.39, 0.45, 0.55) });
+  page.drawText("Descripci\u00f3n", { x: cols.desc, y, size: 10, font: fontBold, color: rgb(0.39, 0.45, 0.55) });
   page.drawText("Cant.", { x: cols.cant, y, size: 10, font: fontBold, color: rgb(0.39, 0.45, 0.55) });
   page.drawText("P. unit.", { x: cols.prec, y, size: 10, font: fontBold, color: rgb(0.39, 0.45, 0.55) });
   page.drawText("Total", { x: cols.total, y, size: 10, font: fontBold, color: rgb(0.39, 0.45, 0.55) });
@@ -1597,7 +1614,7 @@ async function generateBudgetPDF(budgetData: { cliente: string; items: BudgetIte
   page.drawText("TOTAL", { x: cols.desc, y, size: 12, font: fontBold, color: rgb(0.06, 0.09, 0.13) });
   page.drawText("$" + totalGeneral.toLocaleString("es-AR"), { x: cols.total, y, size: 12, font: fontBold, color: rgb(0.06, 0.09, 0.13) });
 
-  page.drawText("Generado por GADU - Tu gestiÃ³n, perfecta", { x: 50, y: 40, size: 10, font: font, color: rgb(0.58, 0.63, 0.71) });
+  page.drawText("Generado por GADU - Tu gesti\u00f3n, perfecta", { x: 50, y: 40, size: 10, font: font, color: rgb(0.58, 0.63, 0.71) });
 
   return await doc.save();
 }
@@ -1623,7 +1640,7 @@ async function sendWhatsAppDocument(to: string, bytes: Uint8Array, filename: str
   });
   const upJson = await up.json().catch(() => ({}));
   if (!up.ok || !upJson.id) {
-    console.error("[GADU-WA-DOC] subir media fallÃ³:", up.status, JSON.stringify(upJson));
+    console.error("[GADU-WA-DOC] subir media fall\u00f3:", up.status, JSON.stringify(upJson));
     return false;
   }
   const mediaId = String(upJson.id);
@@ -1641,12 +1658,12 @@ async function sendWhatsAppDocument(to: string, bytes: Uint8Array, filename: str
     body: JSON.stringify(body),
   });
   const respText = await res.text().catch(() => "");
-  if (!res.ok) console.error("[GADU-WA-DOC] enviar documento fallÃ³:", res.status, respText);
+  if (!res.ok) console.error("[GADU-WA-DOC] enviar documento fall\u00f3:", res.status, respText);
   else console.log("[GADU-WA-DOC] documento enviado OK:", filename);
   return res.ok;
 }
 
-/* Genera un .xlsx con los gastos del usuario (Fecha, Monto, CategorÃ­a, Concepto, Obra) */
+/* Genera un .xlsx con los gastos del usuario (Fecha, Monto, Categor\u00eda, Concepto, Obra) */
 function exportExpensesXlsx(data: Record<string, any>): Uint8Array {
   const works = data.works || [];
   const workName = (id: string | null | undefined) => {
@@ -1657,7 +1674,7 @@ function exportExpensesXlsx(data: Record<string, any>): Uint8Array {
   const rows = (data.expenses || []).map((x: Record<string, any>) => ({
     Fecha: String(x.date || x.fecha || ""),
     Monto: Number(x.amount) || 0,
-    "CategorÃ­a": String(x.category || x.categoria || ""),
+    "Categor\u00eda": String(x.category || x.categoria || ""),
     Concepto: String(x.description || x.name || "").slice(0, 60),
     Obra: workName(x.workId),
   }));
@@ -1668,9 +1685,9 @@ function exportExpensesXlsx(data: Record<string, any>): Uint8Array {
 }
 
 serve(async (req) => {
-  /* Rastreo verbose: imprime SIEMPRE mÃ©todo, URL y headers de cualquier
-     peticiÃ³n, para descartar filtros internos y validar el formato de los
-     headers que envÃ­a Meta. */
+  /* Rastreo verbose: imprime SIEMPRE m\u00e9todo, URL y headers de cualquier
+     petici\u00f3n, para descartar filtros internos y validar el formato de los
+     headers que env\u00eda Meta. */
   console.log("[whatsapp-webhook] request:", req.method, req.url);
   try {
     const headers: Record<string, string> = {};
@@ -1679,11 +1696,11 @@ serve(async (req) => {
   } catch (e) { console.warn("[whatsapp-webhook] no se pudieron leer headers:", e); }
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  /* ===== VerificaciÃ³n del webhook de Meta (GET) =====
+  /* ===== Verificaci\u00f3n del webhook de Meta (GET) =====
      Meta exige responder con `hub.challenge` cuando `hub.verify_token`
      coincide con nuestro secreto (WHATSAPP_VERIFY_TOKEN). SIN este
      handshake Meta NO habilita el webhook y NUNCA entrega mensajes:
-     esta es la causa mÃ¡s comÃºn de "no vincula ni responde". */
+     esta es la causa m\u00e1s com\u00fan de "no vincula ni responde". */
   if (req.method === "GET") {
     try {
       const url = new URL(req.url);
@@ -1694,14 +1711,14 @@ serve(async (req) => {
       if (mode === "subscribe" && expected && token === expected && challenge) {
         return new Response(challenge, { status: 200 });
       }
-      console.warn("[whatsapp-webhook] verificaciÃ³n GET fallida:", { mode, token, expected });
+      console.warn("[whatsapp-webhook] verificaci\u00f3n GET fallida:", { mode, token, expected });
       return new Response("verification failed", { status: 403 });
     } catch (e) {
       return new Response("verification failed", { status: 403 });
     }
   }
 
-  /* ===== ValidaciÃ³n de firma de Meta (X-Hub-Signature-256) =====
+  /* ===== Validaci\u00f3n de firma de Meta (X-Hub-Signature-256) =====
      Intercepta el body crudo ANTES de parsear, verifica el HMAC-SHA256
      con WHATSAPP_APP_SECRET y rechaza con 403 si no coincide. */
   const rawBody = await req.text().catch(() => "");
@@ -1714,7 +1731,7 @@ serve(async (req) => {
     }
     const okSig = await verifyMetaSignature(rawBody, appSecret, signature);
     if (!okSig) {
-      console.warn("[whatsapp-webhook] firma invÃ¡lida de Meta");
+      console.warn("[whatsapp-webhook] firma inv\u00e1lida de Meta");
       return new Response("invalid signature", { status: 403, headers: corsHeaders });
     }
   } else {
@@ -1731,10 +1748,10 @@ serve(async (req) => {
   const phoneQuick = fromQuick ? normalizePhone(fromQuick) : "desconocido";
 
   /* Responder 200 OK INMEDIATAMENTE (en <1s) y procesar TODO en segundo plano.
-     AsÃ­ un audio que tarde (o falle) NUNCA bloquea el 200 OK ni los mensajes
-     siguientes. La idempotencia tambiÃ©n va en background. */
+     As\u00ed un audio que tarde (o falle) NUNCA bloquea el 200 OK ni los mensajes
+     siguientes. La idempotencia tambi\u00e9n va en background. */
   fireAndForget((async () => {
-    /* Idempotencia: si este message.id ya se procesÃ³, salir sin tocar nada */
+    /* Idempotencia: si este message.id ya se proces\u00f3, salir sin tocar nada */
     if (messageId) {
       if (await isDuplicate(messageId)) {
         console.log("[GADU-WA-DEDUP] message_id ya procesado:", messageId);
@@ -1742,7 +1759,7 @@ serve(async (req) => {
       }
       await markProcessed(messageId);
     }
-    /* Encolar PRIMERO y reciÃ©n despuÃ©s drenar (secuencial): si el drain corre
+    /* Encolar PRIMERO y reci\u00e9n despu\u00e9s drenar (secuencial): si el drain corre
        antes de insertar, no ve el mensaje y queda "pending" para siempre. */
     await enqueueMessage(rest, phoneQuick, body);
     await drainPhone(phoneQuick);
@@ -1767,58 +1784,58 @@ function detectInteractive(body: unknown): { from: string; buttonId: string } | 
 }
 
 async function handleButtonReply(from: string, buttonId: string) {
-  console.log("[GADU-WA-BUTTONS] botÃ³n:", buttonId, "de", from);
+  console.log("[GADU-WA-BUTTONS] bot\u00f3n:", buttonId, "de", from);
 
   /* 1) Buscar usuario (helper compartido) */
   const userId = await findUserId(from);
   if (!userId) {
     console.warn("[GADU-WA-BUTTONS] usuario no encontrado para", from);
-    fireAndForget(sendWhatsApp(from, "ðŸ¤– No pude identificar tu cuenta."));
+    fireAndForget(sendWhatsApp(from, "[BOT] No pude identificar tu cuenta."));
     return;
   }
 
-  /* [GADU-WA-SUPPORT] Si hay un ticket ABIERTO, ignorar cualquier botÃ³n salvo
+  /* [GADU-WA-SUPPORT] Si hay un ticket ABIERTO, ignorar cualquier bot\u00f3n salvo
      los de "hablar con humano" (que re-confirman el ticket). */
   if (buttonId !== "action_humano" && buttonId !== "fallback_humano") {
     try {
       if (await getOpenSupportTicket(from)) {
-        console.log("[GADU-WA-SUPPORT] ticket abierto, ignorando botÃ³n:", buttonId);
+        console.log("[GADU-WA-SUPPORT] ticket abierto, ignorando bot\u00f3n:", buttonId);
         return;
       }
     } catch (e) {}
   }
 
-  /* [GADU-WA-MENU] Opciones del menÃº principal (lista interactiva unificada) */
+  /* [GADU-WA-MENU] Opciones del men\u00fa principal (lista interactiva unificada) */
   if (buttonId.startsWith("action_")) {
     const act = buttonId.slice("action_".length);
     if (act === "nuevo_gasto") {
       await upsertSession(from, userId, "WAITING_GASTO", {});
-      fireAndForget(sendWhatsApp(from, "Dale, decime el monto y el concepto (ej: \"GastÃ© 5000 de nafta\" o \"5000 de cemento\")"));
+      fireAndForget(sendWhatsApp(from, "Dale, decime el monto y el concepto (ej: \"Gast\u00e9 5000 de nafta\" o \"5000 de cemento\")"));
       return;
     }
     if (act === "nueva_obra") {
       await upsertSession(from, userId, "WAITING_OBRA", {});
-      fireAndForget(sendWhatsApp(from, "Â¿CÃ³mo se llama la obra y en quÃ© direcciÃ³n estÃ¡? Ej: \"Casa PÃ©rez en Alta Gracia\""));
+      fireAndForget(sendWhatsApp(from, "\u00bfC\u00f3mo se llama la obra y en qu\u00e9 direcci\u00f3n est\u00e1? Ej: \"Casa P\u00e9rez en Alta Gracia\""));
       return;
     }
     if (act === "adelanto") {
       await upsertSession(from, userId, "WAITING_ADVANCE", {});
-      fireAndForget(sendWhatsApp(from, "ðŸ’¸ Decime *a quÃ© empleado* y *de cuÃ¡nto* es el adelanto. Ej: \"Adelanto de Hugo de 12000\"."));
+      fireAndForget(sendWhatsApp(from, "$ Decime *a qu\u00e9 empleado* y *de cu\u00e1nto* es el adelanto. Ej: \"Adelanto de Hugo de 12000\"."));
       return;
     }
     if (act === "presupuesto") {
       await upsertSession(from, userId, "WAITING_PRESUPUESTO", {});
-      fireAndForget(sendWhatsApp(from, "Â¿Para quÃ© cliente es el presupuesto y quÃ© Ã­tems incluye?"));
+      fireAndForget(sendWhatsApp(from, "\u00bfPara qu\u00e9 cliente es el presupuesto y qu\u00e9 \u00edtems incluye?"));
       return;
     }
     if (act === "consulta") {
       await upsertSession(from, userId, "WAITING_CONSULTA", {});
-      fireAndForget(sendWhatsApp(from, "Â¿QuÃ© querÃ©s consultar? Saldo de una obra, gastos de la semana, etc."));
+      fireAndForget(sendWhatsApp(from, "\u00bfQu\u00e9 quer\u00e9s consultar? Saldo de una obra, gastos de la semana, etc."));
       return;
     }
     if (act === "contacto") {
       await upsertSession(from, userId, "WAITING_CONTACT_ROLE", {});
-      await sendWhatsAppButtons(from, "Â¿QuÃ© tipo de contacto querÃ©s registrar?", [
+      await sendWhatsAppButtons(from, "\u00bfQu\u00e9 tipo de contacto quer\u00e9s registrar?", [
         { id: "contact_role:empleado", title: "Empleado" },
         { id: "contact_role:socio", title: "Socio" },
         { id: "contact_role:cliente", title: "Cliente" },
@@ -1834,22 +1851,22 @@ async function handleButtonReply(from: string, buttonId: string) {
         });
       } catch (e) {}
       fireAndForget(notifyAdminNewTicket(from));   // avisar al admin por WhatsApp
-      fireAndForget(sendWhatsApp(from, "âœ… Tu pedido fue enviado. Un asesor de GADU te contactarÃ¡ por este medio a la brevedad."));
+      fireAndForget(sendWhatsApp(from, "OK Tu pedido fue enviado. Un asesor de GADU te contactar\u00e1 por este medio a la brevedad."));
       await deleteSession(normalizePhone(from));
       return;
     }
-    console.warn("[GADU-WA-MENU] acciÃ³n desconocida:", act);
+    console.warn("[GADU-WA-MENU] acci\u00f3n desconocida:", act);
     return;
   }
 
-  /* [GADU-WA-MENU] SelecciÃ³n de rol para el nuevo contacto.
-     Guarda el wizard multi-paso: WAITING_CONTACT_NAME â†’ WAITING_CONTACT_PHONE. */
+  /* [GADU-WA-MENU] Selecci\u00f3n de rol para el nuevo contacto.
+     Guarda el wizard multi-paso: WAITING_CONTACT_NAME \u2192 WAITING_CONTACT_PHONE. */
   if (buttonId.startsWith("contact_role:")) {
     const role = buttonId.slice("contact_role:".length);
     if (role === "empleado" || role === "socio" || role === "cliente") {
       await upsertSession(from, userId, "WAITING_CONTACT_NAME", { contactType: role });
       const label = role === "empleado" ? "Empleado" : (role === "socio" ? "Socio" : "Cliente");
-      fireAndForget(sendWhatsApp(from, "Perfecto, vamos a registrar un *" + label + "*. Â¿CuÃ¡l es el nombre completo? (EscribÃ­ *cancelar* para abortar)"));
+      fireAndForget(sendWhatsApp(from, "Perfecto, vamos a registrar un *" + label + "*. \u00bfCu\u00e1l es el nombre completo? (Escrib\u00ed *cancelar* para abortar)"));
       return;
     }
     console.warn("[GADU-WA-MENU] rol de contacto desconocido:", role);
@@ -1858,13 +1875,13 @@ async function handleButtonReply(from: string, buttonId: string) {
 
   /* [GADU-WA-AI-UPGRADE] Botones del fallback inteligente (no necesitan gasto pendiente) */
   if (buttonId === "fallback_gasto") {
-    fireAndForget(sendWhatsApp(from, "ðŸ’° Decime el gasto, por ejemplo: \"GastÃ© 15000 en cemento\" o \"5000 de nafta\"."));
+    fireAndForget(sendWhatsApp(from, "$ Decime el gasto, por ejemplo: \"Gast\u00e9 15000 en cemento\" o \"5000 de nafta\"."));
     await deleteSession(normalizePhone(from));
     return;
   }
   if (buttonId === "fallback_adelanto") {
     await upsertSession(from, userId, "WAITING_ADVANCE", {});
-    fireAndForget(sendWhatsApp(from, "ðŸ’¸ Decime *a quÃ© empleado* y *de cuÃ¡nto* es el adelanto. Ej: \"Adelanto de Hugo de 12000\"."));
+    fireAndForget(sendWhatsApp(from, "$ Decime *a qu\u00e9 empleado* y *de cu\u00e1nto* es el adelanto. Ej: \"Adelanto de Hugo de 12000\"."));
     return;
   }
   if (buttonId === "fallback_humano") {
@@ -1877,10 +1894,10 @@ async function handleButtonReply(from: string, buttonId: string) {
       });
       console.log("[GADU-WA-SUPPORT] ticket creado para", userId, "/", from);
     } catch (e) {
-      console.error("[GADU-WA-SUPPORT] fallÃ³ insertar ticket:", e);
+      console.error("[GADU-WA-SUPPORT] fall\u00f3 insertar ticket:", e);
     }
     fireAndForget(notifyAdminNewTicket(from));   // avisar al admin por WhatsApp
-    fireAndForget(sendWhatsApp(from, "âœ… Tu pedido fue enviado. Un asesor de GADU te contactarÃ¡ por este medio a la brevedad."));
+    fireAndForget(sendWhatsApp(from, "OK Tu pedido fue enviado. Un asesor de GADU te contactar\u00e1 por este medio a la brevedad."));
     await deleteSession(normalizePhone(from));
     return;
   }
@@ -1890,12 +1907,12 @@ async function handleButtonReply(from: string, buttonId: string) {
   const rowsData = (await rData.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
   if (!Array.isArray(rowsData) || !rowsData.length) {
     console.warn("[GADU-WA-BUTTONS] usuario sin app_data:", userId);
-    fireAndForget(sendWhatsApp(from, "ðŸ¤– No encontrÃ© tus datos."));
+    fireAndForget(sendWhatsApp(from, "[BOT] No encontr\u00e9 tus datos."));
     return;
   }
   const data = rowsData[0].data || {};
 
-  /* 3) Pendiente mÃ¡s reciente: primero gastos, despuÃ©s ingresos (adelanto de cliente) */
+  /* 3) Pendiente m\u00e1s reciente: primero gastos, despu\u00e9s ingresos (adelanto de cliente) */
   const expenses = (data.expenses || []) as Array<Record<string, any>>;
   const incomes = (data.incomes || []) as Array<Record<string, any>>;
   const idxExp = expenses.findIndex(e => e.source === "whatsapp" && e.workId == null);
@@ -1909,25 +1926,25 @@ async function handleButtonReply(from: string, buttonId: string) {
   }
   if (!target) {
     console.warn("[GADU-WA-BUTTONS] sin movimientos pendientes para", userId);
-    fireAndForget(sendWhatsApp(from, "ðŸ¤– No encontrÃ© movimientos pendientes de asignar."));
+    fireAndForget(sendWhatsApp(from, "[BOT] No encontr\u00e9 movimientos pendientes de asignar."));
     return;
   }
   const monto = Number(target.amount) || 0;
 
-  /* 4) Asignar segÃºn el botÃ³n */
+  /* 4) Asignar seg\u00fan el bot\u00f3n */
   if (buttonId.startsWith("assign_work:")) {
     const workId = buttonId.slice("assign_work:".length);
     const work = (data.works || []).find((w: Record<string, any>) => String(w.id) === workId);
     const workName = String(work?.nombre || work?.name || "la obra");
     target.workId = workId;
     if (!esIngreso) target.type = "obra";
-    fireAndForget(sendWhatsApp(from, "âœ… Listo, " + (esIngreso ? "el ingreso" : "el gasto") + " de $" + monto + " fue asignado a la obra " + workName + "."));
+    fireAndForget(sendWhatsApp(from, "OK Listo, " + (esIngreso ? "el ingreso" : "el gasto") + " de $" + monto + " fue asignado a la obra " + workName + "."));
   } else if (buttonId === "assign_general") {
     target.workId = null;
     if (!esIngreso) target.type = "general";
-    fireAndForget(sendWhatsApp(from, "âœ… Listo, " + (esIngreso ? "el ingreso" : "el gasto") + " de $" + monto + " quedÃ³ registrado como " + (esIngreso ? "ingreso sin obra" : "Gasto General") + "."));
+    fireAndForget(sendWhatsApp(from, "OK Listo, " + (esIngreso ? "el ingreso" : "el gasto") + " de $" + monto + " qued\u00f3 registrado como " + (esIngreso ? "ingreso sin obra" : "Gasto General") + "."));
   } else {
-    console.warn("[GADU-WA-BUTTONS] botÃ³n desconocido:", buttonId);
+    console.warn("[GADU-WA-BUTTONS] bot\u00f3n desconocido:", buttonId);
     return;
   }
 
@@ -1937,17 +1954,17 @@ async function handleButtonReply(from: string, buttonId: string) {
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
   });
-  if (!up.ok) console.error("[GADU-WA-BUTTONS] fallÃ³ PATCH app_data:", up.status);
+  if (!up.ok) console.error("[GADU-WA-BUTTONS] fall\u00f3 PATCH app_data:", up.status);
   else console.log("[GADU-WA-BUTTONS] gasto asignado OK:", buttonId);
 
   /* 6) Limpiar el estado WAITING_WORK */
   await deleteSession(normalizePhone(from));
 }
 
-/* ===== Procesamiento del mensaje (extraÃ­do del handler) ===== */
+/* ===== Procesamiento del mensaje (extra\u00eddo del handler) ===== */
 async function processMessage(body: unknown) {
   try {
-    /* Mensajes interactivos (botones) â†’ asignar gasto pendiente */
+    /* Mensajes interactivos (botones) \u2192 asignar gasto pendiente */
     const btn = detectInteractive(body);
     if (btn) {
       await handleButtonReply(btn.from, btn.buttonId);
@@ -1960,12 +1977,12 @@ async function processMessage(body: unknown) {
     }
 
     /* [GADU-WA-SUPPORT] Soporte humano activo: PRIORITARIO, antes de cualquier
-       respuesta automÃ¡tica (menÃºs, estados, audios). Si hay ticket OPEN, anexar
+       respuesta autom\u00e1tica (men\u00fas, estados, audios). Si hay ticket OPEN, anexar
        el mensaje y retornar sin que el bot responda. */
     try {
       const openTicket = await getOpenSupportTicket(resolved.from);
       if (openTicket) {
-        console.log("[GADU-WA-SUPPORT] ticket abierto para", resolved.from, "â†’ registrando y sin responder");
+        console.log("[GADU-WA-SUPPORT] ticket abierto para", resolved.from, "\u2192 registrando y sin responder");
         if (resolved.text) await appendSupportMessage(resolved.from, resolved.text);
         return json({ ok: true, from: resolved.from, ignored: true });
       }
@@ -1974,13 +1991,18 @@ async function processMessage(body: unknown) {
     }
 
     if (resolved.audioFailed) {
-      console.warn("[GADU-WA-AUDIO] transcripciÃ³n fallÃ³ para", resolved.from);
-      fireAndForget(sendWhatsApp(resolved.from, "ðŸ¤– No pude escuchar el audio, Â¿me lo escribÃ­s?"));
+      console.warn("[GADU-WA-AUDIO] transcripci\u00f3n fall\u00f3 para", resolved.from);
+      fireAndForget(sendWhatsApp(resolved.from, "[BOT] No pude escuchar el audio, \u00bfme lo escrib\u00eds?"));
       return;
     }
     if (resolved.imageFailed) {
-      console.warn("[GADU-WA-IMAGE] anÃ¡lisis de imagen fallÃ³ para", resolved.from);
-      fireAndForget(sendWhatsApp(resolved.from, "ðŸ¤– No pude leer la imagen, Â¿me escribÃ­s el gasto?"));
+      console.warn("[GADU-WA-IMAGE] an\u00e1lisis de imagen fall\u00f3 para", resolved.from);
+      fireAndForget(sendWhatsApp(resolved.from, "[BOT] No pude leer la imagen, \u00bfme escrib\u00eds el gasto?"));
+      return;
+    }
+    if (resolved.imageNoMonto) {
+      console.warn("[GADU-WA-IMAGE] no se pudo leer el monto del ticket para", resolved.from);
+      fireAndForget(sendWhatsApp(resolved.from, "[BOT] No pude leer el monto del ticket. \u00bfPodr\u00edas escribirme cu\u00e1nto gastaste?"));
       return;
     }
     const inc = { from: resolved.from, text: resolved.text, mediaUrl: resolved.mediaUrl || "" };
@@ -1992,58 +2014,58 @@ async function processMessage(body: unknown) {
       return;
     }
 
-    /* 0) CÃ³digo de licencia "GADU-XXXXXX": validar contra license_codes y
-       guiar al usuario a canjearlo en la app (NO lo activa acÃ¡). */
+    /* 0) C\u00f3digo de licencia "GADU-XXXXXX": validar contra license_codes y
+       guiar al usuario a canjearlo en la app (NO lo activa ac\u00e1). */
     const licenseCode = matchLicenseCode(inc.text);
     if (licenseCode) {
-      console.log("[whatsapp-webhook] cÃ³digo de licencia detectado:", licenseCode);
+      console.log("[whatsapp-webhook] c\u00f3digo de licencia detectado:", licenseCode);
       const q = "code=eq." + encodeURIComponent(licenseCode) + "&select=id,code,plan_id,duration_days,is_used";
       const r = await rest("license_codes?" + q + "&limit=1");
       const rows = await r.json().catch(() => []);
       if (!r.ok || !Array.isArray(rows) || !rows.length) {
         console.warn("[whatsapp-webhook] licencia no encontrada:", licenseCode);
-        fireAndForget(sendWhatsApp(inc.from, "ðŸ¤– El cÃ³digo " + licenseCode + " no existe. Verificalo o pedilo de nuevo."));
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] El c\u00f3digo " + licenseCode + " no existe. Verificalo o pedilo de nuevo."));
         return json({ ok: false, error: "licencia no encontrada" });
       }
       const lic = rows[0];
       if (lic.is_used) {
         console.warn("[whatsapp-webhook] licencia ya usada:", licenseCode);
-        fireAndForget(sendWhatsApp(inc.from, "ðŸ¤– El cÃ³digo " + licenseCode + " ya fue utilizado."));
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] El c\u00f3digo " + licenseCode + " ya fue utilizado."));
         return json({ ok: false, error: "licencia ya usada" });
       }
-      console.log("[whatsapp-webhook] licencia vÃ¡lida:", licenseCode, "Â· plan:", lic.plan_id, "Â·", lic.duration_days, "dÃ­as");
-      const reply = "âœ… El cÃ³digo " + licenseCode + " es vÃ¡lido (plan " + String(lic.plan_id).toUpperCase() + " por " + lic.duration_days + " dÃ­as).\n" +
-        "Para activarlo, abrÃ­ la app: *Planes y SuscripciÃ³n â†’ Canjear cÃ³digo*.";
+      console.log("[whatsapp-webhook] licencia v\u00e1lida:", licenseCode, "\u00b7 plan:", lic.plan_id, "\u00b7", lic.duration_days, "d\u00edas");
+      const reply = "OK El c\u00f3digo " + licenseCode + " es v\u00e1lido (plan " + String(lic.plan_id).toUpperCase() + " por " + lic.duration_days + " d\u00edas).\n" +
+        "Para activarlo, abr\u00ed la app: *Planes y Suscripci\u00f3n \u2192 Canjear c\u00f3digo*.";
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
     }
 
-    /* 1) VinculaciÃ³n: cÃ³digo alfanumÃ©rico (mayÃºsculas, sin espacios).
-       BÃºsqueda CASE-INSENSITIVE por cÃ³digo (ilike) y SIN filtrar por prefijo
-       de celular: el nÃºmero se valida aparte de forma tolerante (con/sin 9). */
+    /* 1) Vinculaci\u00f3n: c\u00f3digo alfanum\u00e9rico (may\u00fasculas, sin espacios).
+       B\u00fasqueda CASE-INSENSITIVE por c\u00f3digo (ilike) y SIN filtrar por prefijo
+       de celular: el n\u00famero se valida aparte de forma tolerante (con/sin 9). */
     const code = (matchVerificationCode(inc.text) || "").trim().toUpperCase();
     if (code) {
-      console.log("[whatsapp-webhook] cÃ³digo extraÃ­do:", code);
+      console.log("[whatsapp-webhook] c\u00f3digo extra\u00eddo:", code);
       const q = "data->settings->profile->whatsapp->>code=ilike." + encodeURIComponent(code);
       const r = await rest("app_data?select=user_id,data&" + q + "&limit=1");
       const rows = await r.json().catch(() => []);
-      console.log("[whatsapp-webhook] consulta app_data (cÃ³digo):", code, "â†’ http", r.status, "Â·", (Array.isArray(rows) ? rows.length : 0), "coincidencia(s)", (Array.isArray(rows) && rows[0]) ? ("user_id=" + rows[0].user_id) : "");
+      console.log("[whatsapp-webhook] consulta app_data (c\u00f3digo):", code, "\u2192 http", r.status, "\u00b7", (Array.isArray(rows) ? rows.length : 0), "coincidencia(s)", (Array.isArray(rows) && rows[0]) ? ("user_id=" + rows[0].user_id) : "");
       if (!r.ok || !Array.isArray(rows) || !rows.length) {
-        console.warn("[whatsapp-webhook] cÃ³digo no encontrado/vencido:", code, "(http", r.status + ")");
-        fireAndForget(sendWhatsApp(inc.from, "ðŸ¤– El cÃ³digo no es vÃ¡lido o ya expirÃ³. VolvÃ© a generarlo desde la app (Perfil â†’ Vincular WhatsApp â†’ Generar cÃ³digo) y envialo de nuevo."));
-        return json({ ok: false, error: "cÃ³digo no encontrado o expirado" });
+        console.warn("[whatsapp-webhook] c\u00f3digo no encontrado/vencido:", code, "(http", r.status + ")");
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] El c\u00f3digo no es v\u00e1lido o ya expir\u00f3. Volv\u00e9 a generarlo desde la app (Perfil \u2192 Vincular WhatsApp \u2192 Generar c\u00f3digo) y envialo de nuevo."));
+        return json({ ok: false, error: "c\u00f3digo no encontrado o expirado" });
       }
       const row = rows[0];
       const wp = row.data?.settings?.profile?.whatsapp || {};
       if (!phoneMatches(wp.phone, inc.from)) {
-        console.warn("[whatsapp-webhook] telÃ©fono no coincide: from=" + inc.from + " perfil=" + String(wp.phone));
-        fireAndForget(sendWhatsApp(inc.from, "ðŸ¤– El cÃ³digo es vÃ¡lido pero este nÃºmero no coincide con el telÃ©fono registrado en tu perfil."));
-        return json({ ok: false, error: "telÃ©fono no coincide" });
+        console.warn("[whatsapp-webhook] tel\u00e9fono no coincide: from=" + inc.from + " perfil=" + String(wp.phone));
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] El c\u00f3digo es v\u00e1lido pero este n\u00famero no coincide con el tel\u00e9fono registrado en tu perfil."));
+        return json({ ok: false, error: "tel\u00e9fono no coincide" });
       }
       row.data.settings.profile.whatsapp = {
         ...wp,
         linked: true,
-        linkedPhone: normalizePhone(inc.from),   // forma canÃ³nica (54 sin 9)
+        linkedPhone: normalizePhone(inc.from),   // forma can\u00f3nica (54 sin 9)
         linkedAt: new Date().toISOString(),
       };
       const up = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
@@ -2052,10 +2074,10 @@ async function processMessage(body: unknown) {
         body: JSON.stringify({ data: row.data, updated_at: new Date().toISOString() }),
       });
       if (!up.ok) {
-        console.error("[whatsapp-webhook] fallÃ³ marcar linked:", up.status);
-        return json({ ok: false, error: "no se pudo guardar la vinculaciÃ³n" });
+        console.error("[whatsapp-webhook] fall\u00f3 marcar linked:", up.status);
+        return json({ ok: false, error: "no se pudo guardar la vinculaci\u00f3n" });
       }
-      /* Sincronizar la columna canÃ³nica whatsapp_number en public.profiles */
+      /* Sincronizar la columna can\u00f3nica whatsapp_number en public.profiles */
       try {
         const pPatch = await rest("profiles?user_id=eq." + encodeURIComponent(row.user_id), {
           method: "PATCH",
@@ -2066,16 +2088,16 @@ async function processMessage(body: unknown) {
       } catch (e) {
         console.warn("[whatsapp-webhook] error sincronizando profiles.whatsapp_number:", e);
       }
-      console.log("[whatsapp-webhook] cuenta vinculada:", row.user_id, "telÃ©fono:", inc.from);
-      const reply = "Â¡Hola! Tu cuenta de GestiÃ³n GADU ha sido vinculada correctamente con este nÃºmero de WhatsApp. Ya podÃ©s recibir tus avisos y reportes aquÃ­.";
+      console.log("[whatsapp-webhook] cuenta vinculada:", row.user_id, "tel\u00e9fono:", inc.from);
+      const reply = "\u00a1Hola! Tu cuenta de Gesti\u00f3n GADU ha sido vinculada correctamente con este n\u00famero de WhatsApp. Ya pod\u00e9s recibir tus avisos y reportes aqu\u00ed.";
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
     }
 
-    /* 1b) MenÃº principal unificado: saludo + lista de opciones (igual que la web).
-       Solo si el texto es un saludo/palabra clave y NO estÃ¡ en medio de un wizard. */
+    /* 1b) Men\u00fa principal unificado: saludo + lista de opciones (igual que la web).
+       Solo si el texto es un saludo/palabra clave y NO est\u00e1 en medio de un wizard. */
     const menuText = String(inc.text || "").trim().toLowerCase();
-    if (/^(hola|holis|holi|buenas|buen\s*d[iÃ­]a|buenos\s*d[iÃ­]as|menu|men[uÃº]|empezar|ayuda|help|inicio)\b/.test(menuText)) {
+    if (/^(hola|holis|holi|buenas|buen\s*d[i\u00ed]a|buenos\s*d[i\u00ed]as|menu|men[u\u00fa]|empezar|ayuda|help|inicio)\b/.test(menuText)) {
       try {
         const sessMenu = await getSession(normalizePhone(inc.from));
         if (!sessMenu || !sessMenu.state) {
@@ -2088,45 +2110,45 @@ async function processMessage(body: unknown) {
             { id: "action_contacto", title: "Nuevo Contacto / Directorio" },
             { id: "action_humano", title: "Hablar con humano" },
           ];
-          fireAndForget(sendWhatsApp(inc.from, "Â¡Hola! ðŸ‘‹ Soy tu asistente GADU. Â¿QuÃ© querÃ©s hacer hoy?"));
-          await sendWhatsAppList(inc.from, "ElegÃ­ una opciÃ³n ðŸ‘‡", opts, { button: "Ver opciones", sectionTitle: "MenÃº" });
+          fireAndForget(sendWhatsApp(inc.from, "\u00a1Hola! Hola Soy tu asistente GADU. \u00bfQu\u00e9 quer\u00e9s hacer hoy?"));
+          await sendWhatsAppList(inc.from, "Eleg\u00ed una opci\u00f3n [abajo]", opts, { button: "Ver opciones", sectionTitle: "Men\u00fa" });
           return json({ ok: true, from: inc.from });
         }
-      } catch (e) { /* si no hay sesiÃ³n, seguimos normal */ }
+      } catch (e) { /* si no hay sesi\u00f3n, seguimos normal */ }
     }
 
     /* 2) Usuario vinculado: busca por linkedPhone/phone (app_data) y por la
-       columna canÃ³nica whatsapp_number (public.profiles), probando todas las
-       variantes del nÃºmero (con/sin el 9, con/sin '+'). */
+       columna can\u00f3nica whatsapp_number (public.profiles), probando todas las
+       variantes del n\u00famero (con/sin el 9, con/sin '+'). */
     const userId2 = await findUserId(inc.from);
     if (!userId2) {
-      console.warn("[whatsapp-webhook] nÃºmero no vinculado:", inc.from);
-      const rpl = "ðŸ¤– No reconozco este nÃºmero. Primero vinculÃ¡ tu cuenta: desde la app generÃ¡ tu cÃ³digo y envialo por WhatsApp.";
+      console.warn("[whatsapp-webhook] n\u00famero no vinculado:", inc.from);
+      const rpl = "[BOT] No reconozco este n\u00famero. Primero vincul\u00e1 tu cuenta: desde la app gener\u00e1 tu c\u00f3digo y envialo por WhatsApp.";
       fireAndForget(sendWhatsApp(inc.from, rpl));
-      return json({ ok: false, error: "nÃºmero no vinculado", reply: rpl });
+      return json({ ok: false, error: "n\u00famero no vinculado", reply: rpl });
     }
     /* 2c) Recuperar el documento app_data del usuario encontrado */
     const rData = await rest("app_data?select=user_id,data&user_id=eq." + encodeURIComponent(userId2) + "&limit=1");
     const rowsData = await rData.json().catch(() => []);
     if (!Array.isArray(rowsData) || !rowsData.length) {
       console.warn("[whatsapp-webhook] usuario sin app_data:", userId2);
-      const rpl = "ðŸ¤– EncontrÃ© tu cuenta pero aÃºn no tiene datos. AbrÃ­ la app una vez para sincronizar y volvÃ© a intentarlo.";
+      const rpl = "[BOT] Encontr\u00e9 tu cuenta pero a\u00fan no tiene datos. Abr\u00ed la app una vez para sincronizar y volv\u00e9 a intentarlo.";
       fireAndForget(sendWhatsApp(inc.from, rpl));
       return json({ ok: false, error: "sin app_data", reply: rpl });
     }
     const row = rowsData[0];
     const data = row.data || {};
 
-    /* 2d) RESTAURAR: recuperar el Ãºltimo registro de la papelera */
+    /* 2d) RESTAURAR: recuperar el \u00faltimo registro de la papelera */
     if (String(inc.text || "").trim().toUpperCase() === "RESTAURAR") {
       const trash = Array.isArray(data.trash) ? data.trash : [];
       if (!trash.length) {
-        fireAndForget(sendWhatsApp(inc.from, "ðŸ¤– No hay registros para restaurar en tu papelera."));
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] No hay registros para restaurar en tu papelera."));
         return json({ ok: true, from: inc.from });
       }
-      const t = trash[0];   // el mÃ¡s reciente (unshift)
+      const t = trash[0];   // el m\u00e1s reciente (unshift)
       if (!t || !t.collection || !Array.isArray(data[t.collection])) {
-        fireAndForget(sendWhatsApp(inc.from, "ðŸ¤– No pude restaurar el registro."));
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] No pude restaurar el registro."));
         return json({ ok: true, from: inc.from });
       }
       data[t.collection].unshift(t.item);
@@ -2140,7 +2162,7 @@ async function processMessage(body: unknown) {
       };
       const tipo = tipos[t.collection] || String(t.collection);
       let detalle = "";
-      if (t.collection === "expenses") detalle = "$" + (item.amount || 0) + " Â· " + (item.category || item.description || "");
+      if (t.collection === "expenses") detalle = "$" + (item.amount || 0) + " \u00b7 " + (item.category || item.description || "");
       else if (t.collection === "incomes") detalle = "$" + (item.amount || 0);
       else if (t.collection === "works") detalle = item.name || item.nombre || "";
       else if (t.collection === "employees") detalle = ((item.firstName || "") + " " + (item.lastName || "")).trim();
@@ -2153,27 +2175,27 @@ async function processMessage(body: unknown) {
         body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
       });
       if (!up.ok) {
-        console.error("[GADU-WA-RESTORE] fallÃ³ PATCH app_data:", up.status);
-        fireAndForget(sendWhatsApp(inc.from, "ðŸ¤– No pude restaurar el registro."));
+        console.error("[GADU-WA-RESTORE] fall\u00f3 PATCH app_data:", up.status);
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] No pude restaurar el registro."));
         return json({ ok: false, error: "patch " + up.status });
       }
       console.log("[GADU-WA-RESTORE] restaurado:", t.collection, t.id);
-      fireAndForget(sendWhatsApp(inc.from, "âœ… El registro " + tipo + (detalle ? " Â· " + detalle : "") + " ha sido recuperado con Ã©xito."));
+      fireAndForget(sendWhatsApp(inc.from, "OK El registro " + tipo + (detalle ? " \u00b7 " + detalle : "") + " ha sido recuperado con \u00e9xito."));
       return json({ ok: true, from: inc.from });
     }
 
     /* 3) Mismo motor que el chat web: ai-assistant en modo servidor.
        Esperamos la respuesta de la IA con un timeout de seguridad de 10s.
-       ReciÃ©n si la IA FALLA (o tarda mÃ¡s de 10s) caemos al fallback local. */
+       Reci\u00e9n si la IA FALLA (o tarda m\u00e1s de 10s) caemos al fallback local. */
     let aiReply = "";
     let action: { modulo: string; campos?: Record<string, unknown> } | null = null;
 
-    /* [GADU-WA-AI-UPGRADE] DetecciÃ³n determinÃ­stica de "adelanto" (regex de apoyo).
-       Si solo dijo "adelanto" sin datos â†’ arrancamos el wizard paso a paso. */
+    /* [GADU-WA-AI-UPGRADE] Detecci\u00f3n determin\u00edstica de "adelanto" (regex de apoyo).
+       Si solo dijo "adelanto" sin datos \u2192 arrancamos el wizard paso a paso. */
     const advIntent = detectAdvanceIntent(inc.text);
 
     /* [GADU-WA-WIZARD] Wizard de gasto (WAITING_GASTO): captura monto + concepto
-       de forma determinÃ­stica ANTES de la IA o el menÃº de respaldo. */
+       de forma determin\u00edstica ANTES de la IA o el men\u00fa de respaldo. */
     let enWizardGasto = false;
     try {
       const sessGasto = await getSession(normalizePhone(inc.from));
@@ -2190,27 +2212,27 @@ async function processMessage(body: unknown) {
             body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
           });
           await deleteSession(normalizePhone(inc.from));
-          const reply = "âœ… " + resG.label;
+          const reply = "OK " + resG.label;
           fireAndForget(sendWhatsApp(inc.from, reply));
           return json({ ok: true, from: inc.from, reply });
         }
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "ðŸ¤– " + (resG.missing ? "Me falta " + resG.missing + "." : "No pude cargar el gasto.") + " ProbÃ¡ de nuevo: \"GastÃ© 5000 de nafta\"."));
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] " + (resG.missing ? "Me falta " + resG.missing + "." : "No pude cargar el gasto.") + " Prob\u00e1 de nuevo: \"Gast\u00e9 5000 de nafta\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       if (localGasto && localGasto.modulo && localGasto.modulo !== "gasto") {
-        /* El usuario cambiÃ³ de idea: cancelar el wizard y dejar que la IA lo resuelva */
+        /* El usuario cambi\u00f3 de idea: cancelar el wizard y dejar que la IA lo resuelva */
         await deleteSession(normalizePhone(inc.from));
         console.log("[GADU-WA-WIZARD] WAITING_GASTO cancelado, respuesta es:", localGasto.modulo);
       } else {
-        fireAndForget(sendWhatsApp(inc.from, "ðŸ¤– Decime el gasto, por ejemplo: \"GastÃ© 5000 de nafta\" o \"5000 de cemento\"."));
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] Decime el gasto, por ejemplo: \"Gast\u00e9 5000 de nafta\" o \"5000 de cemento\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
     }
 
-    /* [GADU-WA-WIZARD] Presupuesto (WAITING_PRESUPUESTO): la IA extrae cliente + Ã­tems.
+    /* [GADU-WA-WIZARD] Presupuesto (WAITING_PRESUPUESTO): la IA extrae cliente + \u00edtems.
        Interceptamos el texto, limpiamos el estado y dejamos que la IA (CREATE_BUDGET)
-       lo procese sin que el menÃº de respaldo lo intercepte. */
+       lo procese sin que el men\u00fa de respaldo lo intercepte. */
     let enWizardPresupuesto = false;
     try {
       const sessPres = await getSession(normalizePhone(inc.from));
@@ -2218,10 +2240,10 @@ async function processMessage(body: unknown) {
     } catch (e) {}
     if (enWizardPresupuesto) {
       if (!inc.text || !inc.text.trim()) {
-        fireAndForget(sendWhatsApp(inc.from, "ðŸ¤– Contame quÃ© querÃ©s incluir en el presupuesto y para quÃ© cliente."));
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] Contame qu\u00e9 quer\u00e9s incluir en el presupuesto y para qu\u00e9 cliente."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
-      await deleteSession(normalizePhone(inc.from));   // la IA procesa el texto libre a continuaciÃ³n
+      await deleteSession(normalizePhone(inc.from));   // la IA procesa el texto libre a continuaci\u00f3n
     }
 
     /* [GADU-WA-WIZARD] Consulta (WAITING_CONSULTA): la IA resuelve la pregunta.
@@ -2233,10 +2255,10 @@ async function processMessage(body: unknown) {
     } catch (e) {}
     if (enWizardConsulta) {
       if (!inc.text || !inc.text.trim()) {
-        fireAndForget(sendWhatsApp(inc.from, "ðŸ¤– Â¿QuÃ© querÃ©s consultar? Saldo de una obra, gastos de la semana, etc."));
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] \u00bfQu\u00e9 quer\u00e9s consultar? Saldo de una obra, gastos de la semana, etc."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
-      await deleteSession(normalizePhone(inc.from));   // la IA (QUERY_DATA) responde a continuaciÃ³n
+      await deleteSession(normalizePhone(inc.from));   // la IA (QUERY_DATA) responde a continuaci\u00f3n
     }
 
     /* [GADU-WA-AI-UPGRADE] Wizard de adelanto en curso (estado WAITING_ADVANCE) */
@@ -2256,26 +2278,26 @@ async function processMessage(body: unknown) {
             body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
           });
           await deleteSession(normalizePhone(inc.from));
-          const reply = "âœ… " + res.label;
+          const reply = "OK " + res.label;
           fireAndForget(sendWhatsApp(inc.from, reply));
           return json({ ok: true, from: inc.from, reply });
         }
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, res.notFound || "ðŸ¤– No pude cargarlo. ProbÃ¡: \"Adelanto de Hugo de 12000\"."));
+        fireAndForget(sendWhatsApp(inc.from, res.notFound || "[BOT] No pude cargarlo. Prob\u00e1: \"Adelanto de Hugo de 12000\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
-      fireAndForget(sendWhatsApp(inc.from, "ðŸ’¸ Â¿A quÃ© empleado y de cuÃ¡nto es el adelanto? Ej: \"Hugo de 12000\"."));
+      fireAndForget(sendWhatsApp(inc.from, "$ \u00bfA qu\u00e9 empleado y de cu\u00e1nto es el adelanto? Ej: \"Hugo de 12000\"."));
       return json({ ok: true, from: inc.from, reply: "" });
     }
 
-    /* [GADU-WA-WIZARD] Wizard de obra (estado WAITING_OBRA): nombre + direcciÃ³n */
+    /* [GADU-WA-WIZARD] Wizard de obra (estado WAITING_OBRA): nombre + direcci\u00f3n */
     let enWizardObra = false;
     try {
       const sessObra = await getSession(normalizePhone(inc.from));
       if (sessObra && sessObra.state === "WAITING_OBRA") enWizardObra = true;
     } catch (e) {}
     if (enWizardObra) {
-      /* Si el usuario cambiÃ³ de idea (dijo un gasto/adelanto/consulta en lugar del
+      /* Si el usuario cambi\u00f3 de idea (dijo un gasto/adelanto/consulta en lugar del
          nombre de la obra), cancelar el wizard y dejar que la IA lo resuelva. */
       const localOtra = localIntent(inc.text);
       if (localOtra && localOtra.modulo && localOtra.modulo !== "obra") {
@@ -2294,15 +2316,15 @@ async function processMessage(body: unknown) {
               body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
             });
             await deleteSession(normalizePhone(inc.from));
-            const reply = "âœ… " + res.label;
+            const reply = "OK " + res.label;
             fireAndForget(sendWhatsApp(inc.from, reply));
             return json({ ok: true, from: inc.from, reply });
           }
           await deleteSession(normalizePhone(inc.from));
-          fireAndForget(sendWhatsApp(inc.from, "ðŸ¤– No pude crear la obra. ProbÃ¡ de nuevo: \"Casa PÃ©rez en Alta Gracia\"."));
+          fireAndForget(sendWhatsApp(inc.from, "[BOT] No pude crear la obra. Prob\u00e1 de nuevo: \"Casa P\u00e9rez en Alta Gracia\"."));
           return json({ ok: true, from: inc.from, reply: "" });
         }
-        fireAndForget(sendWhatsApp(inc.from, "ðŸ¤– Â¿CÃ³mo se llama la obra? Ej: \"Casa PÃ©rez en Alta Gracia\"."));
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] \u00bfC\u00f3mo se llama la obra? Ej: \"Casa P\u00e9rez en Alta Gracia\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
     }
@@ -2322,19 +2344,19 @@ async function processMessage(body: unknown) {
       const t = inc.text.trim();
       if (/^cancelar$/i.test(t)) {
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "âœ… Carga cancelada. Â¿En quÃ© mÃ¡s te ayudo?"));
+        fireAndForget(sendWhatsApp(inc.from, "OK Carga cancelada. \u00bfEn qu\u00e9 m\u00e1s te ayudo?"));
         return json({ ok: true, from: inc.from, reply: "cancelado" });
       }
       if (!t) {
-        fireAndForget(sendWhatsApp(inc.from, "ðŸ¤– Â¿CuÃ¡l es el nombre completo del contacto?"));
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] \u00bfCu\u00e1l es el nombre completo del contacto?"));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       await upsertSession(inc.from, row.user_id, "WAITING_CONTACT_PHONE", { contactType: contactNameCtx.contactType, name: t });
-      fireAndForget(sendWhatsApp(inc.from, "Perfecto. Â¿CuÃ¡l es el nÃºmero de telÃ©fono de *" + t + "*? (o escribÃ­ *omitir*)"));
+      fireAndForget(sendWhatsApp(inc.from, "Perfecto. \u00bfCu\u00e1l es el n\u00famero de tel\u00e9fono de *" + t + "*? (o escrib\u00ed *omitir*)"));
       return json({ ok: true, from: inc.from, reply: "" });
     }
 
-    /* [GADU-WA-WIZARD] Contacto paso 2: telÃ©fono (WAITING_CONTACT_PHONE) */
+    /* [GADU-WA-WIZARD] Contacto paso 2: tel\u00e9fono (WAITING_CONTACT_PHONE) */
     let enWizardContactPhone = false;
     let contactPhoneCtx: Record<string, unknown> = {};
     try {
@@ -2348,7 +2370,7 @@ async function processMessage(body: unknown) {
       const t = inc.text.trim();
       if (/^cancelar$/i.test(t)) {
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "âœ… Carga cancelada. Â¿En quÃ© mÃ¡s te ayudo?"));
+        fireAndForget(sendWhatsApp(inc.from, "OK Carga cancelada. \u00bfEn qu\u00e9 m\u00e1s te ayudo?"));
         return json({ ok: true, from: inc.from, reply: "cancelado" });
       }
       const name = String(contactPhoneCtx.name || "").trim();
@@ -2374,13 +2396,13 @@ async function processMessage(body: unknown) {
       });
       await deleteSession(normalizePhone(inc.from));
       const label = contactType === "empleado" ? "Empleado" : (contactType === "socio" ? "Socio" : "Cliente");
-      fireAndForget(sendWhatsApp(inc.from, "âœ… Contacto guardado correctamente: " + label + " '" + name + "'."));
+      fireAndForget(sendWhatsApp(inc.from, "OK Contacto guardado correctamente: " + label + " '" + name + "'."));
       return json({ ok: true, from: inc.from, reply: "contacto guardado" });
     }
 
     /* [GADU-WA-EXPORT] Exportar gastos a Excel (comando "excel" / "exportar gastos") */
     if (/\b(excel|planilla|xlsx)\b/i.test(inc.text) || /exportar\s+(gastos|movimientos|todo|mis\s+datos)/i.test(inc.text)) {
-      console.log("[GADU-WA-EXPORT] pedido de exportaciÃ³n:", inc.text);
+      console.log("[GADU-WA-EXPORT] pedido de exportaci\u00f3n:", inc.text);
       try {
         const xlsxBytes = exportExpensesXlsx(data);
         const ok = await sendWhatsAppDocument(
@@ -2391,17 +2413,17 @@ async function processMessage(body: unknown) {
           "Gastos GADU",
         );
         if (!ok) {
-          fireAndForget(sendWhatsApp(inc.from, "ðŸ¤– No pude generar el archivo. ProbÃ¡ de nuevo en unos minutos."));
+          fireAndForget(sendWhatsApp(inc.from, "[BOT] No pude generar el archivo. Prob\u00e1 de nuevo en unos minutos."));
         }
       } catch (e) {
         console.error("[GADU-WA-EXPORT] error generando excel:", e);
-        fireAndForget(sendWhatsApp(inc.from, "ðŸ¤– No pude generar el archivo. ProbÃ¡ de nuevo en unos minutos."));
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] No pude generar el archivo. Prob\u00e1 de nuevo en unos minutos."));
       }
       return json({ ok: true, from: inc.from, reply: "excel" });
     }
 
     if (advIntent && !advIntent.nombre && advIntent.monto <= 0) {
-      const reply = "ðŸ’¸ Â¡Vamos a cargar el adelanto! Decime *a quÃ© empleado* y *de cuÃ¡nto* es. Por ejemplo: \"Adelanto de Hugo de 12000\".";
+      const reply = "$ \u00a1Vamos a cargar el adelanto! Decime *a qu\u00e9 empleado* y *de cu\u00e1nto* es. Por ejemplo: \"Adelanto de Hugo de 12000\".";
       await upsertSession(inc.from, row.user_id, "WAITING_ADVANCE", {});
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
@@ -2432,19 +2454,19 @@ async function processMessage(body: unknown) {
         signal: aiController.signal,
       });
       const ai = await aiRes.json().catch(() => ({}));
-      console.log("[GADU-WA-BACKGROUND] ai-assistant http", aiRes.status, "Â· action:", JSON.stringify(ai.action || null), "Â· reply:", JSON.stringify(ai.reply || ai.error || ""));
+      console.log("[GADU-WA-BACKGROUND] ai-assistant http", aiRes.status, "\u00b7 action:", JSON.stringify(ai.action || null), "\u00b7 reply:", JSON.stringify(ai.reply || ai.error || ""));
       aiReply = ai.reply || "";
       if (ai.action && ai.action.modulo && RECOGNIZED_MODULOS.includes(ai.action.modulo)) {
         action = ai.action;
       } else {
-        console.warn("[GADU-WA-BACKGROUND] IA sin acciÃ³n o mÃ³dulo no reconocido:", JSON.stringify(ai.action || null), "Â· status=", aiRes.status);
+        console.warn("[GADU-WA-BACKGROUND] IA sin acci\u00f3n o m\u00f3dulo no reconocido:", JSON.stringify(ai.action || null), "\u00b7 status=", aiRes.status);
       }
     } catch (e) {
-      console.error("[GADU-WA-BACKGROUND] ai-assistant fallÃ³/abortÃ³:", e);
+      console.error("[GADU-WA-BACKGROUND] ai-assistant fall\u00f3/abort\u00f3:", e);
     } finally {
       clearTimeout(aiTimer);
     }
-    /* Fallback local SOLO si la IA no devolviÃ³ acciÃ³n */
+    /* Fallback local SOLO si la IA no devolvi\u00f3 acci\u00f3n */
     if (!action) {
       const local = localIntent(inc.text);
       if (local) {
@@ -2452,7 +2474,7 @@ async function processMessage(body: unknown) {
         console.log("[GADU-WA-BACKGROUND] usando intent local (fallback):", JSON.stringify(local));
       }
     }
-    /* [GADU-WA-SMART-CONTEXT] Si el regex detectÃ³ "adelanto" con nombre+monto, desambiguar cliente vs empleado */
+    /* [GADU-WA-SMART-CONTEXT] Si el regex detect\u00f3 "adelanto" con nombre+monto, desambiguar cliente vs empleado */
     if (advIntent && advIntent.nombre && advIntent.monto > 0) {
       const target = resolveAdvanceTarget(data, advIntent.nombre);
       if (target.kind === "cliente") {
@@ -2460,18 +2482,18 @@ async function processMessage(body: unknown) {
       } else {
         action = { modulo: "adelanto", campos: { empleado: target.nombre, monto: advIntent.monto } };
       }
-      console.log("[GADU-WA-SMART-CONTEXT] adelanto â†’ " + target.kind + ":", target.nombre, "Â· monto:", advIntent.monto);
+      console.log("[GADU-WA-SMART-CONTEXT] adelanto \u2192 " + target.kind + ":", target.nombre, "\u00b7 monto:", advIntent.monto);
     }
     console.log("[DEBUG] Intent detectado: " + (action ? action.modulo : "ninguno"));
 
-    /* Saludo â†’ respuesta directa (sin acciÃ³n contable) */
+    /* Saludo \u2192 respuesta directa (sin acci\u00f3n contable) */
     if (action && action.modulo === "saludo") {
-      const reply = ((action as unknown) as { reply?: string }).reply || "Â¡Hola! ðŸ‘‹ Soy GADU. Â¿En quÃ© te ayudo?";
+      const reply = ((action as unknown) as { reply?: string }).reply || "\u00a1Hola! Hola Soy GADU. \u00bfEn qu\u00e9 te ayudo?";
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
     }
 
-    /* Consultas (QUERY_DATA): responder con cÃ¡lculos en memoria (no guardar nada) */
+    /* Consultas (QUERY_DATA): responder con c\u00e1lculos en memoria (no guardar nada) */
     if (action && action.modulo === "consulta") {
       const c = (action.campos || {}) as Record<string, unknown>;
       const qtype = String(c.query_type || "");
@@ -2481,8 +2503,8 @@ async function processMessage(body: unknown) {
       else if (qtype === "expenses_week") reply = queryExpensesWeek(data);
       else if (qtype === "attendance_today") reply = queryAttendanceToday(data);
       else if (qtype === "pending_salaries") reply = queryPendingSalaries(data, target);
-      else reply = "ðŸ¤– No entendÃ­ la consulta. ProbÃ¡ preguntando 'Â¿CuÃ¡l es el saldo de la obra X?'";
-      console.log("[GADU-WA-QUERY]", qtype || "(sin tipo)", "Â· target:", target);
+      else reply = "[BOT] No entend\u00ed la consulta. Prob\u00e1 preguntando '\u00bfCu\u00e1l es el saldo de la obra X?'";
+      console.log("[GADU-WA-QUERY]", qtype || "(sin tipo)", "\u00b7 target:", target);
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
     }
@@ -2495,7 +2517,7 @@ async function processMessage(body: unknown) {
         ? c.items.map((it: any) => ({ descripcion: String(it.descripcion || ""), cantidad: Number(it.cantidad) || 0, precio: Number(it.precio) || 0 }))
         : [];
       if (!items.length) {
-        fireAndForget(sendWhatsApp(inc.from, "ðŸ¤– Me faltan los Ã­tems del presupuesto. DecÃ­melos de nuevo, por ejemplo: \"20 m2 de cerÃ¡mica, 3 bolsas de pegamento\"."));
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] Me faltan los \u00edtems del presupuesto. Dec\u00edmelos de nuevo, por ejemplo: \"20 m2 de cer\u00e1mica, 3 bolsas de pegamento\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       try {
@@ -2527,19 +2549,19 @@ async function processMessage(body: unknown) {
           headers: { Prefer: "return=minimal" },
           body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
         });
-        if (!up.ok) console.error("[GADU-WA-BUDGET] fallÃ³ PATCH app_data:", up.status);
+        if (!up.ok) console.error("[GADU-WA-BUDGET] fall\u00f3 PATCH app_data:", up.status);
 
         const pdf = await generateBudgetPDF({ cliente, items });
-        const filename = "Presupuesto_" + String(cliente || "gadu").replace(/[^a-z0-9Ã¡Ã©Ã­Ã³ÃºÃ± ]/gi, "").replace(/\s+/g, "_") + ".pdf";
+        const filename = "Presupuesto_" + String(cliente || "gadu").replace(/[^a-z0-9\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1 ]/gi, "").replace(/\s+/g, "_") + ".pdf";
         const ok = await sendWhatsAppDocument(inc.from, pdf, filename);
         const reply = ok
-          ? "âœ… Presupuesto para " + cliente + " guardado y adjuntado. PodÃ©s verlo en la secciÃ³n 'Presupuestos' de la app."
-          : "âœ… Presupuesto para " + cliente + " guardado. (No pude adjuntar el PDF, probÃ¡ de nuevo.)";
+          ? "OK Presupuesto para " + cliente + " guardado y adjuntado. Pod\u00e9s verlo en la secci\u00f3n 'Presupuestos' de la app."
+          : "OK Presupuesto para " + cliente + " guardado. (No pude adjuntar el PDF, prob\u00e1 de nuevo.)";
         fireAndForget(sendWhatsApp(inc.from, reply));
         return json({ ok: true, from: inc.from, reply });
       } catch (e) {
         console.error("[GADU-WA-DOC] error generando PDF:", e);
-        fireAndForget(sendWhatsApp(inc.from, "âŒ No pude generar el PDF. ProbÃ¡ de nuevo."));
+        fireAndForget(sendWhatsApp(inc.from, "[ERROR] No pude generar el PDF. Prob\u00e1 de nuevo."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
     }
@@ -2559,7 +2581,7 @@ async function processMessage(body: unknown) {
           flatStr(String((x.firstName || "") + " " + (x.lastName || "")).trim()).includes(flatStr(nombre))
         );
         if (!emp) { noEncontrados.push(nombre); continue; }
-        /* Resolver la obra (work) â†’ workId; si no se encuentra o no se dijo, null */
+        /* Resolver la obra (work) \u2192 workId; si no se encuentra o no se dijo, null */
         const workName = String((e as any).work || "").trim();
         let workId: string | null = null;
         let workLabel = "";
@@ -2578,55 +2600,59 @@ async function processMessage(body: unknown) {
         headers: { Prefer: "return=minimal" },
         body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
       });
-      if (!up.ok) console.error("[GADU-WA-ATT] fallÃ³ PATCH app_data:", up.status);
+      if (!up.ok) console.error("[GADU-WA-ATT] fall\u00f3 PATCH app_data:", up.status);
       const partes = registrados.map(r => r.nombre + " (" + r.horas + "hs" + (r.workLabel ? " en " + r.workLabel : " sin obra asignada") + ")");
-      let reply = "âœ… Asistencia registrada: " + (partes.join(", ") || "nadie") + ".";
-      if (noEncontrados.length) reply += " (No encontrÃ© a " + noEncontrados.join(", ") + " en tu lista de empleados).";
+      let reply = "OK Asistencia registrada: " + (partes.join(", ") || "nadie") + ".";
+      if (noEncontrados.length) reply += " (No encontr\u00e9 a " + noEncontrados.join(", ") + " en tu lista de empleados).";
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
     }
 
-    /* 4) Ejecutar la acciÃ³n contable (gasto/ingreso) e impactar en app_data */
+    /* 4) Ejecutar la acci\u00f3n contable (gasto/ingreso) e impactar en app_data */
     if (action && ["gasto", "ingreso", "empleado", "adelanto", "obra"].includes(action.modulo)) {
       const res = executeAction(data, action, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
       if (res.ok) {
+        /* Si el gasto vino de una FOTO de ticket, adjuntar el comprobante ANTES del PATCH
+           (si lo hacemos despu\u00e9s, el receiptUrl no se persiste). */
+        if (action.modulo === "gasto" && inc.mediaUrl) {
+          const gastoNuevo = (data.expenses && data.expenses[0]) || null;
+          if (gastoNuevo) gastoNuevo.receiptUrl = inc.mediaUrl;
+        }
         const up = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
           method: "PATCH",
           headers: { Prefer: "return=minimal" },
           body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
         });
         if (!up.ok) {
-          console.error("[whatsapp-webhook] fallÃ³ impactar el movimiento:", up.status);
+          console.error("[whatsapp-webhook] fall\u00f3 impactar el movimiento:", up.status);
           return json({ ok: false, error: "no se pudo guardar el movimiento" });
         }
-        let reply = (aiReply ? aiReply + "\n\n" : "") + "âœ… " + res.label;
-        /* Deep link + notificaciÃ³n push: enlazar al gasto reciÃ©n creado */
+        let reply = (aiReply ? aiReply + "\n\n" : "") + "OK " + res.label;
+        /* Deep link + notificaci\u00f3n push: enlazar al gasto reci\u00e9n creado */
         if (action.modulo === "gasto") {
           const gasto = (data.expenses && data.expenses[0]) || null;
           if (gasto) {
-            /* Si el gasto vino de una FOTO de ticket, adjuntar el comprobante */
-            if (inc.mediaUrl) gasto.receiptUrl = inc.mediaUrl;
             const gastoId = String(gasto.id || "");
             const monto = Number(gasto.amount) || 0;
             const cat = String(gasto.category || "gasto");
-            if (gastoId) reply += "\n\nðŸ‘‰ Ver en GADU: https://gestiongadu.vercel.app/#/gastos?id=" + gastoId;
-            firePush(row.user_id, "GADU Â· Gasto registrado", "Se guardÃ³ un gasto de $" + monto + " en " + cat + ". TocÃ¡ para verlo.", "/#/gastos?id=" + gastoId);
+            if (gastoId) reply += "\n\n-> Ver en GADU: https://gestiongadu.vercel.app/#/gastos?id=" + gastoId;
+            firePush(row.user_id, "GADU \u00b7 Gasto registrado", "Se guard\u00f3 un gasto de $" + monto + " en " + cat + ". Toc\u00e1 para verlo.", "/#/gastos?id=" + gastoId);
           }
         }
         fireAndForget(sendWhatsApp(inc.from, reply));
-        /* Si quedÃ³ SIN obra (gasto en bandeja o adelanto de cliente), preguntar a quÃ© obra */
+        /* Si qued\u00f3 SIN obra (gasto en bandeja o adelanto de cliente), preguntar a qu\u00e9 obra */
         if (res.pendingWork) {
           await askForWork(inc.from, row.user_id, data);
         }
         return json({ ok: true, from: inc.from, reply });
       }
-      const reply = aiReply || (res.notFound ? res.notFound : "ðŸ¤– Me falta " + (res.missing || "un dato") + " para cargarlo. DecÃ­melo por acÃ¡.");
+      const reply = aiReply || (res.notFound ? res.notFound : "[BOT] Me falta " + (res.missing || "un dato") + " para cargarlo. Dec\u00edmelo por ac\u00e1.");
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
     }
 
       /* 5) Fallback inteligente: ofrecer opciones en lugar de mandar a la web */
-      const reply = aiReply || "ðŸ¤– No estoy seguro de quÃ© querÃ©s hacer. ElegÃ­ una opciÃ³n ðŸ‘‡";
+      const reply = aiReply || "[BOT] No estoy seguro de qu\u00e9 quer\u00e9s hacer. Eleg\u00ed una opci\u00f3n [abajo]";
       fireAndForget(sendWhatsAppButtons(inc.from, reply, [
         { id: "fallback_gasto", title: "Cargar un Gasto" },
         { id: "fallback_adelanto", title: "Cargar un Adelanto" },
@@ -2635,21 +2661,21 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
   } catch (error) {
     console.error("[GADU-WA-QUEUE-FIX] CRITICAL ERROR en processMessage:", error);
-    throw error;   // â† propagar para que drainPhone lo marque como fallido y siga
+    throw error;   //  propagar para que drainPhone lo marque como fallido y siga
   }
 }
 
 /* ===== Drain FIFO de la cola ===== */
 async function drainPhone(phone: string) {
-  /* [GADU-WA-RESET] Liberar mensajes 'processing' huÃ©rfanos (crash) hace mÃ¡s de 3 min */
+  /* [GADU-WA-RESET] Liberar mensajes 'processing' hu\u00e9rfanos (crash) hace m\u00e1s de 3 min */
   try {
     const freed = await resetStaleProcessing(rest);
-    if (freed > 0) console.warn("[GADU-WA-RESET] liberados", freed, "mensaje(s) processing huÃ©rfano(s)");
+    if (freed > 0) console.warn("[GADU-WA-RESET] liberados", freed, "mensaje(s) processing hu\u00e9rfano(s)");
   } catch (e) {
-    console.warn("[GADU-WA-RESET] error liberando huÃ©rfanos:", e);
+    console.warn("[GADU-WA-RESET] error liberando hu\u00e9rfanos:", e);
   }
 
-  /* Mutex por telÃ©fono: si otro drain ya tiene un mensaje en 'processing',
+  /* Mutex por tel\u00e9fono: si otro drain ya tiene un mensaje en 'processing',
      salimos para no pisar el read-modify-write de app_data. */
   const busy = await rest("whatsapp_queue?status=eq.processing&phone=eq." + encodeURIComponent(phone) + "&limit=1", { method: "GET" });
   const busyRows = (await busy.json().catch(() => [])) as Array<{ id: number }>;
@@ -2657,7 +2683,7 @@ async function drainPhone(phone: string) {
 
   let item = await claimNext(rest, phone);
   while (item) {
-    console.log("[GADU-WA-CRITICAL-FIX] Procesando mensaje", item.id, "Â· status=", item.status, "Â· attempts=", item.attempts);
+    console.log("[GADU-WA-CRITICAL-FIX] Procesando mensaje", item.id, "\u00b7 status=", item.status, "\u00b7 attempts=", item.attempts);
     try {
       await processMessage(item.payload);
       await markDone(rest, item.id);
@@ -2667,7 +2693,7 @@ async function drainPhone(phone: string) {
       await markFailed(rest, item.id);
       /* Avisar al usuario y SEGUIR con el siguiente mensaje de la cola */
       try {
-        await sendWhatsApp(item.phone, "ðŸ¤– FallÃ³ el procesamiento, reintenta o escrÃ­belo por texto.");
+        await sendWhatsApp(item.phone, "[BOT] Fall\u00f3 el procesamiento, reintenta o escr\u00edbelo por texto.");
       } catch (e2) {
         console.error("[GADU-WA-CRITICAL-FIX] no se pudo notificar el fallo:", e2);
       }
