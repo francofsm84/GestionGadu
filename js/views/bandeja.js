@@ -38,6 +38,19 @@
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
   }
 
+  /* Forzar recarga de obras desde la nube si S.data.works está vacío */
+  async function reloadWorks() {
+    try {
+      if (!G.sync || typeof G.sync.pull !== 'function') return;
+      const remote = await G.sync.pull();
+      if (remote && remote.data && Array.isArray(remote.data.works) && remote.data.works.length) {
+        S.applyRemote(remote.data);
+      }
+    } catch (e) {
+      console.warn('[bandeja] no se pudo recargar obras:', e);
+    }
+  }
+
   function render(view) {
     view.innerHTML =
       '<div class="toolbar">' +
@@ -51,6 +64,14 @@
       bindList(view.querySelector('#listWrap'));
     });
     bindList(view.querySelector('#listWrap'));
+
+    /* Si no hay obras en memoria, traerlas de la nube y re-renderizar el select */
+    if (!(S.data.works && S.data.works.length)) {
+      reloadWorks().then(() => {
+        const wrap = view.querySelector('#listWrap');
+        if (wrap) { wrap.innerHTML = listHTML(pendientes()); bindList(wrap); }
+      });
+    }
   }
 
   function listHTML(list) {
