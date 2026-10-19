@@ -3,8 +3,6 @@
 // La app web (js/store.js) invoca esta función al borrar un
 // registro, para avisar al usuario y ofrecerle RESTAURAR.
 // ============================================================
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -20,7 +18,7 @@ function toMetaPhone(p: unknown): string {
   return d;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
