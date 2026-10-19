@@ -1910,6 +1910,109 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply: "empleado guardado" });
     }
 
+    /* [GADU-WA-WIZARD] Agenda paso 2: fecha (WAITING_AGENDA_FECHA) */
+    let enWizardAgendaFecha = false;
+    let agendaFechaCtx: Record<string, unknown> = {};
+    try {
+      const sessAF = await getSession(normalizePhone(inc.from));
+      if (sessAF && sessAF.state === "WAITING_AGENDA_FECHA") { enWizardAgendaFecha = true; agendaFechaCtx = (sessAF.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardAgendaFecha) {
+      const t = String(inc.text || "").trim();
+      const fecha = resolveFecha(t);
+      if (!fecha) { fireAndForget(sendWhatsApp(inc.from, "🤖 No entendí esa fecha. Decime \"hoy\", \"mañana\" o una fecha (ej. 15/04).")); return json({ ok: true, from: inc.from, reply: "" }); }
+      await upsertSession(inc.from, row.user_id, "WAITING_AGENDA_OBRA", { titulo: agendaFechaCtx.titulo, fecha });
+      fireAndForget(sendWhatsApp(inc.from, "¿A qué obra o contacto se relaciona? (escribí *ninguna* si no aplica)"));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* Agenda paso 3: obra/contacto → guardar (WAITING_AGENDA_OBRA) */
+    let enWizardAgendaObra = false;
+    let agendaObraCtx: Record<string, unknown> = {};
+    try {
+      const sessAO2 = await getSession(normalizePhone(inc.from));
+      if (sessAO2 && sessAO2.state === "WAITING_AGENDA_OBRA") { enWizardAgendaObra = true; agendaObraCtx = (sessAO2.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardAgendaObra) {
+      const t = String(inc.text || "").trim();
+      const sinRef = /^(ninguna|nada|sin\s+obra)$/i.test(t);
+      const work = !sinRef ? (data.works || []).find((w: any) => flat(String(w.nombre || w.name || "")).includes(flat(t))) : null;
+      (data.compromisos || (data.compromisos = [])).unshift({
+        id: crypto.randomUUID(), fecha: String(agendaObraCtx.fecha || ""), hora: "", tipo: "compromiso",
+        titulo: String(agendaObraCtx.titulo || "Compromiso"), lugar: "", contactoId: work ? String(work.id) : null,
+        notas: sinRef ? "" : t, estado: "pendiente", createdAt: new Date().toISOString(),
+      });
+      await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+      });
+      await deleteSession(normalizePhone(inc.from));
+      fireAndForget(sendWhatsApp(inc.from, "✅ Compromiso agendado: " + String(agendaObraCtx.titulo || "") + " (" + String(agendaObraCtx.fecha || "") + ")"));
+      return json({ ok: true, from: inc.from, reply: "compromiso guardado" });
+    }
+
+    /* [GADU-WA-WIZARD] Jornada paso 1: empleado (WAITING_JORNADA) */
+    let enWizardJornada = false;
+    try {
+      const sessJor = await getSession(normalizePhone(inc.from));
+      if (sessJor && sessJor.state === "WAITING_JORNADA") enWizardJornada = true;
+    } catch (e) {}
+    if (enWizardJornada) {
+      const t = String(inc.text || "").trim();
+      if (!t) { fireAndForget(sendWhatsApp(inc.from, "🤖 ¿A qué empleado le cargamos la jornada?")); return json({ ok: true, from: inc.from, reply: "" }); }
+      await upsertSession(inc.from, row.user_id, "WAITING_JORNADA_HORAS", { empleado: t });
+      fireAndForget(sendWhatsApp(inc.from, "¿Cuántas horas trabajó? (ej. 8)"));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* Jornada paso 2: horas (WAITING_JORNADA_HORAS) */
+    let enWizardJorHoras = false;
+    let jorHorasCtx: Record<string, unknown> = {};
+    try {
+      const sessJH = await getSession(normalizePhone(inc.from));
+      if (sessJH && sessJH.state === "WAITING_JORNADA_HORAS") { enWizardJorHoras = true; jorHorasCtx = (sessJH.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardJorHoras) {
+      const t = String(inc.text || "").trim();
+      const horas = Number(t.replace(/[^\d.,]/g, "").replace(",", "."));
+      if (!horas || horas <= 0) { fireAndForget(sendWhatsApp(inc.from, "🤖 Eso no es un número de horas válido. ¿Cuántas horas trabajó?")); return json({ ok: true, from: inc.from, reply: "" }); }
+      await upsertSession(inc.from, row.user_id, "WAITING_JORNADA_OBRA", { empleado: jorHorasCtx.empleado, horas });
+      fireAndForget(sendWhatsApp(inc.from, "¿En qué obra trabajó?"));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* Jornada paso 3: obra → guardar (WAITING_JORNADA_OBRA) */
+    let enWizardJorObra = false;
+    let jorObraCtx: Record<string, unknown> = {};
+    try {
+      const sessJO = await getSession(normalizePhone(inc.from));
+      if (sessJO && sessJO.state === "WAITING_JORNADA_OBRA") { enWizardJorObra = true; jorObraCtx = (sessJO.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardJorObra) {
+      const t = String(inc.text || "").trim();
+      const emp = (data.employees || []).find((e: any) => flat(String((e.firstName || "") + " " + (e.lastName || "")).trim()).includes(flat(String(jorObraCtx.empleado || ""))));
+      if (!emp) {
+        await deleteSession(normalizePhone(inc.from));
+        fireAndForget(sendWhatsApp(inc.from, "🤖 No encontré a ese empleado. Primero cargalo con \"nuevo empleado [nombre]\"."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      const work = (data.works || []).find((w: any) => flat(String(w.nombre || w.name || "")).includes(flat(t)));
+      (data.attendance || (data.attendance = [])).unshift({
+        id: crypto.randomUUID(), employeeId: String((emp as any).id || ""), date: new Date().toISOString().slice(0, 10),
+        status: "presente", hours: [{ workId: work ? String((work as any).id) : null, hours: Number(jorObraCtx.horas) || 0 }], notes: "",
+      });
+      await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+      });
+      await deleteSession(normalizePhone(inc.from));
+      const empName = String((emp as any).firstName || "") + " " + String((emp as any).lastName || "");
+      fireAndForget(sendWhatsApp(inc.from, "✅ Jornada registrada: " + empName.trim() + " · " + Number(jorObraCtx.horas) + "h" + (work ? " en " + String((work as any).nombre || (work as any).name || "") : "")));
+      return json({ ok: true, from: inc.from, reply: "jornada guardada" });
+    }
+
     /* [GADU-WA-EXPORT] Exportar gastos a Excel (comando "excel" / "exportar gastos") */
     if (/\b(excel|planilla|xlsx)\b/i.test(inc.text) || /exportar\s+(gastos|movimientos|todo|mis\s+datos)/i.test(inc.text)) {
       console.log("[GADU-WA-EXPORT] pedido de exportación:", inc.text);
@@ -2119,6 +2222,27 @@ async function processMessage(body: unknown) {
     }
 
     /* 4) Ejecutar la acción contable (gasto/ingreso) e impactar en app_data */
+    /* [AGENDA/JORNADA] módulos con wizard propio: NO pasan por executeAction */
+    if (action && action.modulo === "agendar") {
+      const titulo = String((action.campos || {}).titulo || "").trim();
+      await upsertSession(inc.from, row.user_id, "WAITING_AGENDA_FECHA", { titulo: titulo || "Compromiso" });
+      fireAndForget(sendWhatsApp(inc.from, "¿Para qué día? (ej. hoy, mañana, 15/04, 2026-04-15)"));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+    if (action && action.modulo === "jornada") {
+      const cj = (action.campos || {}) as Record<string, unknown>;
+      const empleado = String(cj.empleado || "").trim();
+      const horas = Number(cj.horas) || 0;
+      if (empleado && horas > 0) {
+        await upsertSession(inc.from, row.user_id, "WAITING_JORNADA_OBRA", { empleado, horas });
+        fireAndForget(sendWhatsApp(inc.from, "¿En qué obra trabajó?"));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      await upsertSession(inc.from, row.user_id, "WAITING_JORNADA", {});
+      fireAndForget(sendWhatsApp(inc.from, "¿A qué empleado le cargamos la jornada?"));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
     if (action && ["gasto", "ingreso", "empleado", "adelanto", "obra", "inversion"].includes(action.modulo)) {
       /* [EMPLEADO multi-paso] Si hay nombre pero faltan oficio/tarifa/teléfono,
          arrancar el wizard secuencial en lugar de crear un empleado incompleto. */

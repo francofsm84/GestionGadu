@@ -299,6 +299,14 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
   m = f.match(/(?:nueva\s+obra|crear\s+obra|obra\s+nueva)\s+(.+?)(?:\s+en\s+(.+))?$/i);
   if (m && String(m[1] || "").trim()) return { modulo: "obra", campos: { nombre: String(m[1] || "").trim(), ubicacion: String(m[2] || "").trim() } };
 
+  /* 7a) Agenda/compromiso: "agendar visita mañana" / "nueva visita a la obra" */
+  m = f.match(/(?:agendar|agenda|nuevo\s+compromiso|compromiso|visita|reuni[oó]n|entrega|evento)\s+(.+)/i);
+  if (m && String(m[1] || "").trim()) return { modulo: "agendar", campos: { titulo: String(m[1] || "").trim() } };
+
+  /* 7b) Jornada: "Juan 8 horas en obra X" / "jornada de Juan 8 horas" */
+  m = f.match(/(?:jornada\s+(?:de\s+)?)?(.+?)\s+([\d]+(?:\s*[.,]\s*\d+)?)\s*horas?\s+(?:en\s+)?(.+)/i);
+  if (m && String(m[1] || "").trim() && Number(m[2]) > 0) return { modulo: "jornada", campos: { empleado: String(m[1] || "").trim(), horas: Number(m[2]), obra: String(m[3] || "").trim() } };
+
   /* 7b) Gasto SIN verbo: "45678 de nafta" / "5000 de cemento" (número + "de" + concepto) */
   m = f.match(/^([\d][\d.,]*)\s+de\s+(.+)/i);
   if (m && num(m[1]) > 0) {
