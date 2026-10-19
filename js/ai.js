@@ -1016,9 +1016,10 @@
     const pillsUser = [
       { k: 'new-obra', e: '🏗️', l: 'Nueva obra' },
       { k: 'new-gasto', e: '💸', l: 'Cargar gasto' },
+      { k: 'new-ingreso', e: '💰', l: 'Registrar cobro' },
       { k: 'pago', e: '💳', l: 'Pago / Adelanto' },
       { k: 'new-presupuesto', e: '📄', l: 'Presupuesto' },
-      { k: 'contabilidad', e: '💰', l: 'Consultar saldo' },
+      { k: 'contabilidad', e: '📊', l: 'Consultar saldo' },
       { k: 'new-contacto', e: '👤', l: 'Nuevo contacto' },
       { k: 'hoy', e: '👷', l: '¿Quién trabajó hoy?' },
       { k: 'herramientas', e: '🛠️', l: 'Herramientas' },
