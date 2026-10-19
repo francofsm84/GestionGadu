@@ -777,6 +777,19 @@ async function handleButtonReply(from: string, buttonId: string) {
     } catch (e) {}
   }
 
+  /* [GADU-WA-ADVANCE-TYPE] Selección del tipo de adelanto */
+  if (buttonId.startsWith("advance_type:")) {
+    const tipo = buttonId.slice("advance_type:".length);
+    if (tipo === "empleado") {
+      await upsertSession(from, userId, "WAITING_ADVANCE", {});
+      fireAndForget(sendWhatsApp(from, "💸 Decime *a qué empleado* y *de cuánto* es el adelanto. Ej: \"Adelanto de Hugo de 12000\"."));
+    } else if (tipo === "cliente") {
+      await upsertSession(from, userId, "WAITING_CLIENT_ADVANCE", {});
+      fireAndForget(sendWhatsApp(from, "💰 Decime *de qué cliente/obra* es el adelanto y *de cuánto*. Ej: \"Adelanto de 50000 de la obra Casa Pérez\"."));
+    }
+    return;
+  }
+
   /* [GADU-WA-MENU] Opciones del menú principal (lista interactiva unificada) */
   if (buttonId.startsWith("action_")) {
     const act = buttonId.slice("action_".length);
@@ -801,8 +814,11 @@ async function handleButtonReply(from: string, buttonId: string) {
       return;
     }
     if (act === "adelanto") {
-      await upsertSession(from, userId, "WAITING_ADVANCE", {});
-      fireAndForget(sendWhatsApp(from, "💸 Decime *a qué empleado* y *de cuánto* es el adelanto. Ej: \"Adelanto de Hugo de 12000\"."));
+      await upsertSession(from, userId, "WAITING_ADVANCE_TYPE", {});
+      await sendWhatsAppButtons(from, "¿Qué tipo de adelanto es?", [
+        { id: "advance_type:empleado", title: "Adelanto a Empleado" },
+        { id: "advance_type:cliente", title: "Adelanto de Cliente" },
+      ]);
       return;
     }
     if (act === "presupuesto") {
@@ -1444,6 +1460,59 @@ async function processMessage(body: unknown) {
         return json({ ok: true, from: inc.from, reply: "" });
       }
       await deleteSession(normalizePhone(inc.from));   // la IA (QUERY_DATA) responde a continuación
+    }
+
+    /* [GADU-WA-ADVANCE-TYPE] Selección del tipo de adelanto por texto */
+    let enWizardAdvType = false;
+    try {
+      const sessAT = await getSession(normalizePhone(inc.from));
+      if (sessAT && sessAT.state === "WAITING_ADVANCE_TYPE") enWizardAdvType = true;
+    } catch (e) {}
+    if (enWizardAdvType) {
+      const t = String(inc.text || "").trim().toLowerCase();
+      if (/empleado|trabajador|operario|personal|obrero/.test(t)) {
+        await upsertSession(inc.from, row.user_id, "WAITING_ADVANCE", {});
+        fireAndForget(sendWhatsApp(inc.from, "💸 Decime *a qué empleado* y *de cuánto* es el adelanto. Ej: \"Adelanto de Hugo de 12000\"."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      if (/cliente|obra|seña|sena|anticipo|cobro/.test(t)) {
+        await upsertSession(inc.from, row.user_id, "WAITING_CLIENT_ADVANCE", {});
+        fireAndForget(sendWhatsApp(inc.from, "💰 Decime *de qué cliente/obra* es el adelanto y *de cuánto*. Ej: \"Adelanto de 50000 de la obra Casa Pérez\"."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      await sendWhatsAppButtons(inc.from, "Elegí una opción:", [
+        { id: "advance_type:empleado", title: "Adelanto a Empleado" },
+        { id: "advance_type:cliente", title: "Adelanto de Cliente" },
+      ]);
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* [GADU-WA-ADVANCE-CLIENTE] Adelanto de cliente → ingreso (cobro anticipado) */
+    let enWizardClientAdvance = false;
+    try {
+      const sessCA = await getSession(normalizePhone(inc.from));
+      if (sessCA && sessCA.state === "WAITING_CLIENT_ADVANCE") enWizardClientAdvance = true;
+    } catch (e) {}
+    if (enWizardClientAdvance) {
+      const parsed = parseAdvanceNameAmount(inc.text);
+      if (parsed && parsed.monto > 0) {
+        const res = executeAction(data, { modulo: "ingreso", campos: { concepto: "Adelanto", monto: parsed.monto, cliente: parsed.nombre, obra: parsed.nombre } }, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
+        if (res.ok) {
+          await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+            method: "PATCH",
+            headers: { Prefer: "return=minimal" },
+            body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+          });
+          await deleteSession(normalizePhone(inc.from));
+          fireAndForget(sendWhatsApp(inc.from, "✅ " + res.label));
+          return json({ ok: true, from: inc.from, reply: "✅ " + res.label });
+        }
+        await deleteSession(normalizePhone(inc.from));
+        fireAndForget(sendWhatsApp(inc.from, res.missing ? "🤖 Me falta " + res.missing + "." : "🤖 No pude cargarlo."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      fireAndForget(sendWhatsApp(inc.from, "💰 Decime *de qué cliente/obra* es el adelanto y *de cuánto*. Ej: \"Adelanto de 50000 de Casa Pérez\"."));
+      return json({ ok: true, from: inc.from, reply: "" });
     }
 
     /* [GADU-WA-AI-UPGRADE] Wizard de adelanto en curso (estado WAITING_ADVANCE) */
