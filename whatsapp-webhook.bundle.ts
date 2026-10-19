@@ -1092,7 +1092,6 @@ export async function markFailed(
 //   supabase functions deploy whatsapp-webhook
 // ============================================================
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 const corsHeaders = {
@@ -1675,7 +1674,7 @@ function exportExpensesXlsx(data: Record<string, any>): Uint8Array {
   return new Uint8Array(XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer);
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   /* Rastreo verbose: imprime SIEMPRE m\u00e9todo, URL y headers de cualquier
      petici\u00f3n, para descartar filtros internos y validar el formato de los
      headers que env\u00eda Meta. */
