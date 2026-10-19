@@ -203,8 +203,8 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
     };
   }
 
-  /* 1) Gasto explicito: monto + "en/de" + descripcion ("Gaste 5000 criollos") */
-  let m = f.match(/gas(?:te|to|t[ee]|t[oo])\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:en|de)\s+(.+)/i);
+  /* 1) Gasto explicito: monto + (moneda opcional) + "en/de" + descripcion */
+  let m = f.match(/gas(?:te|to|t[ee]|t[oo])\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:(?:pesos?|peso|mangos?|lucas?|ars|usd|d[oo]lares)\s+)?(?:en|de)\s+(.+)/i);
   if (m && num(m[1]) > 0) {
     return { modulo: "gasto", campos: { monto: num(m[1]), categoria: String(m[2] || "").trim() } };
   }
@@ -219,8 +219,8 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
     return { modulo: "gasto", campos: { monto: num(m[2]), categoria: String(m[1] || "").trim() } };
   }
 
-  /* 4) Ingreso: "Cobre 50000 por la obra" / "Ingrese 80000 por la obra" */
-  m = f.match(/(?:cobr[ee]?|ingres[ee]?|cobro|ingreso)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:por|de)\s+(.+)/i);
+  /* 4) Ingreso: "Cobre 50000 por la obra" / "Ingrese 80000 pesos por la obra" */
+  m = f.match(/(?:cobr[ee]?|ingres[ee]?|cobro|ingreso)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:(?:pesos?|peso|mangos?|lucas?|ars|usd|d[oo]lares)\s+)?(?:por|de)\s+(.+)/i);
   if (m && num(m[1]) > 0) {
     return { modulo: "ingreso", campos: { monto: num(m[1]), concepto: String(m[2] || "").trim() } };
   }
@@ -230,8 +230,8 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
     return { modulo: "ingreso", campos: { monto: num(m[1]), concepto: "Cobro" } };
   }
 
-  /* 4c) Inversion: "Inverti 50000 en una maquina" / "Inversion de 10000 en capital" / "Compre para invertir 300000 en..." */
-  m = f.match(/(?:invert[ii]|inversion|inversi[oo]n|invertir|compr[ee]\s+(?:para\s+)?invertir)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:en|de)\s+(.+)/i);
+  /* 4c) Inversion: "Inverti 50000 pesos en una maquina" / "Inversion de 10000 mangos en capital" */
+  m = f.match(/(?:invert[ii]|inversion|inversi[oo]n|invertir|compr[ee]\s+(?:para\s+)?invertir)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:(?:pesos?|peso|mangos?|lucas?|ars|usd|d[oo]lares)\s+)?(?:en|de)\s+(.+)/i);
   if (m && num(m[1]) > 0) {
     return { modulo: "inversion", campos: { monto: num(m[1]), categoria: String(m[2] || "").trim() } };
   }
