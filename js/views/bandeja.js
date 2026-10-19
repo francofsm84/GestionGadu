@@ -62,7 +62,7 @@
         const wOpts =
           '<select class="select" data-sel="' + x.id + '" style="max-width:180px">' +
             '<option value="">— Asignar a obra —</option>' +
-            S.data.works.map(w => '<option value="' + w.id + '">' + UI.escapeHtml(workName(w)) + '</option>').join('') +
+            (S.data.works || []).filter(w => w && w.id).map(w => '<option value="' + w.id + '">' + UI.escapeHtml(workName(w)) + '</option>').join('') +
           '</select>';
         return '<tr>' +
           '<td class="muted">' + UI.fmtDate(x.date) + '</td>' +
