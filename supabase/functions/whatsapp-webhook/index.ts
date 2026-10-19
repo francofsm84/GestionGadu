@@ -963,7 +963,7 @@ async function processMessage(body: unknown) {
     }
     if (resolved.imageFailed) {
       console.warn("[GADU-WA-IMAGE] análisis de imagen falló para", resolved.from);
-      fireAndForget(sendWhatsApp(resolved.from, "🤖 No pude leer la imagen, ¿me escribís el gasto?"));
+      fireAndForget(sendWhatsApp(resolved.from, "🤖 No pude leer el ticket. ¿Me escribís el gasto?"));
       return;
     }
     if (resolved.imageNoMonto) {

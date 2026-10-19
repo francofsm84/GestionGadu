@@ -778,8 +778,8 @@ async function geminiAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption
   }
   const model = Deno.env.get("GEMINI_MODEL") || "gemini-1.5-flash";
   const base64 = arrayBufferToBase64(buffer);
-  const prompt = "Eres un experto leyendo tickets de compra, incluso si estan rotados, borrosos o con letra muy pequena. " +
-    "Busca SIEMPRE la palabra 'TOTAL' (o 'TOTAL A PAGAR', 'IMPORTE') para extraer el monto exacto. " +
+  const prompt = "Eres un experto leyendo tickets de compra, incluso si estan rotados, borrosos, con poca luz, arrugados o fotografiados de costado. " +
+    "Haz un esfuerzo EXTRA: busca la palabra 'TOTAL' (o 'TOTAL A PAGAR', 'IMPORTE', 'SUBTOTAL') y lee los numeros AUNQUE esten al final o al borde de la imagen. " +
     "Devuelve SOLO y ESTRICTAMENTE un JSON valido, sin markdown ni comentarios, con esta estructura exacta: " +
     '{"monto": <numero>, "concepto": "<descripcion>"}. ' +
     'Si no puedes leer el monto, devuelve {"monto": 0, "concepto": ""}. ' +
@@ -843,8 +843,8 @@ async function groqAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption: 
   try {
     const base64 = arrayBufferToBase64(buffer);
     const dataUrl = "data:" + norm + ";base64," + base64;
-    const prompt = "Eres un experto leyendo tickets de compra, incluso si estan rotados, borrosos o con letra muy pequena. " +
-      "Busca SIEMPRE la palabra 'TOTAL' (o 'TOTAL A PAGAR', 'IMPORTE') para extraer el monto exacto. " +
+    const prompt = "Eres un experto leyendo tickets de compra, incluso si estan rotados, borrosos, con poca luz, arrugados o fotografiados de costado. " +
+      "Haz un esfuerzo EXTRA: busca la palabra 'TOTAL' (o 'TOTAL A PAGAR', 'IMPORTE', 'SUBTOTAL') y lee los numeros AUNQUE esten al final o al borde de la imagen. " +
       "Devuelve SOLO y ESTRICTAMENTE un JSON valido, sin markdown ni comentarios, con esta estructura exacta: " +
       '{"monto": <numero>, "concepto": "<descripcion>"}. ' +
       'Si no puedes leer el monto, devuelve {"monto": 0, "concepto": ""}. ' +
@@ -967,6 +967,11 @@ export async function resolveIncomingText(payload: unknown): Promise<ResolvedInc
         }
       } catch (e) {
         console.error("[GADU-WA-CRITICAL-FIX] analyzeImage fallo:", e);
+        /* Si la vision lanzo error pero hay caption, usar el texto como fallback */
+        if (caption && caption.trim()) {
+          console.warn("[GADU-WA-IMAGE] vision lanzo error, uso caption como fallback:", caption);
+          return { from, text: caption, mediaUrl: "" };
+        }
         return { from, text: "", imageFailed: true };
       }
       if (!text) {
@@ -2050,7 +2055,7 @@ async function processMessage(body: unknown) {
     }
     if (resolved.imageFailed) {
       console.warn("[GADU-WA-IMAGE] analisis de imagen fallo para", resolved.from);
-      fireAndForget(sendWhatsApp(resolved.from, "[BOT] No pude leer la imagen, me escribis el gasto?"));
+      fireAndForget(sendWhatsApp(resolved.from, "[BOT] No pude leer el ticket. Me escribis el gasto?"));
       return;
     }
     if (resolved.imageNoMonto) {
