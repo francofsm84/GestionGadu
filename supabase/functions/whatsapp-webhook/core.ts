@@ -156,8 +156,20 @@ export function findWork(works: Array<Record<string, unknown>>, mention: string)
 }
 
 /* Palabras comunes → categorías canónicas del store */
+/* Limpia prefijos comunes de un concepto: "pesos en papel de bano" → "papel de bano" */
+function cleanConcept(raw: string): string {
+  let s = String(raw || "").trim();
+  let prev: string;
+  do {
+    prev = s;
+    s = s.replace(/^(?:pesos?|peso|monto|total|importe|en|de|por|para|el|la|los|las|un|una|unos|unas)\s+/i, "");
+  } while (s !== prev);
+  return s;
+}
+
 export function normCategory(raw: string): string {
-  const f = flat(String(raw || ""));
+  const limpio = cleanConcept(raw);
+  const f = flat(limpio);
   if (!f) return "";
   if (/cemento|material|arena|ladrillo|hierro|pintura|yeso|cal|cer[aá]mic/.test(f)) return "Materiales";
   if (/nafta|gasoil|combustible|gas|diesel/.test(f)) return "Combustible";
@@ -169,7 +181,7 @@ export function normCategory(raw: string): string {
   if (/servicio|luz|agua|internet|tel[eé]fono|gas natural/.test(f)) return "Servicios";
   if (/subcontrat|contratista/.test(f)) return "Subcontratos";
   if (/cigarrillo|tabaco|ocio|entretenimiento|cine|juego|recreaci[oó]n|esparcimiento/.test(f)) return "Ocio";
-  return String(raw).trim();
+  return limpio;
 }
 
 /* Intención local simple (fallback sin LLM): registra gastos e ingresos con
@@ -410,7 +422,7 @@ export function executeAction(
   const monto = Number(c.monto);
   if (action.modulo === "gasto") {
     if (!(monto > 0)) return { ok: false, missing: "el monto" };
-    const concepto = String(c.categoria || sourceText || "").trim().slice(0, 60) || "gasto";
+    const concepto = cleanConcept(String(c.categoria || sourceText || "")).slice(0, 60) || "gasto";
     const cat = normCategory(String(c.categoria || sourceText));
     if (!cat) return { ok: false, missing: "la categoría" };
     const montoFmt = monto.toLocaleString("es-AR");

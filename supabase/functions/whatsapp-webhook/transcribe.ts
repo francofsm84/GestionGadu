@@ -433,6 +433,12 @@ export async function resolveIncomingText(payload: unknown): Promise<ResolvedInc
         return { from, text: "", imageFailed: true };
       }
       if (!text) {
+        /* La visión falló. Si el usuario escribió un caption, usarlo como
+           red de seguridad para que el flujo normal de texto procese el gasto. */
+        if (caption && caption.trim()) {
+          console.warn("[GADU-WA-IMAGE] visión vacía, uso caption como fallback:", caption);
+          return { from, text: caption, mediaUrl };
+        }
         console.warn("[GADU-WA-IMAGE] análisis vacío para media", mediaId);
         return { from, text: "", imageFailed: true, mediaUrl };
       }
@@ -448,6 +454,11 @@ export async function resolveIncomingText(payload: unknown): Promise<ResolvedInc
           return { from, text: "Gasto de " + monto + " en " + concepto, mediaUrl };
         }
         console.warn("[GADU-WA-IMAGE] monto 0 → no se pudo leer el monto del ticket");
+        /* Si hay caption (texto del usuario), usarlo como fallback */
+        if (caption && caption.trim()) {
+          console.warn("[GADU-WA-IMAGE] monto 0, uso caption como fallback:", caption);
+          return { from, text: caption, mediaUrl };
+        }
         return { from, text: "", imageNoMonto: true, mediaUrl };
       } catch (e) {
         /* No devolvió JSON: usar el texto crudo como fallback (flujo normal) */
