@@ -193,7 +193,31 @@ export function normCategory(raw: string): string {
 export function localIntent(text: string): { modulo: string; campos?: Record<string, unknown>; reply?: string } | null {
   const f = flat(String(text || "")).trim();
   if (!f) return null;
-  const num = (s: string) => Number(s.replace(/\./g, "").replace(",", "."));
+  const num = (s: string) => {
+    let t = String(s || "").trim();
+    if (!t) return 0;
+    if (t.includes(".") && t.includes(",")) {
+      /* AR: "19.813,47" -> 19813.47 (punto=miles, coma=decimal) */
+      t = t.replace(/\./g, "").replace(",", ".");
+    } else if (t.includes(",")) {
+      const parts = t.split(",");
+      if (parts.length === 2 && parts[1].length >= 1 && parts[1].length <= 2) t = t.replace(",", ".");
+      else t = t.replace(/,/g, "");
+    } else if (t.includes(".")) {
+      /* Solo punto: si el ULTIMO grupo tiene 1-2 digitos -> decimal ("19813.47"),
+         si no -> miles ("19.813"). */
+      const lastDot = t.lastIndexOf(".");
+      const decimals = t.length - lastDot - 1;
+      if (decimals >= 1 && decimals <= 2 && lastDot > 0) {
+        const intPart = t.slice(0, lastDot).replace(/\./g, "");
+        t = intPart + "." + t.slice(lastDot + 1);
+      } else {
+        t = t.replace(/\./g, "");
+      }
+    }
+    const n = Number(t);
+    return isFinite(n) ? n : 0;
+  };
 
   /* 0) Saludo -> intent de saludo (respuesta directa, sin accion contable) */
   if (/^(hola|holis|holi|buenas|buen\s*d[ii]a|buenos\s*d[ii]as|que\s*tal|c[oo]mo\s+(est[aa]s|est[aa]n|va)|hey|alo)\b/.test(f)) {

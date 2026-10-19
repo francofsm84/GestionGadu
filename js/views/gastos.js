@@ -203,8 +203,8 @@
             ? '<strong>' + UI.escapeHtml(S.employeeName(S.employeeById(x.employeeId)) || '—') + '</strong> ' +
               UI.chip('Empleado', 'info') + (x.expenseKind === 'adelanto' ? ' ' + UI.chip('Adelanto', 'warning', 'zap') : '')
             : UI.escapeHtml(prov ? prov.name : '—')) + '</td>' +
-          '<td>' + UI.escapeHtml(x.description) + '</td>' +
-          '<td class="muted">' + (x.invoiceNumber ? UI.escapeHtml(x.invoiceNumber) : '—') + (x.receiptUrl ? ' <button class="icon-btn sm" data-ticket="' + UI.escapeHtml(x.receiptUrl) + '" title="Ver ticket">' + UI.icon('camera', 14) + '</button>' : '') + '</td>' +
+          '<td>' + UI.escapeHtml(x.description) + (x.receiptUrl ? ' <button class="icon-btn sm" data-ticket="' + UI.escapeHtml(x.receiptUrl) + '" title="Ver ticket">' + UI.icon('camera', 14) + '</button>' : '') + '</td>' +
+          '<td class="muted">' + (x.invoiceNumber ? UI.escapeHtml(x.invoiceNumber) : '—') + '</td>' +
           '<td class="muted">' + UI.escapeHtml(x.paymentMethod || '—') + '</td>' +
           '<td class="num neg"><b>−' + UI.fmtMoney(x.amount) + '</b></td>' +
           '<td><div class="row-actions">' +

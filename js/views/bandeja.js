@@ -27,6 +27,17 @@
 
   function workName(w) { return String(w.name || w.nombre || 'Obra'); }
 
+  /* Modal con la foto del ticket en grande */
+  function openTicket(url) {
+    const m = UI.openModal({
+      title: 'Ticket / comprobante',
+      size: 'wide',
+      body: '<div style="text-align:center"><img src="' + UI.escapeHtml(url) + '" style="max-width:100%;max-height:70vh;border-radius:10px" alt="Ticket"></div>',
+      footer: '<a class="btn btn-soft" href="' + UI.escapeHtml(url) + '" target="_blank" rel="noopener">' + UI.icon('image', 14) + 'Abrir en pestaña</a><button class="btn btn-ghost" data-cancel>Cerrar</button>',
+    });
+    m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+  }
+
   function render(view) {
     view.innerHTML =
       '<div class="toolbar">' +
@@ -56,7 +67,7 @@
         return '<tr>' +
           '<td class="muted">' + UI.fmtDate(x.date) + '</td>' +
           '<td>' + UI.chip(x.category || 'Otros', 'neutral') + '</td>' +
-          '<td>' + UI.escapeHtml(x.description || '') + '</td>' +
+          '<td>' + UI.escapeHtml(x.description || '') + (x.receiptUrl ? ' <button class="icon-btn sm" data-ticket="' + UI.escapeHtml(x.receiptUrl) + '" title="Ver ticket">' + UI.icon('camera', 14) + '</button>' : '') + '</td>' +
           '<td class="num neg"><b>−' + UI.fmtMoney(x.amount) + '</b></td>' +
           '<td><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' +
             wOpts +
@@ -69,6 +80,11 @@
   }
 
   function bindList(wrap) {
+    /* Ver ticket / comprobante */
+    UI.on(wrap, '[data-ticket]', 'click', e => {
+      const url = e.target.closest('[data-ticket]').dataset.ticket;
+      openTicket(url);
+    });
     /* Asignar a obra */
     UI.on(wrap, '[data-sel]', 'change', async e => {
       const id = e.target.dataset.sel;
