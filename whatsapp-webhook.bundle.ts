@@ -220,7 +220,7 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
   };
 
   /* 0) Saludo -> intent de saludo (respuesta directa, sin accion contable) */
-  if (/^(hola|holis|holi|buenas|buen\s*d[ii]a|buenos\s*d[ii]as|que\s*tal|c[oo]mo\s+(est[aa]s|est[aa]n|va)|hey|alo)\b/.test(f)) {
+  if (/^(hola|holis|holi|buenas|buen\s*d[ii]a|buenos\s*d[ii]as|que\s*tal|c[oo]mo\s+(est[aa]s|est[aa]n|va)|hey|alo)\s*[.!?,]*$/.test(f)) {
     return {
       modulo: "saludo",
       reply: "Hola! Hola Soy GADU, tu asistente de obra. Podes cargarme gastos o ingresos por aca, por ejemplo:\n- \"Gaste 15000 en cemento\"\n- \"Cobre 50000 por la obra\"\n\nEn que te ayudo?",
@@ -2179,7 +2179,10 @@ async function processMessage(body: unknown) {
     /* 1b) Saludo -> SIEMPRE forzar el menu: borrar cualquier sesion vieja (wizard)
        y desplegar la lista interactiva, sin importar el estado previo. */
     const menuText = String(inc.text || "").trim().toLowerCase();
-    if (/^(hola|holis|holi|buenas|buen\s*d[ii]a|buenos\s*d[ii]as|menu|men[uu]|empezar|ayuda|help|inicio)\b/.test(menuText)) {
+    /* Solo un saludo PURO (sin contenido extra) resetea y muestra el menu.
+       Si el mensaje es "hola, quiero cargar un gasto...", NO lo trata como saludo:
+       deja que el wizard/IA procese el contenido. */
+    if (/^(hola|holis|holi|buenas|buen\s*d[ii]a|buenos\s*d[ii]as|menu|men[uu]|empezar|ayuda|help|inicio)\s*[.!?,]*$/.test(menuText)) {
       try { await deleteSession(normalizePhone(inc.from)); } catch (e) { /* sin sesion: ok */ }
       await showMainMenu(inc.from, "Hola! Hola Soy tu asistente GADU. Que queres hacer hoy?");
       return json({ ok: true, from: inc.from });

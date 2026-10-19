@@ -220,7 +220,7 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
   };
 
   /* 0) Saludo → intent de saludo (respuesta directa, sin acción contable) */
-  if (/^(hola|holis|holi|buenas|buen\s*d[ií]a|buenos\s*d[ií]as|que\s*tal|c[oó]mo\s+(est[aá]s|est[aá]n|va)|hey|alo)\b/.test(f)) {
+  if (/^(hola|holis|holi|buenas|buen\s*d[ií]a|buenos\s*d[ií]as|que\s*tal|c[oó]mo\s+(est[aá]s|est[aá]n|va)|hey|alo)\s*[.!?,]*$/.test(f)) {
     return {
       modulo: "saludo",
       reply: "¡Hola! 👋 Soy GADU, tu asistente de obra. Podés cargarme gastos o ingresos por acá, por ejemplo:\n• \"Gasté 15000 en cemento\"\n• \"Cobré 50000 por la obra\"\n\n¿En qué te ayudo?",
