@@ -373,7 +373,6 @@
       '<div class="ai-panel" id="aiPanel" hidden>' +
       '<div class="ai-head"><span class="ai-head-logo"><img src="' + AVATAR_SRC + '" alt="" class="ai-avatar"></span>' +
       '<div class="ai-head-txt"><strong>Asistente GADU</strong><span class="muted small" id="aiSub">Te guío paso a paso</span></div>' +
-      '<select class="ai-voice-sel" id="aiVoiceSel" title="Voz de lectura" aria-label="Voz de lectura"></select>' +
       '</div>' +
       '<div class="ai-log" id="aiLog"></div>' +
       '<div class="ai-foot">' +
@@ -486,12 +485,6 @@
     addGreeting();
     window.addEventListener('hashchange', refreshGreeting);
 
-    /* Voces de lectura: cargar + refrescar cuando el navegador las publique */
-    loadVoices();
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.addEventListener('voiceschanged', loadVoices);
-    }
-
     /* Burbuja de saludo del robot: aparece sola al cargar la app y se oculta
        sola o al tocar el robot / abrir el chat. */
     const tip = document.getElementById('aiFabTip');
@@ -555,39 +548,6 @@
     return msg;
   }
 
-  /* Texto a voz (Text-to-Speech): síntesis nativa con selector de voces en español */
-  let ttsVoices = [];
-  function loadVoices() {
-    try {
-      if (!('speechSynthesis' in window)) return;
-      ttsVoices = window.speechSynthesis.getVoices() || [];
-      const sel = document.getElementById('aiVoiceSel');
-      if (!sel) return;
-      const es = ttsVoices.filter(v => /^es([-_]|$)/i.test(v.lang || '') || /spanish|español/i.test(v.name || ''));
-      const list = es.length ? es : ttsVoices;
-      const cur = sel.value;
-      sel.innerHTML = (list.length ? list : [{ name: 'Sin voces', lang: 'es', voiceURI: '' }])
-        .map(v => '<option value="' + v.voiceURI + '"' + (!v.voiceURI ? ' disabled' : '') + '>' + esc(v.name + (v.lang ? ' · ' + v.lang : '')) + '</option>').join('');
-      if (cur) { try { sel.value = cur; } catch (e) {} }
-    } catch (e) {}
-  }
-  function speak(text) {
-    try {
-      if (!('speechSynthesis' in window)) return;
-      const clean = String(text || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500);
-      if (!clean) return;
-      const u = new SpeechSynthesisUtterance(clean);
-      u.lang = 'es-AR';
-      const sel = document.getElementById('aiVoiceSel');
-      if (sel && sel.value) {
-        const v = ttsVoices.find(v => v.voiceURI === sel.value);
-        if (v) u.voice = v;
-      }
-      u.rate = 1.02; u.pitch = 1;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(u);
-    } catch (e) {}
-  }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
   /* Persistencia real: inserta en la capa de datos local y sincroniza a Supabase */
@@ -2260,8 +2220,6 @@
   function appendLog(el) {
     log.appendChild(el);
     while (log.children.length > MAX_LOG && log.firstChild) log.removeChild(log.firstChild);
-    /* Leer en voz alta las respuestas del bot (voz seleccionada en la cabecera) */
-    if (el.classList && el.classList.contains('ai-bot')) speak(el.textContent || '');
   }
 
   /* ---------- Flujo "Crear agenda" → Rol → carga 100% manual ---------- */

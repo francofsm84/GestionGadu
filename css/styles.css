@@ -929,8 +929,6 @@ body.no-session .app { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .ai-avatar { animation: none; }
 }
-.ai-voice-sel { flex: none; max-width: 120px; min-width: 0; font-size: 11px; padding: 4px 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); cursor: pointer; }
-.ai-voice-sel[hidden] { display: none; }
 .ai-log { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .ai-msg { max-width: 88%; padding: 9px 12px; border-radius: 12px; font-size: 13.5px; line-height: 1.45; }
 .ai-bot { align-self: flex-start; background: var(--surface-2); color: var(--text); border-bottom-left-radius: 4px; }
@@ -977,7 +975,6 @@ body.no-session .app { display: none; }
      acción (editar/borrar) de las tablas y tarjetas */
   .ai-fab { right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: 46px; height: 46px; opacity: .9; }
   .ai-panel { width: calc(100vw - 24px); height: calc(100dvh - 92px); max-height: calc(100dvh - 92px); bottom: calc(74px + env(safe-area-inset-bottom, 0px)); right: 12px; left: 12px; margin: auto; }
-  .ai-voice-sel { max-width: 96px; }   /* selector de voz compacto en móvil */
   .ai-fab-tip { right: 92px; bottom: calc(30px + env(safe-area-inset-bottom, 0px)); max-width: 200px; }
   /* Espacio inferior para que el botón flotante no tape las tarjetas */
   .view { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
