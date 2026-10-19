@@ -164,6 +164,8 @@ function cleanConcept(raw: string): string {
     prev = s;
     s = s.replace(/^(?:pesos?|peso|monto|total|importe|en|de|por|para|el|la|los|las|un|una|unos|unas)\s+/i, "");
   } while (s !== prev);
+  /* Limpiar signos de puntuacion al final: "hormigonera." -> "hormigonera" */
+  s = s.replace(/[.,;:!?\s]+$/g, "").trim();
   return s;
 }
 
@@ -228,8 +230,8 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
     return { modulo: "ingreso", campos: { monto: num(m[1]), concepto: "Cobro" } };
   }
 
-  /* 4c) Inversion: "Inverti 50000 en una maquina" / "Inversion de 10000 en capital" */
-  m = f.match(/(?:invert[ii]|inversion|inversi[oo]n|invertir)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:en|de)\s+(.+)/i);
+  /* 4c) Inversion: "Inverti 50000 en una maquina" / "Inversion de 10000 en capital" / "Compre para invertir 300000 en..." */
+  m = f.match(/(?:invert[ii]|inversion|inversi[oo]n|invertir|compr[ee]\s+(?:para\s+)?invertir)\s+(?:de\s+)?\$?\s*([\d][\d.,]*)\s+(?:en|de)\s+(.+)/i);
   if (m && num(m[1]) > 0) {
     return { modulo: "inversion", campos: { monto: num(m[1]), categoria: String(m[2] || "").trim() } };
   }
