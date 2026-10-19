@@ -550,6 +550,7 @@ export function executeAction(
     if (!nombreObra) return { ok: false, missing: "el nombre de la obra" };
     (d.works || (d.works = [])).unshift({
       id: idGen(), nombre: nombreObra, ubicacion: String(c.ubicacion || ""), status: "activa", source: "whatsapp",
+      budgetTotal: Number(c.presupuesto) || 0,
     } as unknown as Record<string, unknown>);
     return { ok: true, label: "Obra '" + nombreObra + "' creada OK" };
   }
@@ -2503,43 +2504,80 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply: "" });
     }
 
-    /* [GADU-WA-WIZARD] Wizard de obra (estado WAITING_OBRA): nombre + direccion */
+    /* [GADU-WA-WIZARD] Wizard de obra (WAITING_OBRA): nombre -> ubicacion -> presupuesto */
     let enWizardObra = false;
     try {
       const sessObra = await getSession(normalizePhone(inc.from));
       if (sessObra && sessObra.state === "WAITING_OBRA") enWizardObra = true;
     } catch (e) {}
     if (enWizardObra) {
-      /* Si el usuario cambio de idea (dijo un gasto/adelanto/consulta en lugar del
-         nombre de la obra), cancelar el wizard y dejar que la IA lo resuelva. */
       const localOtra = localIntent(inc.text);
       if (localOtra && localOtra.modulo && localOtra.modulo !== "obra") {
         await deleteSession(normalizePhone(inc.from));
         console.log("[GADU-WA-WIZARD] WAITING_OBRA cancelado, respuesta es:", localOtra.modulo);
       } else {
-        const mObra = inc.text.match(/^(.*?)\s+en\s+(.+)$/i);
-        const nombreObra = String(mObra ? mObra[1] : inc.text).trim();
-        const ubicacionObra = String(mObra ? mObra[2] : "").trim();
-        if (nombreObra) {
-          const res = executeAction(data, { modulo: "obra", campos: { nombre: nombreObra, ubicacion: ubicacionObra } }, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
-          if (res.ok) {
-            await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
-              method: "PATCH",
-              headers: { Prefer: "return=minimal" },
-              body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
-            });
-            await deleteSession(normalizePhone(inc.from));
-            const reply = "OK " + res.label;
-            fireAndForget(sendWhatsApp(inc.from, reply));
-            return json({ ok: true, from: inc.from, reply });
-          }
-          await deleteSession(normalizePhone(inc.from));
-          fireAndForget(sendWhatsApp(inc.from, "[BOT] No pude crear la obra. Proba de nuevo: \"Casa Perez en Alta Gracia\"."));
+        const tObra = String(inc.text || "").trim();
+        const mObra = tObra.match(/^(.*?)\s+en\s+(.+)$/i);
+        if (mObra) {
+          /* "Casa Perez en Alta Gracia" -> nombre + ubicacion en un solo mensaje */
+          await upsertSession(inc.from, row.user_id, "WAITING_OBRA_PRESUPUESTO", { nombre: String(mObra[1]).trim(), ubicacion: String(mObra[2]).trim() });
+          fireAndForget(sendWhatsApp(inc.from, "Cual es el presupuesto total? (ej. 100000   escribi *omitir* si no lo sabes)"));
+          return json({ ok: true, from: inc.from, reply: "" });
+        }
+        if (tObra) {
+          await upsertSession(inc.from, row.user_id, "WAITING_OBRA_UBICACION", { nombre: tObra });
+          fireAndForget(sendWhatsApp(inc.from, "Donde queda la obra? (ej. Alta Gracia   escribi *omitir* si no lo sabes)"));
           return json({ ok: true, from: inc.from, reply: "" });
         }
         fireAndForget(sendWhatsApp(inc.from, "[BOT] Como se llama la obra? Ej: \"Casa Perez en Alta Gracia\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
+    }
+
+    /* Obra paso 2: ubicacion (WAITING_OBRA_UBICACION) */
+    let enWizardObraUbi = false;
+    let obraUbiCtx: Record<string, unknown> = {};
+    try {
+      const sessOU = await getSession(normalizePhone(inc.from));
+      if (sessOU && sessOU.state === "WAITING_OBRA_UBICACION") { enWizardObraUbi = true; obraUbiCtx = (sessOU.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardObraUbi) {
+      const t = String(inc.text || "").trim();
+      const ubicacion = /^omitir$/i.test(t) ? "" : t;
+      await upsertSession(inc.from, row.user_id, "WAITING_OBRA_PRESUPUESTO", { nombre: obraUbiCtx.nombre, ubicacion });
+      fireAndForget(sendWhatsApp(inc.from, "Cual es el presupuesto total? (ej. 100000   escribi *omitir* si no lo sabes)"));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* Obra paso 3: presupuesto -> crear (WAITING_OBRA_PRESUPUESTO) */
+    let enWizardObraPre = false;
+    let obraPreCtx: Record<string, unknown> = {};
+    try {
+      const sessOP = await getSession(normalizePhone(inc.from));
+      if (sessOP && sessOP.state === "WAITING_OBRA_PRESUPUESTO") { enWizardObraPre = true; obraPreCtx = (sessOP.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardObraPre) {
+      const t = String(inc.text || "").trim();
+      const omitir = /^omitir$/i.test(t);
+      const presupuesto = omitir ? 0 : Number(t.replace(/\./g, "").replace(",", "."));
+      if (!omitir && (!presupuesto || presupuesto <= 0)) {
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] Eso no es un monto valido. Cual es el presupuesto total? (o *omitir*)"));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      const res = executeAction(data, { modulo: "obra", campos: { nombre: String(obraPreCtx.nombre || ""), ubicacion: String(obraPreCtx.ubicacion || ""), presupuesto } }, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
+      if (res.ok) {
+        await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+        });
+        await deleteSession(normalizePhone(inc.from));
+        fireAndForget(sendWhatsApp(inc.from, "OK " + res.label));
+        return json({ ok: true, from: inc.from, reply: "OK " + res.label });
+      }
+      await deleteSession(normalizePhone(inc.from));
+      fireAndForget(sendWhatsApp(inc.from, "[BOT] No pude crear la obra. Proba de nuevo."));
+      return json({ ok: true, from: inc.from, reply: "" });
     }
 
     /* [GADU-WA-WIZARD] Contacto paso 1: nombre (WAITING_CONTACT_NAME).

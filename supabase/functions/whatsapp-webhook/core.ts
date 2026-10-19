@@ -550,6 +550,7 @@ export function executeAction(
     if (!nombreObra) return { ok: false, missing: "el nombre de la obra" };
     (d.works || (d.works = [])).unshift({
       id: idGen(), nombre: nombreObra, ubicacion: String(c.ubicacion || ""), status: "activa", source: "whatsapp",
+      budgetTotal: Number(c.presupuesto) || 0,
     } as unknown as Record<string, unknown>);
     return { ok: true, label: "Obra '" + nombreObra + "' creada ✓" };
   }
