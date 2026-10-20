@@ -43,6 +43,8 @@ import {
   extractFrom,
   formatProperName,
   rawDigits,
+  detectQueryIntent,
+  computeQuery,
 } from "./core.ts";
 import { resolveIncomingText } from "./transcribe.ts";
 import { enqueueMessage, claimNext, markDone, markFailed, resetStaleProcessing } from "./queue.ts";
@@ -2040,6 +2042,16 @@ async function processMessage(body: unknown) {
       await upsertSession(inc.from, row.user_id, "WAITING_ADVANCE", {});
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
+    }
+
+    /* Consultas analíticas (SOLO LECTURA): detectar + calcular ANTES de la IA.
+       Sueldos, balance de obra, agenda y herramientas se resuelven localmente. */
+    const queryIntent = detectQueryIntent(inc.text);
+    if (queryIntent) {
+      const qr = computeQuery(data, queryIntent);
+      console.log("[GADU-WA-QUERY] consulta:", queryIntent.type, "· target:", queryIntent.target || "(—)");
+      fireAndForget(sendWhatsApp(inc.from, qr));
+      return json({ ok: true, from: inc.from, reply: qr });
     }
 
     const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra", "inversion"];

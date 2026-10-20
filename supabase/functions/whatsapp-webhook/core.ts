@@ -566,3 +566,126 @@ export function executeAction(
   /* Módulos con wizard complejo: los responde la IA guiando a la app web */
   return { ok: false, unsupported: action.modulo };
 }
+
+/* =====================================================================
+   CONSULTAS ANALÍTICAS (SOLO LECTURA)
+   Detectan preguntas ("cuánto pago esta semana", "balance de la obra X",
+   "qué tengo en la agenda", "dónde está la herramienta Y") y calculan
+   la respuesta desde app_data SIN modificar nada.
+   ===================================================================== */
+
+export interface QueryIntent {
+  type: "sueldos" | "balance" | "agenda" | "herramientas";
+  target: string;
+  periodo: "semana" | "mes" | "hoy";
+}
+
+export function detectQueryIntent(text: string): QueryIntent | null {
+  const f = flat(String(text || "")).trim();
+  if (!f) return null;
+
+  /* Sueldos / pagos / adelantos de la semana o el mes */
+  if (/(cu[aá]nto|cuanto).*(pagar|sueldos?|jornales|adelantos?|liquidar|deveng)/.test(f) ||
+      /(sueldos?|jornales|salarios?|pagar).*(semana|mes|esta)/.test(f) ||
+      /(cu[aá]nto|cuanto).*(gan[aó]|debo).*(empleados?|personal|cuadrilla)/.test(f)) {
+    return { type: "sueldos", target: "", periodo: /mes/.test(f) ? "mes" : "semana" };
+  }
+
+  /* Balance / estado financiero de una obra */
+  if (/(balance|estado|margen|resumen|saldo|cu[aá]nto (?:cobr[eé]|gan[eé]|gast[eé]|invirti[oó]))/.test(f) &&
+      /(obra|proyecto)/.test(f)) {
+    const m = f.match(/(?:de|en|la|el)\s+(?:la\s+|el\s+)?(?:obra\s+|proyecto\s+)?(.+?)(?:\s+(?:balance|estado|margen|resumen|saldo))?$/i);
+    const target = m ? String(m[1]).trim().replace(/^(la|el|obra|proyecto)\s+/i, "") : "";
+    return { type: "balance", target, periodo: "mes" };
+  }
+
+  /* Agenda / compromisos pendientes (hoy o la semana) */
+  if (/(agenda|compromisos?|tareas?|visitas?|reuniones?|qu[eé] tengo|pendiente)/.test(f) &&
+      /(hoy|semana|mañana|pendiente|agenda|compromisos?)/.test(f)) {
+    return { type: "agenda", target: "", periodo: /hoy/.test(f) ? "hoy" : "semana" };
+  }
+
+  /* Herramientas: ubicación / asignación */
+  if (/(herramienta|amoladora|sierra|taladro|rotomartillo|hormigonera|m[aá]quina|equipo)/.test(f) &&
+      /(d[oó]nde|donde|ubicaci[oó]n|est[aá]|asignad|pr[eé]stamo|prestam|obra|dep[oó]sito)/.test(f)) {
+    const m = f.match(/(?:d[oó]nde|donde)\s+(?:est[aá]\s+)?(?:la\s+|el\s+)?(.+)/i);
+    const target = m ? String(m[1]).trim() : "";
+    return { type: "herramientas", target, periodo: "hoy" };
+  }
+
+  return null;
+}
+
+export function computeQuery(data: Record<string, any>, q: QueryIntent): string {
+  const sum = (arr: number[]) => arr.reduce((a, b) => a + b, 0);
+  const fmt = (n: number) => "$" + (Number(n) || 0).toLocaleString("es-AR");
+  const works = (data.works || []) as any[];
+  const employees = (data.employees || []) as any[];
+  const attendance = (data.attendance || []) as any[];
+  const expenses = (data.expenses || []) as any[];
+  const incomes = (data.incomes || []) as any[];
+  const compromisos = (data.compromisos || []) as any[];
+  const assets = (data.assets || []) as any[];
+
+  const hoy = new Date().toISOString().slice(0, 10);
+  const desdeSemana = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+  const desdeMes = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+
+  if (q.type === "sueldos") {
+    const desde = q.periodo === "mes" ? desdeMes : desdeSemana;
+    const attPeriodo = attendance.filter(a => (a.date || "") >= desde && a.status === "presente");
+    let total = 0;
+    const lineas: string[] = [];
+    employees.forEach(emp => {
+      const nombre = ((emp.firstName || "") + " " + (emp.lastName || "")).trim() || "Empleado";
+      const att = attPeriodo.filter(a => a.employeeId === emp.id);
+      const horas = sum(att.flatMap((a: any) => (a.hours || []).map((h: any) => Number(h.hours) || 0)));
+      const dias = att.length;
+      const devengado = horas * (Number(emp.hourlyRate) || 0);
+      const adelantos = sum(expenses.filter(x => x.employeeId === emp.id && x.expenseKind === "adelanto" && (x.date || "") >= desde).map(x => Number(x.amount) || 0));
+      total += devengado - adelantos;
+      lineas.push("• " + nombre + ": " + dias + "d · " + horas + "h · " + fmt(devengado) + (adelantos ? " · adelantos -" + fmt(adelantos) : ""));
+    });
+    return (q.periodo === "mes" ? "*Sueldos del mes*" : "*Sueldos de la semana*") +
+      "\n*A pagar: " + fmt(total) + "*\n\n" + (lineas.join("\n") || "Sin jornadas registradas.");
+  }
+
+  if (q.type === "balance") {
+    if (!q.target) return "¿De qué obra querés el balance? Decime el nombre (ej. \"balance de la obra Casa Pérez\").";
+    const w = works.find(x => flat(String(x.name || x.nombre || "")).includes(flat(q.target)));
+    if (!w) return "No encontré la obra \"" + q.target + "\". ¿Cuál es el nombre exacto?";
+    const wid = String(w.id || "");
+    const ing = sum(incomes.filter(i => i.workId === wid).map(i => Number(i.amount) || 0));
+    const cos = sum(expenses.filter(x => x.workId === wid).map(x => Number(x.amount) || 0));
+    const margen = ing - cos;
+    const presupuesto = Number(w.budgetTotal) || 0;
+    const pendiente = Math.max(0, presupuesto - ing);
+    return "*Balance: " + (w.name || w.nombre) + "*\n" +
+      "• Ingresos: " + fmt(ing) + "\n" +
+      "• Costos directos: -" + fmt(cos) + "\n" +
+      "• Margen: " + fmt(margen) + "\n" +
+      "• Presupuesto: " + fmt(presupuesto) + "\n" +
+      "• Pendiente de cobrar: " + fmt(pendiente);
+  }
+
+  if (q.type === "agenda") {
+    const hasta = q.periodo === "hoy" ? hoy : new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    const pend = compromisos.filter(c => c.estado !== "hecho" && (c.fecha || "") >= hoy && (c.fecha || "") <= hasta)
+      .sort((a, b) => String(a.fecha || "").localeCompare(String(b.fecha || "")));
+    const lineas = pend.map(c => "• " + (c.fecha || "") + " · " + (c.titulo || c.tipo || "Compromiso"));
+    return (q.periodo === "hoy" ? "*Agenda de hoy*" : "*Agenda de la semana*") + "\n" + (lineas.join("\n") || "No tenés compromisos pendientes.");
+  }
+
+  if (q.type === "herramientas") {
+    let list = assets;
+    if (q.target) list = list.filter(a => flat(String(a.name || a.nombre || "")).includes(flat(q.target)));
+    const lineas = list.map(a => {
+      const loc = a.location ? works.find(w => String(w.id) === String(a.location)) : null;
+      const lugar = loc ? (loc.name || loc.nombre) : (a.status === "operativo" ? "Depósito" : (a.status || "—"));
+      return "• " + (a.name || a.nombre || "Herramienta") + " (" + (a.category || "—") + ") → " + lugar;
+    });
+    return "*Herramientas*" + (q.target ? " (\"" + q.target + "\")" : "") + "\n" + (lineas.join("\n") || "No encontré esa herramienta.");
+  }
+
+  return "No pude procesar la consulta.";
+}
