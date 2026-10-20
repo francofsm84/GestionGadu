@@ -690,6 +690,20 @@ export function computeQuery(data: Record<string, any>, q: QueryIntent): string 
   return "No pude procesar la consulta.";
 }
 
+/* Devuelve el enlace web del reporte visual correspondiente a la consulta
+   (vistas publicas de solo lectura, estilo portal). */
+export function queryLink(data: Record<string, any>, q: QueryIntent): string {
+  const base = "https://gestiongadu.vercel.app";
+  if (q.type === "sueldos") return base + "/#/reporte/empleados";
+  if (q.type === "agenda") return base + "/#/agenda";
+  if (q.type === "herramientas") return base + "/#/herramientas";
+  if (q.type === "balance" && q.target) {
+    const w = ((data.works || []) as any[]).find(x => flat(String(x.name || x.nombre || "")).includes(flat(q.target)));
+    if (w) return base + "/#/reporte/obra/" + String(w.id);
+  }
+  return "";
+}
+
 
 // ============================================================
 // GADU   Transcribir notas de voz de WhatsApp con Gemini
@@ -1319,6 +1333,7 @@ import {
   rawDigits,
   detectQueryIntent,
   computeQuery,
+  queryLink,
 } from "./core.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -3320,9 +3335,11 @@ async function processMessage(body: unknown) {
     const queryIntent = detectQueryIntent(inc.text);
     if (queryIntent) {
       const qr = computeQuery(data, queryIntent);
+      const link = queryLink(data, queryIntent);
+      const reply = link ? qr + "\n\n[metricas] Ver reporte completo: " + link : qr;
       console.log("[GADU-WA-QUERY] consulta:", queryIntent.type, "  target:", queryIntent.target || "(-)");
-      fireAndForget(sendWhatsApp(inc.from, qr));
-      return json({ ok: true, from: inc.from, reply: qr });
+      fireAndForget(sendWhatsApp(inc.from, reply));
+      return json({ ok: true, from: inc.from, reply });
     }
 
     const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra", "inversion"];

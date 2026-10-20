@@ -689,3 +689,17 @@ export function computeQuery(data: Record<string, any>, q: QueryIntent): string 
 
   return "No pude procesar la consulta.";
 }
+
+/* Devuelve el enlace web del reporte visual correspondiente a la consulta
+   (vistas públicas de solo lectura, estilo portal). */
+export function queryLink(data: Record<string, any>, q: QueryIntent): string {
+  const base = "https://gestiongadu.vercel.app";
+  if (q.type === "sueldos") return base + "/#/reporte/empleados";
+  if (q.type === "agenda") return base + "/#/agenda";
+  if (q.type === "herramientas") return base + "/#/herramientas";
+  if (q.type === "balance" && q.target) {
+    const w = ((data.works || []) as any[]).find(x => flat(String(x.name || x.nombre || "")).includes(flat(q.target)));
+    if (w) return base + "/#/reporte/obra/" + String(w.id);
+  }
+  return "";
+}

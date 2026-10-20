@@ -44,6 +44,8 @@ const APP_SHELL = [
   './js/views/agenda.js',
   './js/views/admin.js',
   './js/views/planes.js',
+  './js/views/portal-cliente.js',
+  './js/views/reportes.js',
   // CDNs (para funcionar offline tras la primera carga)
   'https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js',
   'https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js',

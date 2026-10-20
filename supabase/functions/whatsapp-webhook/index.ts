@@ -45,6 +45,7 @@ import {
   rawDigits,
   detectQueryIntent,
   computeQuery,
+  queryLink,
 } from "./core.ts";
 import { resolveIncomingText } from "./transcribe.ts";
 import { enqueueMessage, claimNext, markDone, markFailed, resetStaleProcessing } from "./queue.ts";
@@ -2049,9 +2050,11 @@ async function processMessage(body: unknown) {
     const queryIntent = detectQueryIntent(inc.text);
     if (queryIntent) {
       const qr = computeQuery(data, queryIntent);
+      const link = queryLink(data, queryIntent);
+      const reply = link ? qr + "\n\n📊 Ver reporte completo: " + link : qr;
       console.log("[GADU-WA-QUERY] consulta:", queryIntent.type, "· target:", queryIntent.target || "(—)");
-      fireAndForget(sendWhatsApp(inc.from, qr));
-      return json({ ok: true, from: inc.from, reply: qr });
+      fireAndForget(sendWhatsApp(inc.from, reply));
+      return json({ ok: true, from: inc.from, reply });
     }
 
     const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra", "inversion"];

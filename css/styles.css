@@ -1007,6 +1007,11 @@ body.no-session .app { display: none; }
 .portal-no-photos { text-align: center; color: #94a3b8; font-size: 13px; padding: 14px 0; }
 .portal-foot { text-align: center; color: #94a3b8; font-size: 12px; margin: 20px 0 0; }
 .portal-empty { text-align: center; color: #64748b; padding: 40px; font-size: 15px; }
+/* Filas de reporte (solo lectura): montos alineados a la derecha */
+.report-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #eef2f7; }
+.report-row:last-child { border-bottom: none; }
+.report-row span { color: #64748b; }
+.report-row b { font-size: 15px; white-space: nowrap; }
 
 /* Banner de instalación PWA */
 .pwa-banner { position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 60; display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.28); font-size: 13px; }
