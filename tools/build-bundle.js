@@ -5,8 +5,8 @@ const fs = require('fs');
 const dir = 'supabase/functions/whatsapp-webhook/';
 
 let index = fs.readFileSync(dir + 'index.ts', 'utf8');
-// quitar imports locales (core/transcribe/queue)
-index = index.replace(/import \{\s*matchVerificationCode,[\s\S]*?rawDigits,\s*\} from "\.\/core\.ts";\s*\r?\n/, '');
+// quitar imports locales (core/transcribe/queue) — regex no dependiente de la lista exacta
+index = index.replace(/import \{\s*matchVerificationCode,[\s\S]*?\} from "\.\/core\.ts";\s*\r?\n/, '');
 index = index.replace(/import \{ resolveIncomingText \} from "\.\/transcribe\.ts";\s*\r?\n/, '');
 index = index.replace(/import \{ enqueueMessage, claimNext, markDone, markFailed, resetStaleProcessing \} from "\.\/queue\.ts";\s*\r?\n/, '');
 

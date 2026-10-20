@@ -1316,25 +1316,6 @@ export async function markFailed(
 
 import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
-import {
-  matchVerificationCode,
-  matchLicenseCode,
-  normalizePhone,
-  phoneMatches,
-  buildContext,
-  executeAction,
-  localIntent,
-  detectAdvanceIntent,
-  parseAdvanceNameAmount,
-  resolveAdvanceTarget,
-  toMetaPhone,
-  extractFrom,
-  formatProperName,
-  rawDigits,
-  detectQueryIntent,
-  computeQuery,
-  queryLink,
-} from "./core.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
