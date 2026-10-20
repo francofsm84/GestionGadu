@@ -575,9 +575,19 @@ export function executeAction(
    ===================================================================== */
 
 export interface QueryIntent {
-  type: "sueldos" | "balance" | "agenda" | "herramientas";
+  type: "sueldos" | "balance" | "balance_general" | "gastos" | "ingresos" | "agenda" | "herramientas";
   target: string;
   periodo: "semana" | "mes" | "hoy";
+}
+
+/* Normaliza un nombre de obra para matching tolerante: minúsculas, sin tildes,
+   sin artículos/preposiciones ("de", "la", "el", "casa", "obra", etc.). */
+function normWork(s: string): string {
+  return flat(String(s || ""))
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\b(?:de|del|la|el|los|las|en|a|con|y|e|al|un|una|casa|obra|obras|proyecto|proyectos|the|of|para|por|mi|mis)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function detectQueryIntent(text: string): QueryIntent | null {
@@ -591,12 +601,33 @@ export function detectQueryIntent(text: string): QueryIntent | null {
     return { type: "sueldos", target: "", periodo: /mes/.test(f) ? "mes" : "semana" };
   }
 
-  /* Balance / estado financiero de una obra */
-  if (/(balance|estado|margen|resumen|saldo|cu[aá]nto (?:cobr[eé]|gan[eé]|gast[eé]|invirti[oó]))/.test(f) &&
-      /(obra|proyecto)/.test(f)) {
-    const m = f.match(/(?:de|en|la|el)\s+(?:la\s+|el\s+)?(?:obra\s+|proyecto\s+)?(.+?)(?:\s+(?:balance|estado|margen|resumen|saldo))?$/i);
-    const target = m ? String(m[1]).trim().replace(/^(la|el|obra|proyecto)\s+/i, "") : "";
+  /* Balance GENERAL de todas las obras (global) */
+  if (/(balance|estado|margen|resumen|saldo|financiero)/.test(f) &&
+      /(general|todas|todos|global|completo|cartera|empresa)/.test(f)) {
+    return { type: "balance_general", target: "", periodo: "mes" };
+  }
+
+  /* Balance / estado financiero de UNA obra */
+  if (/(balance|estado|margen|resumen|saldo|financiero)/.test(f) &&
+      /(obra|proyecto|casa|de|del|la|el)/.test(f)) {
+    const target = f
+      .replace(/^.*?(?:balance|estado|margen|resumen|saldo|financiero)/, "")
+      .replace(/\b(?:de|del|la|el|los|las|obra|proyecto)\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
     return { type: "balance", target, periodo: "mes" };
+  }
+
+  /* Gastos de la semana/mes */
+  if (/(gast[eé]|gastos|egresos|cu[aá]nto gast[eé])/.test(f) &&
+      /(semana|mes|hoy|esta)/.test(f)) {
+    return { type: "gastos", target: "", periodo: /mes/.test(f) ? "mes" : (/hoy/.test(f) ? "hoy" : "semana") };
+  }
+
+  /* Ingresos / cobros de la semana/mes */
+  if (/(ingresos?|cobr[eé]|cobros|recaud)/.test(f) &&
+      /(semana|mes|hoy|esta)/.test(f)) {
+    return { type: "ingresos", target: "", periodo: /mes/.test(f) ? "mes" : (/hoy/.test(f) ? "hoy" : "semana") };
   }
 
   /* Agenda / compromisos pendientes (hoy o la semana) */
@@ -652,8 +683,15 @@ export function computeQuery(data: Record<string, any>, q: QueryIntent): string 
 
   if (q.type === "balance") {
     if (!q.target) return "¿De qué obra querés el balance? Decime el nombre (ej. \"balance de la obra Casa Pérez\").";
-    const w = works.find(x => flat(String(x.name || x.nombre || "")).includes(flat(q.target)));
-    if (!w) return "No encontré la obra \"" + q.target + "\". ¿Cuál es el nombre exacto?";
+    const tn = normWork(q.target);
+    const w = works.find(x => {
+      const n = normWork(String(x.name || x.nombre || ""));
+      return !!n && (n.includes(tn) || tn.includes(n));
+    });
+    if (!w) {
+      const activas = works.filter(x => x.status === "activa").map(x => "• " + (x.name || x.nombre));
+      return "No encontré la obra \"" + q.target + "\".\n\n*Obras activas:*\n" + (activas.join("\n") || "Sin obras activas.");
+    }
     const wid = String(w.id || "");
     const ing = sum(incomes.filter(i => i.workId === wid).map(i => Number(i.amount) || 0));
     const cos = sum(expenses.filter(x => x.workId === wid).map(x => Number(x.amount) || 0));
@@ -666,6 +704,38 @@ export function computeQuery(data: Record<string, any>, q: QueryIntent): string 
       "• Margen: " + fmt(margen) + "\n" +
       "• Presupuesto: " + fmt(presupuesto) + "\n" +
       "• Pendiente de cobrar: " + fmt(pendiente);
+  }
+
+  if (q.type === "balance_general") {
+    const lineas = works.filter(x => x.status !== "finalizada").map(x => {
+      const wid = String(x.id || "");
+      const ing = sum(incomes.filter(i => i.workId === wid).map(i => Number(i.amount) || 0));
+      const cos = sum(expenses.filter(e => e.workId === wid).map(e => Number(e.amount) || 0));
+      return "• " + (x.name || x.nombre) + ": margen " + fmt(ing - cos) + " (" + fmt(ing) + " cobrado / -" + fmt(cos) + ")";
+    });
+    const totalIng = sum(incomes.map(i => Number(i.amount) || 0));
+    const totalCos = sum(expenses.map(e => Number(e.amount) || 0));
+    return "*Balance general*\n" +
+      "• Ingresos totales: " + fmt(totalIng) + "\n" +
+      "• Costos totales: -" + fmt(totalCos) + "\n" +
+      "• Margen neto: " + fmt(totalIng - totalCos) + "\n\n" +
+      (lineas.join("\n") || "Sin obras activas.");
+  }
+
+  if (q.type === "gastos") {
+    const desde = q.periodo === "mes" ? desdeMes : (q.periodo === "hoy" ? hoy : desdeSemana);
+    const gastos = expenses.filter(x => (x.date || "") >= desde);
+    const total = sum(gastos.map(x => Number(x.amount) || 0));
+    const label = q.periodo === "mes" ? "del mes" : (q.periodo === "hoy" ? "de hoy" : "de la semana");
+    return "*Gastos " + label + "*\nTotal: " + fmt(total) + " (" + gastos.length + " movimientos)";
+  }
+
+  if (q.type === "ingresos") {
+    const desde = q.periodo === "mes" ? desdeMes : (q.periodo === "hoy" ? hoy : desdeSemana);
+    const cobros = incomes.filter(i => (i.date || "") >= desde);
+    const total = sum(cobros.map(i => Number(i.amount) || 0));
+    const label = q.periodo === "mes" ? "del mes" : (q.periodo === "hoy" ? "de hoy" : "de la semana");
+    return "*Ingresos " + label + "*\nTotal: " + fmt(total) + " (" + cobros.length + " cobros)";
   }
 
   if (q.type === "agenda") {
@@ -697,8 +767,15 @@ export function queryLink(data: Record<string, any>, q: QueryIntent): string {
   if (q.type === "sueldos") return base + "/#/reporte/empleados";
   if (q.type === "agenda") return base + "/#/agenda";
   if (q.type === "herramientas") return base + "/#/herramientas";
+  if (q.type === "balance_general") return base + "/#/obras";
+  if (q.type === "gastos") return base + "/#/gastos";
+  if (q.type === "ingresos") return base + "/#/ingresos";
   if (q.type === "balance" && q.target) {
-    const w = ((data.works || []) as any[]).find(x => flat(String(x.name || x.nombre || "")).includes(flat(q.target)));
+    const tn = normWork(q.target);
+    const w = ((data.works || []) as any[]).find(x => {
+      const n = normWork(String(x.name || x.nombre || ""));
+      return !!n && (n.includes(tn) || tn.includes(n));
+    });
     if (w) return base + "/#/reporte/obra/" + String(w.id);
   }
   return "";
