@@ -2051,7 +2051,7 @@ async function processMessage(body: unknown) {
     if (queryIntent) {
       const qr = computeQuery(data, queryIntent);
       const link = queryLink(data, queryIntent);
-      const reply = link ? qr + "\n\n📊 Ver reporte completo: " + link : qr;
+      const reply = link ? qr + "\n\n📊 Podés ver el reporte completo y detallado acá: " + link : qr;
       console.log("[GADU-WA-QUERY] consulta:", queryIntent.type, "· target:", queryIntent.target || "(—)");
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
