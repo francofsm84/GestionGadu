@@ -780,3 +780,96 @@ export function queryLink(data: Record<string, any>, q: QueryIntent): string {
   }
   return "";
 }
+
+/* =====================================================================
+   REPORTES AVANZADOS (módulo "reporte" de la IA)
+   balance_obra · dias_trabajados · pagos_empleado · deuda_empleado
+   ===================================================================== */
+
+function periodStart(periodo: string): string {
+  const hoy = new Date();
+  if (periodo === "semana") return new Date(hoy.getTime() - 7 * 86400000).toISOString().slice(0, 10);
+  if (periodo === "mes") return new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
+  return "";  // historial completo
+}
+
+export function computeReporte(data: Record<string, any>, tipo: string, campos: Record<string, unknown>): string {
+  const sum = (arr: any[]) => (arr || []).reduce((a, b) => a + (Number(b) || 0), 0);
+  const fmt = (n: number) => "$" + (Number(n) || 0).toLocaleString("es-AR");
+  const employees = (data.employees || []) as any[];
+  const attendance = (data.attendance || []) as any[];
+  const expenses = (data.expenses || []) as any[];
+  const incomes = (data.incomes || []) as any[];
+  const works = (data.works || []) as any[];
+
+  const nombreEmp = (e: any) => ((e.firstName || "") + " " + (e.lastName || "")).trim() || "Empleado";
+  const findEmp = (nombre: string) => employees.find(e => {
+    const n = normWork(nombreEmp(e));
+    const t = normWork(nombre);
+    return !!n && !!t && (n.includes(t) || t.includes(n));
+  });
+  const findWork = (nombre: string) => works.find(w => {
+    const n = normWork(String(w.name || w.nombre || ""));
+    const t = normWork(nombre);
+    return !!n && !!t && (n.includes(t) || t.includes(n));
+  });
+  const esPago = (x: any) => x.expenseKind === "adelanto" || x.expenseKind === "pago" || x.expenseKind === "sueldo";
+
+  if (tipo === "balance_obra") {
+    const nombre = String(campos.obra || campos.nombre || "").trim();
+    if (!nombre) return "¿De qué obra querés el balance?";
+    const w = findWork(nombre);
+    if (!w) return "No encontré la obra \"" + nombre + "\".";
+    const ing = sum(incomes.filter(i => i.workId === w.id).map(i => i.amount));
+    const cos = sum(expenses.filter(x => x.workId === w.id).map(x => x.amount));
+    return "💰 *Balance: " + (w.name || w.nombre) + "*\n" +
+      "• Cobros: " + fmt(ing) + "\n" +
+      "• Gastos: -" + fmt(cos) + "\n" +
+      "• Saldo: " + fmt(ing - cos);
+  }
+
+  if (tipo === "dias_trabajados") {
+    const nombre = String(campos.empleado || "").trim();
+    if (!nombre) return "¿De qué empleado querés los días trabajados?";
+    const e = findEmp(nombre);
+    if (!e) return "No encontré al empleado \"" + nombre + "\".";
+    const desde = periodStart(String(campos.periodo || ""));
+    const dias = attendance.filter(a => a.employeeId === e.id && a.status === "presente" && (!desde || (a.date || "") >= desde)).length;
+    const label = campos.periodo === "semana" ? "esta semana" : (campos.periodo === "mes" ? "este mes" : "en total");
+    return "👷 *" + nombreEmp(e) + "*\n• Días trabajados " + label + ": " + dias;
+  }
+
+  if (tipo === "pagos_empleado") {
+    const nombre = String(campos.empleado || "").trim();
+    if (!nombre) return "¿De qué empleado querés los pagos?";
+    const e = findEmp(nombre);
+    if (!e) return "No encontré al empleado \"" + nombre + "\".";
+    const desde = periodStart(String(campos.periodo || ""));
+    const pagos = expenses.filter(x => x.employeeId === e.id && esPago(x) && (!desde || (x.date || "") >= desde));
+    const total = sum(pagos.map(x => x.amount));
+    const label = campos.periodo === "semana" ? "esta semana" : (campos.periodo === "mes" ? "este mes" : "en total");
+    return "💸 *Pagos a " + nombreEmp(e) + "* (" + label + ")\n" +
+      "• Total: " + fmt(total) + "\n" +
+      "• " + pagos.length + " pago(s)";
+  }
+
+  if (tipo === "deuda_empleado") {
+    const nombre = String(campos.empleado || "").trim();
+    if (!nombre) return "¿De qué empleado querés la deuda?";
+    const e = findEmp(nombre);
+    if (!e) return "No encontré al empleado \"" + nombre + "\".";
+    const att = attendance.filter(a => a.employeeId === e.id && a.status === "presente");
+    const horas = sum(att.flatMap((a: any) => (a.hours || []).map((h: any) => Number(h.hours) || 0)));
+    const devengado = horas * (Number(e.hourlyRate) || 0);
+    const pagado = sum(expenses.filter(x => x.employeeId === e.id && esPago(x)).map(x => x.amount));
+    const deuda = Math.max(0, devengado - pagado);
+    return "🧾 *Deuda a " + nombreEmp(e) + "*\n" +
+      "• Días trabajados: " + att.length + "\n" +
+      "• Horas: " + horas + "\n" +
+      "• Devengado: " + fmt(devengado) + "\n" +
+      "• Pagado: -" + fmt(pagado) + "\n" +
+      "• Deuda pendiente: " + fmt(deuda);
+  }
+
+  return "No pude procesar el reporte.";
+}

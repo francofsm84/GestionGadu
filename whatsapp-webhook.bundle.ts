@@ -781,6 +781,99 @@ export function queryLink(data: Record<string, any>, q: QueryIntent): string {
   return "";
 }
 
+/* =====================================================================
+   REPORTES AVANZADOS (modulo "reporte" de la IA)
+   balance_obra   dias_trabajados   pagos_empleado   deuda_empleado
+   ===================================================================== */
+
+function periodStart(periodo: string): string {
+  const hoy = new Date();
+  if (periodo === "semana") return new Date(hoy.getTime() - 7 * 86400000).toISOString().slice(0, 10);
+  if (periodo === "mes") return new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
+  return "";  // historial completo
+}
+
+export function computeReporte(data: Record<string, any>, tipo: string, campos: Record<string, unknown>): string {
+  const sum = (arr: any[]) => (arr || []).reduce((a, b) => a + (Number(b) || 0), 0);
+  const fmt = (n: number) => "$" + (Number(n) || 0).toLocaleString("es-AR");
+  const employees = (data.employees || []) as any[];
+  const attendance = (data.attendance || []) as any[];
+  const expenses = (data.expenses || []) as any[];
+  const incomes = (data.incomes || []) as any[];
+  const works = (data.works || []) as any[];
+
+  const nombreEmp = (e: any) => ((e.firstName || "") + " " + (e.lastName || "")).trim() || "Empleado";
+  const findEmp = (nombre: string) => employees.find(e => {
+    const n = normWork(nombreEmp(e));
+    const t = normWork(nombre);
+    return !!n && !!t && (n.includes(t) || t.includes(n));
+  });
+  const findWork = (nombre: string) => works.find(w => {
+    const n = normWork(String(w.name || w.nombre || ""));
+    const t = normWork(nombre);
+    return !!n && !!t && (n.includes(t) || t.includes(n));
+  });
+  const esPago = (x: any) => x.expenseKind === "adelanto" || x.expenseKind === "pago" || x.expenseKind === "sueldo";
+
+  if (tipo === "balance_obra") {
+    const nombre = String(campos.obra || campos.nombre || "").trim();
+    if (!nombre) return "De que obra queres el balance?";
+    const w = findWork(nombre);
+    if (!w) return "No encontre la obra \"" + nombre + "\".";
+    const ing = sum(incomes.filter(i => i.workId === w.id).map(i => i.amount));
+    const cos = sum(expenses.filter(x => x.workId === w.id).map(x => x.amount));
+    return "$ *Balance: " + (w.name || w.nombre) + "*\n" +
+      "- Cobros: " + fmt(ing) + "\n" +
+      "- Gastos: -" + fmt(cos) + "\n" +
+      "- Saldo: " + fmt(ing - cos);
+  }
+
+  if (tipo === "dias_trabajados") {
+    const nombre = String(campos.empleado || "").trim();
+    if (!nombre) return "De que empleado queres los dias trabajados?";
+    const e = findEmp(nombre);
+    if (!e) return "No encontre al empleado \"" + nombre + "\".";
+    const desde = periodStart(String(campos.periodo || ""));
+    const dias = attendance.filter(a => a.employeeId === e.id && a.status === "presente" && (!desde || (a.date || "") >= desde)).length;
+    const label = campos.periodo === "semana" ? "esta semana" : (campos.periodo === "mes" ? "este mes" : "en total");
+    return "[empleado] *" + nombreEmp(e) + "*\n- Dias trabajados " + label + ": " + dias;
+  }
+
+  if (tipo === "pagos_empleado") {
+    const nombre = String(campos.empleado || "").trim();
+    if (!nombre) return "De que empleado queres los pagos?";
+    const e = findEmp(nombre);
+    if (!e) return "No encontre al empleado \"" + nombre + "\".";
+    const desde = periodStart(String(campos.periodo || ""));
+    const pagos = expenses.filter(x => x.employeeId === e.id && esPago(x) && (!desde || (x.date || "") >= desde));
+    const total = sum(pagos.map(x => x.amount));
+    const label = campos.periodo === "semana" ? "esta semana" : (campos.periodo === "mes" ? "este mes" : "en total");
+    return "$ *Pagos a " + nombreEmp(e) + "* (" + label + ")\n" +
+      "- Total: " + fmt(total) + "\n" +
+      "- " + pagos.length + " pago(s)";
+  }
+
+  if (tipo === "deuda_empleado") {
+    const nombre = String(campos.empleado || "").trim();
+    if (!nombre) return "De que empleado queres la deuda?";
+    const e = findEmp(nombre);
+    if (!e) return "No encontre al empleado \"" + nombre + "\".";
+    const att = attendance.filter(a => a.employeeId === e.id && a.status === "presente");
+    const horas = sum(att.flatMap((a: any) => (a.hours || []).map((h: any) => Number(h.hours) || 0)));
+    const devengado = horas * (Number(e.hourlyRate) || 0);
+    const pagado = sum(expenses.filter(x => x.employeeId === e.id && esPago(x)).map(x => x.amount));
+    const deuda = Math.max(0, devengado - pagado);
+    return "[ticket] *Deuda a " + nombreEmp(e) + "*\n" +
+      "- Dias trabajados: " + att.length + "\n" +
+      "- Horas: " + horas + "\n" +
+      "- Devengado: " + fmt(devengado) + "\n" +
+      "- Pagado: -" + fmt(pagado) + "\n" +
+      "- Deuda pendiente: " + fmt(deuda);
+  }
+
+  return "No pude procesar el reporte.";
+}
+
 
 // ============================================================
 // GADU   Transcribir notas de voz de WhatsApp con Gemini
@@ -3400,7 +3493,7 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
     }
 
-    const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra", "inversion"];
+    const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra", "inversion", "reporte"];
     console.log("[GADU-WA-INTENT] texto a interpretar:", JSON.stringify(inc.text));
 
     const aiController = new AbortController();
@@ -3599,6 +3692,15 @@ async function processMessage(body: unknown) {
       await upsertSession(inc.from, row.user_id, "WAITING_JORNADA", {});
       fireAndForget(sendWhatsApp(inc.from, "A que empleado le cargamos la jornada?"));
       return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* [REPORTE] consulta gerencial (solo lectura): calcular y responder */
+    if (action && action.modulo === "reporte") {
+      const rc = (action.campos || {}) as Record<string, unknown>;
+      const reply = computeReporte(data, String(rc.tipo || ""), rc);
+      console.log("[GADU-WA-REPORTE] tipo:", rc.tipo, "  campos:", JSON.stringify(rc));
+      fireAndForget(sendWhatsApp(inc.from, reply));
+      return json({ ok: true, from: inc.from, reply });
     }
 
     if (action && ["gasto", "ingreso", "empleado", "adelanto", "obra", "inversion"].includes(action.modulo)) {

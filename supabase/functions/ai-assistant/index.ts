@@ -54,6 +54,12 @@ MAPEO DE CAMPOS POR MÓDULO:
 - JORNADA: "empleado" = nombre del empleado, "horas" = número, "obra" = obra si la nombra.
 - DIFERENCIACIÓN (CRÍTICO): Si el usuario dice "Gasté 5000 en la obra X", la acción es modulo="gasto" y la obra es SOLO una referencia (NO crees una obra nueva). Si el usuario dice "Crear obra X" / "Nueva obra X", la acción es modulo="obra". NUNCA mezcles ambas intenciones ni crees una obra a partir de un gasto.
 - MONEDA / RELLENO: ignorá las palabras de moneda o relleno entre el número y el concepto ("pesos", "peso", "mangos", "lucas", "ARS", "USD", "$"). Ej: "Invertí 170000 pesos en clavos" → monto=170000, categoria="clavos". NUNCA incluyas "pesos" ni "mangos" dentro de la categoría.
+- REPORTE: si el usuario pide un CÁLCULO o CONSULTA GERENCIAL (no quiere crear/registrar nada), usá modulo="reporte" con campos:
+  · "¿Cuál es el balance de la obra X?" → campos={"tipo":"balance_obra","obra":"X"}
+  · "¿Cuántos días trabajó Y esta semana/mes?" → campos={"tipo":"dias_trabajados","empleado":"Y","periodo":"semana|mes|total"}
+  · "¿Cuánto le pagué a Y este mes?" → campos={"tipo":"pagos_empleado","empleado":"Y","periodo":"mes|semana|total"}
+  · "¿Cuánto le debo a Y?" → campos={"tipo":"deuda_empleado","empleado":"Y"}
+  NO lo trates como "consulta" ni como "gasto": es SOLO LECTURA.
 
 - GASTO SIN VERBO: si el usuario escribe un NÚMERO seguido de "de" y un concepto (ej. "45678 de nafta", "5000 de cemento"), asumí que es un GASTO. Extraé "monto" = el número y "categoria" = el concepto. No preguntes.
 
@@ -124,7 +130,7 @@ function tools() {
       parameters: {
         type: "OBJECT",
         properties: {
-          modulo: { type: "STRING", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "inversion", "jornada", "adelanto", "consulta", "presupuesto_pdf", "asistencia"], description: "Qué formulario abrir. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = presupuesto en PDF. 'asistencia' = registrar horas trabajadas de empleados." },
+          modulo: { type: "STRING", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "inversion", "jornada", "adelanto", "consulta", "presupuesto_pdf", "asistencia", "reporte"], description: "Qué formulario abrir o reporte generar. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = presupuesto en PDF. 'asistencia' = registrar horas trabajadas de empleados. 'reporte' = balance de obra, días trabajados, pagos o deuda de un empleado." },
           campos: {
             type: "OBJECT",
             description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol, cliente, obra, empleado, monto, concepto, categoria, horas, ubicacion, presupuesto, query_type, target, items (solo con modulo='presupuesto_pdf').",
@@ -190,7 +196,7 @@ function toolsOpenAI() {
       parameters: {
         type: "object",
         properties: {
-          modulo: { type: "string", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "inversion", "jornada", "adelanto", "consulta", "presupuesto_pdf", "asistencia"], description: "Qué formulario abrir. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = presupuesto en PDF. 'asistencia' = registrar horas trabajadas de empleados." },
+          modulo: { type: "string", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "inversion", "jornada", "adelanto", "consulta", "presupuesto_pdf", "asistencia", "reporte"], description: "Qué formulario abrir o reporte generar. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = presupuesto en PDF. 'asistencia' = registrar horas trabajadas de empleados. 'reporte' = balance de obra, días trabajados, pagos o deuda de un empleado." },
           campos: {
             type: "object",
             description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol, cliente, obra, empleado, monto, concepto, categoria, horas, ubicacion, presupuesto, query_type, target, items (solo con modulo='presupuesto_pdf').",

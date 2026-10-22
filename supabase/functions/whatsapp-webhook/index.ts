@@ -46,6 +46,7 @@ import {
   detectQueryIntent,
   computeQuery,
   queryLink,
+  computeReporte,
 } from "./core.ts";
 import { resolveIncomingText } from "./transcribe.ts";
 import { enqueueMessage, claimNext, markDone, markFailed, resetStaleProcessing } from "./queue.ts";
@@ -2057,7 +2058,7 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
     }
 
-    const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra", "inversion"];
+    const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra", "inversion", "reporte"];
     console.log("[GADU-WA-INTENT] texto a interpretar:", JSON.stringify(inc.text));
 
     const aiController = new AbortController();
@@ -2256,6 +2257,15 @@ async function processMessage(body: unknown) {
       await upsertSession(inc.from, row.user_id, "WAITING_JORNADA", {});
       fireAndForget(sendWhatsApp(inc.from, "¿A qué empleado le cargamos la jornada?"));
       return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* [REPORTE] consulta gerencial (solo lectura): calcular y responder */
+    if (action && action.modulo === "reporte") {
+      const rc = (action.campos || {}) as Record<string, unknown>;
+      const reply = computeReporte(data, String(rc.tipo || ""), rc);
+      console.log("[GADU-WA-REPORTE] tipo:", rc.tipo, "· campos:", JSON.stringify(rc));
+      fireAndForget(sendWhatsApp(inc.from, reply));
+      return json({ ok: true, from: inc.from, reply });
     }
 
     if (action && ["gasto", "ingreso", "empleado", "adelanto", "obra", "inversion"].includes(action.modulo)) {
