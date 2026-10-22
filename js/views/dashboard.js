@@ -107,6 +107,11 @@
       .sort((a, b) => b.date.localeCompare(a.date))
       .slice(0, 8);
     const workById = id => works.find(w => w.id === id);
+    /* Deudas activas que vencen en 7 días o ya vencieron (alerta del dashboard) */
+    const debtsVencer = (S.data.debts || []).filter(d => !d.finalizada && (() => {
+      const dias = Math.ceil((new Date(d.fechaVencimiento + 'T00:00:00') - new Date()) / 86400000);
+      return dias <= 7;
+    })());
 
     view.innerHTML =
       '<div class="card period-bar">' +
@@ -253,6 +258,26 @@
           '</a>';
       }).join('') || '<p class="form-hint">Sin seguros registrados. <a href="#/seguros">Cargá la primera póliza</a>.</p>') +
       '</div></section>' +
+
+      (debtsVencer.length
+        ? '<section class="card">' +
+          '<div class="card-head">' +
+          '<div><h3>⚠️ Deudas próximas a vencer</h3><p class="muted">Cuotas que vencen en 7 días o ya vencieron</p></div>' +
+          '<a class="link-btn" href="#/deudas">Ir a Deudas ' + UI.icon('chevron-right', 14) + '</a>' +
+          '</div>' +
+          '<div class="stack">' +
+          debtsVencer.map(d => {
+            const dias = Math.ceil((new Date(d.fechaVencimiento + 'T00:00:00') - new Date()) / 86400000);
+            const vencida = dias < 0;
+            return '<a class="split-row" href="#/deudas">' +
+              '<div class="split-row-main"><strong>' + UI.escapeHtml(d.concepto) + '</strong>' +
+              '<span class="muted small">' + (vencida ? 'vencida el ' : 'vence el ') + UI.fmtDate(d.fechaVencimiento) + ' · cuota ' + d.cuotaActual + '/' + d.cuotasTotales + '</span></div>' +
+              '<div class="split-row-end">' + UI.chip(vencida ? 'Vencida' : (dias === 0 ? 'Hoy' : dias + 'd'), vencida ? 'danger' : 'warning', vencida ? 'alert-triangle' : 'calendar') + '<b>' + UI.fmtMoney(d.montoPorCuota) + '</b></div>' +
+              '</a>';
+          }).join('') +
+          '<a class="btn btn-soft btn-block" href="#/deudas">Ver todas las deudas</a>' +
+          '</div></section>'
+        : '') +
 
       '<section class="card">' +
       '<div class="card-head"><div><h3>Últimos movimientos</h3><p class="muted">Ingresos y gastos recientes</p></div></div>' +

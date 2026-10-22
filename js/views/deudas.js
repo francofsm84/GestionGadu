@@ -20,9 +20,20 @@
     return faltan * porCuota;
   }
 
+  /* Avanza una fecha exactamente N meses (clampa el día al fin de mes si no existe) */
+  function addMonths(dateStr, n) {
+    const parts = String(dateStr || '').split('-').map(Number);
+    if (parts.length !== 3 || !parts[0]) return dateStr;
+    const target = new Date(parts[0], parts[1] - 1 + n, 1);
+    const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+    const newDay = Math.min(parts[2], lastDay);
+    return target.getFullYear() + '-' + String(target.getMonth() + 1).padStart(2, '0') + '-' + String(newDay).padStart(2, '0');
+  }
+
   function list() {
     const q = state.q.toLowerCase();
     return S.data.debts.slice().filter(d => {
+      if (state.f === 'Finalizadas') return d.finalizada && (!q || d.concepto.toLowerCase().includes(q));
       if (d.finalizada) return false;
       const matchF = state.f === 'todas' || (state.f === d.tipo);
       const hay = (d.concepto + ' ' + d.tipo).toLowerCase();
@@ -50,6 +61,7 @@
       '<option value="Personal"' + (state.f === 'Personal' ? ' selected' : '') + '>Personal</option>' +
       '<option value="Empresa"' + (state.f === 'Empresa' ? ' selected' : '') + '>Empresa</option>' +
       '<option value="Obra"' + (state.f === 'Obra' ? ' selected' : '') + '>Obra</option>' +
+      '<option value="Finalizadas"' + (state.f === 'Finalizadas' ? ' selected' : '') + '>Finalizadas</option>' +
       '</select>' +
       '<div class="grow"></div>' +
       '<button class="btn btn-primary" id="btnNew">' + UI.icon('plus', 16) + 'Nueva Deuda</button>' +
@@ -116,11 +128,36 @@
   }
 
   function bindList(wrap) {
-    UI.on(wrap, '[data-pay]', 'click', e => {
+    UI.on(wrap, '[data-pay]', 'click', async e => {
       const d = S.data.debts.find(x => x.id === e.target.closest('[data-pay]').dataset.pay);
-      if (!d) return;
-      /* FASE 2: registrar el pago (suma cuota, avanza fecha, genera gasto) */
-      UI.toast('El pago de cuotas se habilita en la Fase 2', 'warning');
+      if (!d || d.finalizada) return;
+      const ok = await UI.confirm({
+        title: 'Pagar cuota',
+        message: 'Se pagará la cuota <strong>' + d.cuotaActual + '/' + d.cuotasTotales + '</strong> de ' + UI.escapeHtml(d.concepto) + ' (' + UI.fmtMoney(d.montoPorCuota) + ') y se registrará como gasto general.',
+        okLabel: 'Pagar cuota',
+      });
+      if (!ok) return;
+
+      /* 1) Registrar el gasto en caja general (antes de avanzar la cuota) */
+      S.add('expenses', {
+        type: 'general', workId: null, date: S.todayISO(), amount: Number(d.montoPorCuota) || 0,
+        category: 'Deuda', providerId: null, employeeId: null,
+        description: 'Pago cuota ' + d.cuotaActual + '/' + d.cuotasTotales + ' - ' + d.concepto,
+        invoiceNumber: '', paymentMethod: 'Efectivo', expenseKind: null, source: 'web',
+      });
+
+      /* 2) Avanzar la cuota + un mes de vencimiento */
+      const cuotaActual = (Number(d.cuotaActual) || 0) + 1;
+      const finalizada = cuotaActual > (Number(d.cuotasTotales) || 0);
+      S.update('debts', d.id, {
+        cuotaActual,
+        fechaVencimiento: addMonths(d.fechaVencimiento, 1),
+        finalizada,
+        updatedAt: new Date().toISOString(),
+      });
+
+      UI.toast(finalizada ? '✅ Última cuota pagada. Deuda finalizada.' : '✅ Cuota pagada. Se registró el gasto en tu caja general.', 'success');
+      G.router.refresh();
     });
     UI.on(wrap, '[data-edit]', 'click', e => openDeudaModal(S.data.debts.find(x => x.id === e.target.closest('[data-edit]').dataset.edit)));
     UI.on(wrap, '[data-del]', 'click', async e => {
