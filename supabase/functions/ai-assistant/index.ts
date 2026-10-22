@@ -54,24 +54,22 @@ MAPEO DE CAMPOS POR MÓDULO:
 - JORNADA: "empleado" = nombre del empleado, "horas" = número, "obra" = obra si la nombra.
 - DIFERENCIACIÓN (CRÍTICO): Si el usuario dice "Gasté 5000 en la obra X", la acción es modulo="gasto" y la obra es SOLO una referencia (NO crees una obra nueva). Si el usuario dice "Crear obra X" / "Nueva obra X", la acción es modulo="obra". NUNCA mezcles ambas intenciones ni crees una obra a partir de un gasto.
 - MONEDA / RELLENO: ignorá las palabras de moneda o relleno entre el número y el concepto ("pesos", "peso", "mangos", "lucas", "ARS", "USD", "$"). Ej: "Invertí 170000 pesos en clavos" → monto=170000, categoria="clavos". NUNCA incluyas "pesos" ni "mangos" dentro de la categoría.
-- REPORTE: si el usuario pide un CÁLCULO o CONSULTA GERENCIAL (no quiere crear/registrar nada), usá modulo="reporte" con campos:
-  · "¿Cuál es el balance de la obra X?" → campos={"tipo":"balance_obra","obra":"X"}
-  · "¿Cuántos días trabajó Y esta semana/mes?" → campos={"tipo":"dias_trabajados","empleado":"Y","periodo":"semana|mes|total"}
-  · "¿Cuánto le pagué a Y este mes?" → campos={"tipo":"pagos_empleado","empleado":"Y","periodo":"mes|semana|total"}
-  · "¿Cuánto le debo a Y?" → campos={"tipo":"deuda_empleado","empleado":"Y"}
-  NO lo trates como "consulta" ni como "gasto": es SOLO LECTURA.
+- REPORTE (PRIORITARIO): si el usuario pide un CÁLCULO GERENCIAL o un número (balance, saldo, días trabajados, pagos, deuda), usá SIEMPRE modulo="reporte" (JAMÁS "consulta" ni "gasto"). Es SOLO LECTURA:
+  · "¿Cuál es el balance de la obra X?" / "saldo de la obra X" → {"tipo":"balance_obra","obra":"X"}
+  · "¿Cuántos días trabajó Y esta semana/mes?" → {"tipo":"dias_trabajados","empleado":"Y","periodo":"semana"|"mes"|"total"}
+  · "¿Cuánto le pagué a Y este mes?" → {"tipo":"pagos_empleado","empleado":"Y","periodo":"mes"|"semana"|"total"}
+  · "¿Cuánto le debo a Y?" / "cuánto cobra Y" → {"tipo":"deuda_empleado","empleado":"Y"}
+  Si el tipo de cálculo no está en esta lista, NO uses "reporte".
 
 - GASTO SIN VERBO: si el usuario escribe un NÚMERO seguido de "de" y un concepto (ej. "45678 de nafta", "5000 de cemento"), asumí que es un GASTO. Extraé "monto" = el número y "categoria" = el concepto. No preguntes.
 
-CONSULTAS (QUERY_DATA):
-- Si el usuario hace una PREGUNTA sobre sus datos (NO quiere crear/registrar nada), llamá "abrir_formulario" con modulo="consulta" y campos={"query_type": ..., "target": ...}.
+CONSULTAS (QUERY_DATA) — SOLO para preguntas que NO son cálculos gerenciales:
+- Si el usuario hace una PREGUNTA simple (NO un reporte numérico), usá modulo="consulta" con campos={"query_type": ..., "target": ...}.
 - query_type posibles:
   - "expenses_week": preguntas de gastos de la última semana (ej. "¿Cuánto gasté esta semana?").
-  - "balance_work": saldo de una obra (ej. "¿Cuál es el saldo de la obra X?"). target = nombre de la obra.
   - "attendance_today": quién trabajó hoy (ej. "¿Quién trabajó hoy?").
-  - "pending_salaries": deudas/pagos pendientes a un empleado (ej. "¿Cuánto le debo a Juan?"). target = nombre del empleado.
 - target = el nombre de la obra o empleado mencionado (vacío "" si no se nombra).
-- Si la pregunta no encaja en ninguno de esos 4 tipos, NO llames la herramienta: respondé con un texto corto pidiendo reformular (ej. "No entendí la consulta. Probá '¿Cuál es el saldo de la obra X?'").
+- Si la pregunta no encaja, NO llames la herramienta: respondé con un texto corto pidiendo reformular.
 
 TOLERANCIA Y ADELANTOS (crítico):
 - MONTO CON "p": si el monto trae una "p" o "pesos" pegada (ej. "12000p", "12000 pesos"), ignorá esa letra y tomá solo el número (12000).
