@@ -2193,28 +2193,45 @@ async function processMessage(body: unknown) {
     let attHorasCtx: Record<string, unknown> = {};
     try {
       const sessAH = await getSession(normalizePhone(inc.from));
+      console.log("[GADU-WA-ATT] sesión recuperada:", JSON.stringify(sessAH ? { state: sessAH.state, ctx: sessAH.context } : null));
       if (sessAH && sessAH.state === "WAITING_ATTENDANCE_HOURS") { enWizardAttHoras = true; attHorasCtx = (sessAH.context as Record<string, unknown>) || {}; }
-    } catch (e) {}
+    } catch (e) {
+      console.error("[GADU-WA-ATT] error leyendo sesión:", e);
+    }
     if (enWizardAttHoras) {
-      const t = String(inc.text || "").trim();
-      const horas = Number(t.replace(/[^\d.,]/g, "").replace(",", "."));
-      if (!horas || horas <= 0) {
-        fireAndForget(sendWhatsApp(inc.from, "🤖 Eso no es un número de horas válido. ¿Cuántas horas trabajó? (ej. 8)"));
+      try {
+        console.log("[GADU-WA-ATT] contexto WAITING_ATTENDANCE_HOURS:", JSON.stringify(attHorasCtx));
+        const t = String(inc.text || "").trim();
+        const horas = Number(t.replace(/[^\d.,]/g, "").replace(",", "."));
+        console.log("[GADU-WA-ATT] horas parseadas:", horas, "· texto:", JSON.stringify(t));
+        if (!horas || horas <= 0 || !isFinite(horas)) {
+          fireAndForget(sendWhatsApp(inc.from, "🤖 Eso no es un número de horas válido. ¿Cuántas horas trabajó? (ej. 8)"));
+          return json({ ok: true, from: inc.from, reply: "" });
+        }
+        if (!data || !Array.isArray(data.attendance)) data.attendance = [];
+        const employeeId = String(attHorasCtx.employeeId || "");
+        const workId = attHorasCtx.workId ? String(attHorasCtx.workId) : null;
+        console.log("[GADU-WA-ATT] employeeId:", employeeId, "· workId:", workId, "· data ok:", !!data);
+        data.attendance.unshift({
+          id: crypto.randomUUID(), employeeId, date: new Date().toISOString().slice(0, 10),
+          status: "presente", hours: [{ workId, hours }], notes: "",
+        });
+        const up = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+        });
+        console.log("[GADU-WA-ATT] PATCH app_data status:", up.status);
+        await deleteSession(normalizePhone(inc.from));
+        const empNameAtt = String(attHorasCtx.employeeName || "Empleado");
+        const workNameAtt = String(attHorasCtx.workName || "");
+        fireAndForget(sendWhatsApp(inc.from, "✅ Asistencia registrada: " + empNameAtt + " trabajó " + horas + " horas" + (workNameAtt ? " en " + workNameAtt : "")));
+        return json({ ok: true, from: inc.from, reply: "asistencia guardada" });
+      } catch (err) {
+        console.error("[GADU-WA-ATT] ERROR en WAITING_ATTENDANCE_HOURS:", err);
+        fireAndForget(sendWhatsApp(inc.from, "🤖 No pude registrar la asistencia. Escribí *cancelar* y volvé a intentar con \"registrar asistencia\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
-      (data.attendance || (data.attendance = [])).unshift({
-        id: crypto.randomUUID(), employeeId: String(attHorasCtx.employeeId || ""), date: new Date().toISOString().slice(0, 10),
-        status: "presente", hours: [{ workId: attHorasCtx.workId ? String(attHorasCtx.workId) : null, hours }], notes: "",
-      });
-      await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
-        method: "PATCH",
-        headers: { Prefer: "return=minimal" },
-        body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
-      });
-      await deleteSession(normalizePhone(inc.from));
-      const workNameAtt = String(attHorasCtx.workName || "");
-      fireAndForget(sendWhatsApp(inc.from, "✅ Asistencia registrada: " + String(attHorasCtx.employeeName || "Empleado") + " trabajó " + horas + " horas" + (workNameAtt ? " en " + workNameAtt : "")));
-      return json({ ok: true, from: inc.from, reply: "asistencia guardada" });
     }
 
     /* [GADU-WA-EXPORT] Exportar gastos a Excel (comando "excel" / "exportar gastos") */
