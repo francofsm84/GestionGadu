@@ -303,7 +303,17 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
   m = f.match(/(?:agendar|agenda|nuevo\s+compromiso|compromiso|visita|reuni[oo]n|entrega|evento)\s+(.+)/i);
   if (m && String(m[1] || "").trim()) return { modulo: "agendar", campos: { titulo: String(m[1] || "").trim() } };
 
-  /* 7b) Jornada: "Juan 8 horas en obra X" / "jornada de Juan 8 horas" */
+  /* 7b) Asistencia: "Registra 6 horas de Angel en casa de chicho" /
+          "Leo trabajo 8 horas en la obra de Hugo" /
+          fallback jornada: "Juan 8 horas en obra X" */
+  m = f.match(/^(?:registra[r]?|carg[aa]r?|anot[aa]r?|agreg[aa]r?)\s+([\d]+(?:\s*[.,]\s*\d+)?)\s*horas?\s+(?:de|para)\s+(.+?)\s+(?:en\s+)?(.+)/i);
+  if (m && Number(m[1]) > 0 && String(m[2] || "").trim()) {
+    return { modulo: "asistencia", campos: { empleado: String(m[2] || "").trim(), horas: Number(m[1]), obra: String(m[3] || "").trim() } };
+  }
+  m = f.match(/(.+?)\s+(?:trabaj[oo]|labur[oo]|hizo)\s+([\d]+(?:\s*[.,]\s*\d+)?)\s*horas?\s+(?:en\s+)?(.+)/i);
+  if (m && String(m[1] || "").trim() && Number(m[2]) > 0) {
+    return { modulo: "asistencia", campos: { empleado: String(m[1] || "").trim(), horas: Number(m[2]), obra: String(m[3] || "").trim() } };
+  }
   m = f.match(/(?:jornada\s+(?:de\s+)?)?(.+?)\s+([\d]+(?:\s*[.,]\s*\d+)?)\s*horas?\s+(?:en\s+)?(.+)/i);
   if (m && String(m[1] || "").trim() && Number(m[2]) > 0) return { modulo: "jornada", campos: { empleado: String(m[1] || "").trim(), horas: Number(m[2]), obra: String(m[3] || "").trim() } };
 
@@ -1781,6 +1791,7 @@ const SUBMENUS: Record<string, Array<{ id: string; title: string; description?: 
     { id: "action_nueva_obra", title: "Nueva Obra" },
     { id: "action_presupuesto", title: "Presupuesto" },
     { id: "action_contacto", title: "Nuevo Contacto" },
+    { id: "action_asistencia", title: "Registrar Asistencia" },
     { id: "action_humano", title: "Hablar con humano" },
   ],
 };
@@ -1973,6 +1984,14 @@ function money(n: unknown): string {
 }
 function flatStr(s: unknown): string {
   return String(s || "").toLowerCase().normalize("NFD").split("").filter((c: string) => { const n = c.charCodeAt(0); return n < 768 || n > 879; }).join("");
+}
+/* Normaliza nombres para matching tolerante (sin articulos/preposiciones) */
+function normStr(s: unknown): string {
+  return flatStr(s)
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\b(?:de|del|la|el|los|las|en|a|con|y|e|al|un|una|casa|obra|obras|proyecto|the|of|para|por|mi|mis)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 function resolveFecha(raw: string): string {
   const r = String(raw || "hoy").toLowerCase();
@@ -2295,6 +2314,49 @@ async function handleButtonReply(from: string, buttonId: string) {
     return;
   }
 
+  /* [GADU-WA-ATTENDANCE] Paso 1: empleado seleccionado -> pedir obra */
+  if (buttonId.startsWith("att_emp:")) {
+    const empId = buttonId.slice("att_emp:".length);
+    try {
+      const rAtt = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+      const rowsAtt = (await rAtt.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+      const dAtt = (Array.isArray(rowsAtt) && rowsAtt.length) ? (rowsAtt[0].data || {}) : {};
+      const emp = (dAtt.employees || []).find((e: any) => String(e.id) === empId);
+      const empName = emp ? String((emp.firstName || "") + " " + (emp.lastName || "")).trim() : "el empleado";
+      const obras = (dAtt.works || []).filter((w: any) => w.status === "activa").slice(0, 10);
+      if (!obras.length) {
+        fireAndForget(sendWhatsApp(from, "[BOT] No tenes obras activas. Crea una con \"nueva obra [nombre]\"."));
+        await deleteSession(normalizePhone(from));
+        return;
+      }
+      await upsertSession(from, userId, "WAITING_ATTENDANCE_WORK", { employeeId: empId, employeeName: empName });
+      await sendWhatsAppList(from, "En que obra trabajo " + empName + "?", obras.map((w: any) => ({ id: "att_work:" + String(w.id), title: String(w.nombre || w.name || "Obra") })), { button: "Elegir obra", sectionTitle: "Obras activas" });
+    } catch (e) {
+      fireAndForget(sendWhatsApp(from, "[ALERTA] No pude cargar las obras. Proba de nuevo."));
+    }
+    return;
+  }
+
+  /* [GADU-WA-ATTENDANCE] Paso 2: obra seleccionada -> pedir horas */
+  if (buttonId.startsWith("att_work:")) {
+    const workId = buttonId.slice("att_work:".length);
+    try {
+      const sessAtt = await getSession(normalizePhone(from));
+      const ctxAtt = ((sessAtt && sessAtt.context) || {}) as Record<string, unknown>;
+      const empName = String(ctxAtt.employeeName || "el empleado");
+      const rAtt = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+      const rowsAtt = (await rAtt.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+      const dAtt = (Array.isArray(rowsAtt) && rowsAtt.length) ? (rowsAtt[0].data || {}) : {};
+      const work = (dAtt.works || []).find((w: any) => String(w.id) === workId);
+      const workName = work ? String(work.nombre || work.name || "la obra") : "la obra";
+      await upsertSession(from, userId, "WAITING_ATTENDANCE_HOURS", { employeeId: ctxAtt.employeeId, employeeName: empName, workId, workName });
+      fireAndForget(sendWhatsApp(from, "Cuantas horas trabajo " + empName + " en " + workName + "? (Ej: 8)"));
+    } catch (e) {
+      fireAndForget(sendWhatsApp(from, "[ALERTA] No pude continuar. Proba de nuevo."));
+    }
+    return;
+  }
+
   /* [GADU-WA-METRICAS] Deudas de TODOS los empleados (solo lectura) */
   if (buttonId === "metricas_deudas") {
     try {
@@ -2370,6 +2432,23 @@ async function handleButtonReply(from: string, buttonId: string) {
         { id: "contact_role:socio", title: "Socio" },
         { id: "contact_role:empleado", title: "Empleado" },
       ], { button: "Elegir tipo", sectionTitle: "Contacto" });
+      return;
+    }
+    if (act === "asistencia") {
+      try {
+        const rAsis = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+        const rowsAsis = (await rAsis.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+        const dAsis = (Array.isArray(rowsAsis) && rowsAsis.length) ? (rowsAsis[0].data || {}) : {};
+        const emps = (dAsis.employees || []).filter((e: any) => e.active !== false).slice(0, 10);
+        if (!emps.length) {
+          fireAndForget(sendWhatsApp(from, "[BOT] No tenes empleados activos. Carga uno con \"nuevo empleado [nombre]\"."));
+          return;
+        }
+        await upsertSession(from, userId, "WAITING_ATTENDANCE_EMPLOYEE", {});
+        await sendWhatsAppList(from, "Que empleado trabajo?", emps.map((e: any) => ({ id: "att_emp:" + String(e.id), title: String((e.firstName || "") + " " + (e.lastName || "")).trim() })), { button: "Elegir empleado", sectionTitle: "Empleados" });
+      } catch (e) {
+        fireAndForget(sendWhatsApp(from, "[ALERTA] No pude cargar los empleados. Proba de nuevo."));
+      }
       return;
     }
     if (act === "humano") {
@@ -3549,6 +3628,35 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply: "jornada guardada" });
     }
 
+    /* [GADU-WA-ATTENDANCE] Asistencia paso 3: horas -> guardar (WAITING_ATTENDANCE_HOURS) */
+    let enWizardAttHoras = false;
+    let attHorasCtx: Record<string, unknown> = {};
+    try {
+      const sessAH = await getSession(normalizePhone(inc.from));
+      if (sessAH && sessAH.state === "WAITING_ATTENDANCE_HOURS") { enWizardAttHoras = true; attHorasCtx = (sessAH.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardAttHoras) {
+      const t = String(inc.text || "").trim();
+      const horas = Number(t.replace(/[^\d.,]/g, "").replace(",", "."));
+      if (!horas || horas <= 0) {
+        fireAndForget(sendWhatsApp(inc.from, "[BOT] Eso no es un numero de horas valido. Cuantas horas trabajo? (ej. 8)"));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      (data.attendance || (data.attendance = [])).unshift({
+        id: crypto.randomUUID(), employeeId: String(attHorasCtx.employeeId || ""), date: new Date().toISOString().slice(0, 10),
+        status: "presente", hours: [{ workId: attHorasCtx.workId ? String(attHorasCtx.workId) : null, hours }], notes: "",
+      });
+      await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+      });
+      await deleteSession(normalizePhone(inc.from));
+      const workNameAtt = String(attHorasCtx.workName || "");
+      fireAndForget(sendWhatsApp(inc.from, "OK Asistencia registrada: " + String(attHorasCtx.employeeName || "Empleado") + " trabajo " + horas + " horas" + (workNameAtt ? " en " + workNameAtt : "")));
+      return json({ ok: true, from: inc.from, reply: "asistencia guardada" });
+    }
+
     /* [GADU-WA-EXPORT] Exportar gastos a Excel (comando "excel" / "exportar gastos") */
     if (/\b(excel|planilla|xlsx)\b/i.test(inc.text) || /exportar\s+(gastos|movimientos|todo|mis\s+datos)/i.test(inc.text)) {
       console.log("[GADU-WA-EXPORT] pedido de exportacion:", inc.text);
@@ -3727,27 +3835,32 @@ async function processMessage(body: unknown) {
       }
     }
 
-    /* Registro de asistencia (REGISTER_ATTENDANCE) */
+    /* Registro de asistencia (REGISTER_ATTENDANCE) - acepta formato array
+       (employees) o simple (empleado/obra/horas) */
     if (action && action.modulo === "asistencia") {
       const c = (action.campos || {}) as Record<string, unknown>;
       const fecha = resolveFecha(String(c.fecha || "hoy"));
-      const employees = Array.isArray(c.employees) ? c.employees : [];
+      /* Formato simple: {empleado, horas, obra} -> envolver como array */
+      let employees: Array<Record<string, unknown>> = Array.isArray(c.employees) ? (c.employees as Array<Record<string, unknown>>) : [];
+      if (!employees.length && c.empleado) {
+        employees = [{ nombre: String(c.empleado || ""), horas: Number(c.horas) || 0, work: String(c.obra || c.work || "") }];
+      }
       const registrados: Array<{ nombre: string; horas: number; workLabel: string }> = [];
       const noEncontrados: string[] = [];
       for (const e of employees) {
-        const nombre = String((e as any).nombre || "").trim();
+        const nombre = String((e as any).nombre || (e as any).empleado || "").trim();
         const horas = Number((e as any).horas) || 0;
         if (!nombre || horas <= 0) continue;
         const emp = (data.employees || []).find((x: any) =>
-          flatStr(String((x.firstName || "") + " " + (x.lastName || "")).trim()).includes(flatStr(nombre))
+          normStr(String((x.firstName || "") + " " + (x.lastName || "")).trim()).includes(normStr(nombre))
         );
         if (!emp) { noEncontrados.push(nombre); continue; }
-        /* Resolver la obra (work) -> workId; si no se encuentra o no se dijo, null */
-        const workName = String((e as any).work || "").trim();
+        /* Resolver la obra -> workId con matching flexible (normWork) */
+        const workName = String((e as any).work || (e as any).obra || "").trim();
         let workId: string | null = null;
         let workLabel = "";
         if (workName) {
-          const w = (data.works || []).find((x: any) => flatStr(String(x.nombre || x.name || "")).includes(flatStr(workName)));
+          const w = (data.works || []).find((x: any) => normStr(String(x.nombre || x.name || "")).includes(normStr(workName)));
           if (w) { workId = String(w.id || ""); workLabel = String(w.nombre || w.name || workName); }
         }
         (data.attendance || (data.attendance = [])).push({

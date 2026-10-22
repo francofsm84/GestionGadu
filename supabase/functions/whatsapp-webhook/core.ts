@@ -303,7 +303,17 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
   m = f.match(/(?:agendar|agenda|nuevo\s+compromiso|compromiso|visita|reuni[oó]n|entrega|evento)\s+(.+)/i);
   if (m && String(m[1] || "").trim()) return { modulo: "agendar", campos: { titulo: String(m[1] || "").trim() } };
 
-  /* 7b) Jornada: "Juan 8 horas en obra X" / "jornada de Juan 8 horas" */
+  /* 7b) Asistencia: "Registra 6 horas de Angel en casa de chicho" /
+          "Leo trabajó 8 horas en la obra de Hugo" /
+          fallback jornada: "Juan 8 horas en obra X" */
+  m = f.match(/^(?:registra[r]?|carg[aá]r?|anot[aá]r?|agreg[aá]r?)\s+([\d]+(?:\s*[.,]\s*\d+)?)\s*horas?\s+(?:de|para)\s+(.+?)\s+(?:en\s+)?(.+)/i);
+  if (m && Number(m[1]) > 0 && String(m[2] || "").trim()) {
+    return { modulo: "asistencia", campos: { empleado: String(m[2] || "").trim(), horas: Number(m[1]), obra: String(m[3] || "").trim() } };
+  }
+  m = f.match(/(.+?)\s+(?:trabaj[oó]|labur[oó]|hizo)\s+([\d]+(?:\s*[.,]\s*\d+)?)\s*horas?\s+(?:en\s+)?(.+)/i);
+  if (m && String(m[1] || "").trim() && Number(m[2]) > 0) {
+    return { modulo: "asistencia", campos: { empleado: String(m[1] || "").trim(), horas: Number(m[2]), obra: String(m[3] || "").trim() } };
+  }
   m = f.match(/(?:jornada\s+(?:de\s+)?)?(.+?)\s+([\d]+(?:\s*[.,]\s*\d+)?)\s*horas?\s+(?:en\s+)?(.+)/i);
   if (m && String(m[1] || "").trim() && Number(m[2]) > 0) return { modulo: "jornada", campos: { empleado: String(m[1] || "").trim(), horas: Number(m[2]), obra: String(m[3] || "").trim() } };
 

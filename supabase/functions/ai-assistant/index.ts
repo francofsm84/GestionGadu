@@ -89,6 +89,7 @@ PRESUPUESTO PDF (CREATE_BUDGET):
 
 REGISTRO DE ASISTENCIA (REGISTER_ATTENDANCE):
 - Si el usuario registra horas trabajadas de empleados (ej. "Hoy trabajó Juan 8 horas, Pedro 6 y Luis 4" o "Registrá jornada de ayer: Juan 8, Pedro 8"), llamá "abrir_formulario" con modulo="asistencia" y campos={"fecha": "hoy"|"ayer"|"YYYY-MM-DD", "employees": [{"nombre":"Juan","horas":8,"work":"Casa Ángel"}, ...]}.
+- Para UN SOLO empleado podés usar el formato simple: "Leo trabajó 8 horas en la obra de Hugo" o "Registra 6 horas de Angel en casa de chicho" → modulo="asistencia" con campos={"empleado":"Leo","horas":8,"obra":"Hugo"}.
 - "fecha": "hoy" si no se aclara, "ayer" si dice "ayer", o la fecha ISO si la da explícita.
 - "employees": array de {nombre, horas, work}. "work" = nombre de la obra si el usuario la menciona (ej. "en la obra Casa Ángel"); si no la menciona, dejá "work" vacío (""). Si un empleado no tiene horas, poné horas=0.
 
