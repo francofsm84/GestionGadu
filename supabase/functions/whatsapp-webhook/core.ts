@@ -912,3 +912,23 @@ export function calcularDeudasEmpleados(data: Record<string, any>): string {
   ).join("\n");
   return "🧾 *Deudas de Empleados*\n\n" + body + "\n\n*Total a pagar: " + fmt(total) + "*";
 }
+
+/* Cuotas pendientes de "Deudas y Cuotas" (data.debts): monto restante
+   y próximo vencimiento de cada deuda activa (no finalizada). */
+export function calcularCuotas(data: Record<string, any>): string {
+  const fmt = (n: number) => "$" + (Number(n) || 0).toLocaleString("es-AR");
+  const debts = (data.debts || []) as any[];
+  const activas = debts.filter(d => !d.finalizada);
+  if (!activas.length) return "💰 *Cuotas pendientes*\nNo tenés deudas activas en cuotas.";
+
+  const lineas = activas.map(d => {
+    const faltan = Math.max(0, (Number(d.cuotasTotales) || 0) - (Number(d.cuotaActual) || 0) + 1);
+    const pendiente = faltan * (Number(d.montoPorCuota) || 0);
+    return "• " + (d.concepto || "Deuda") + ": " + faltan + " cuota(s) restante(s) · " + fmt(pendiente) + " · vence " + (d.fechaVencimiento || "—");
+  });
+  const total = activas.reduce((s, d) => {
+    const faltan = Math.max(0, (Number(d.cuotasTotales) || 0) - (Number(d.cuotaActual) || 0) + 1);
+    return s + faltan * (Number(d.montoPorCuota) || 0);
+  }, 0);
+  return "💰 *Cuotas pendientes*\n\n" + lineas.join("\n") + "\n\n*Total pendiente: " + fmt(total) + "*";
+}

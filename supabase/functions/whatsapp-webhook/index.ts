@@ -48,6 +48,7 @@ import {
   queryLink,
   computeReporte,
   calcularDeudasEmpleados,
+  calcularCuotas,
 } from "./core.ts";
 import { resolveIncomingText } from "./transcribe.ts";
 import { enqueueMessage, claimNext, markDone, markFailed, resetStaleProcessing } from "./queue.ts";
@@ -310,9 +311,10 @@ const SUBMENUS: Record<string, Array<{ id: string; title: string; description?: 
     { id: "action_ingreso", title: "Registrar Cobro" },
   ],
   menu_metricas: [
-    { id: "action_consulta", title: "Consultar Saldo" },
-    { id: "action_balance_obra", title: "Balance de Obra" },
-    { id: "metricas_deudas", title: "Deudas de Empleados" },
+    { id: "action_balance_obra", title: "Consultar Saldo Obra" },
+    { id: "metricas_deudas", title: "Deudas Empleados" },
+    { id: "metricas_cuotas", title: "Cuotas" },
+    { id: "menu_root", title: "Volver al menú" },
   ],
   menu_gestionar: [
     { id: "action_nueva_obra", title: "Nueva Obra" },
@@ -897,6 +899,28 @@ async function handleButtonReply(from: string, buttonId: string) {
       console.error("[GADU-WA-METRICAS] falló:", e);
       fireAndForget(sendWhatsApp(from, "⚠️ No pude calcular las deudas. Probá de nuevo."));
     }
+    return;
+  }
+
+  /* [GADU-WA-METRICAS] Cuotas pendientes de Deudas y Cuotas (data.debts) */
+  if (buttonId === "metricas_cuotas") {
+    try {
+      const rCuotas = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+      const rowsCuotas = (await rCuotas.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+      const dCuotas = (Array.isArray(rowsCuotas) && rowsCuotas.length) ? (rowsCuotas[0].data || {}) : {};
+      const reply = calcularCuotas(dCuotas);
+      console.log("[GADU-WA-METRICAS] cuotas calculadas para", userId);
+      fireAndForget(sendWhatsApp(from, reply));
+    } catch (e) {
+      console.error("[GADU-WA-METRICAS] falló:", e);
+      fireAndForget(sendWhatsApp(from, "⚠️ No pude calcular las cuotas. Probá de nuevo."));
+    }
+    return;
+  }
+
+  /* [GADU-WA-MENU] Volver al menú principal */
+  if (buttonId === "menu_root") {
+    await showMainMenu(from, "¡Hola! 👋 Soy tu asistente GADU. ¿Qué querés hacer hoy?");
     return;
   }
 

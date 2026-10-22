@@ -913,6 +913,26 @@ export function calcularDeudasEmpleados(data: Record<string, any>): string {
   return "[ticket] *Deudas de Empleados*\n\n" + body + "\n\n*Total a pagar: " + fmt(total) + "*";
 }
 
+/* Cuotas pendientes de "Deudas y Cuotas" (data.debts): monto restante
+   y proximo vencimiento de cada deuda activa (no finalizada). */
+export function calcularCuotas(data: Record<string, any>): string {
+  const fmt = (n: number) => "$" + (Number(n) || 0).toLocaleString("es-AR");
+  const debts = (data.debts || []) as any[];
+  const activas = debts.filter(d => !d.finalizada);
+  if (!activas.length) return "$ *Cuotas pendientes*\nNo tenes deudas activas en cuotas.";
+
+  const lineas = activas.map(d => {
+    const faltan = Math.max(0, (Number(d.cuotasTotales) || 0) - (Number(d.cuotaActual) || 0) + 1);
+    const pendiente = faltan * (Number(d.montoPorCuota) || 0);
+    return "- " + (d.concepto || "Deuda") + ": " + faltan + " cuota(s) restante(s)   " + fmt(pendiente) + "   vence " + (d.fechaVencimiento || "-");
+  });
+  const total = activas.reduce((s, d) => {
+    const faltan = Math.max(0, (Number(d.cuotasTotales) || 0) - (Number(d.cuotaActual) || 0) + 1);
+    return s + faltan * (Number(d.montoPorCuota) || 0);
+  }, 0);
+  return "$ *Cuotas pendientes*\n\n" + lineas.join("\n") + "\n\n*Total pendiente: " + fmt(total) + "*";
+}
+
 
 // ============================================================
 // GADU   Transcribir notas de voz de WhatsApp con Gemini
@@ -1783,9 +1803,10 @@ const SUBMENUS: Record<string, Array<{ id: string; title: string; description?: 
     { id: "action_ingreso", title: "Registrar Cobro" },
   ],
   menu_metricas: [
-    { id: "action_consulta", title: "Consultar Saldo" },
-    { id: "action_balance_obra", title: "Balance de Obra" },
-    { id: "metricas_deudas", title: "Deudas de Empleados" },
+    { id: "action_balance_obra", title: "Consultar Saldo Obra" },
+    { id: "metricas_deudas", title: "Deudas Empleados" },
+    { id: "metricas_cuotas", title: "Cuotas" },
+    { id: "menu_root", title: "Volver al menu" },
   ],
   menu_gestionar: [
     { id: "action_nueva_obra", title: "Nueva Obra" },
@@ -2370,6 +2391,28 @@ async function handleButtonReply(from: string, buttonId: string) {
       console.error("[GADU-WA-METRICAS] fallo:", e);
       fireAndForget(sendWhatsApp(from, "[ALERTA] No pude calcular las deudas. Proba de nuevo."));
     }
+    return;
+  }
+
+  /* [GADU-WA-METRICAS] Cuotas pendientes de Deudas y Cuotas (data.debts) */
+  if (buttonId === "metricas_cuotas") {
+    try {
+      const rCuotas = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+      const rowsCuotas = (await rCuotas.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+      const dCuotas = (Array.isArray(rowsCuotas) && rowsCuotas.length) ? (rowsCuotas[0].data || {}) : {};
+      const reply = calcularCuotas(dCuotas);
+      console.log("[GADU-WA-METRICAS] cuotas calculadas para", userId);
+      fireAndForget(sendWhatsApp(from, reply));
+    } catch (e) {
+      console.error("[GADU-WA-METRICAS] fallo:", e);
+      fireAndForget(sendWhatsApp(from, "[ALERTA] No pude calcular las cuotas. Proba de nuevo."));
+    }
+    return;
+  }
+
+  /* [GADU-WA-MENU] Volver al menu principal */
+  if (buttonId === "menu_root") {
+    await showMainMenu(from, "Hola! Hola Soy tu asistente GADU. Que queres hacer hoy?");
     return;
   }
 
