@@ -34,6 +34,7 @@ const APP_SHELL = [
   './js/views/gastos.js',
   './js/views/bandeja.js',
   './js/views/libro.js',
+  './js/views/deudas.js',
   './js/views/socios.js',
   './js/views/seguros.js',
   './js/views/empleados.js',
