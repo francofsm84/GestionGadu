@@ -2312,6 +2312,18 @@ async function handleButtonReply(from: string, buttonId: string) {
     return;
   }
 
+  /* [GADU-WA-MENU] Navegacion jerarquica: SIEMPRE PRIMERO, antes de cualquier
+     otro chequeo (soporte, wizards, etc.). menu_root + menu_* no caen a texto. */
+  if (buttonId === "menu_root") {
+    await showMainMenu(from, "Hola! Hola Soy tu asistente GADU. Que queres hacer hoy?");
+    return;
+  }
+  if (buttonId.startsWith("menu_")) {
+    console.log("[GADU-WA-MENU] mostrando submenu para:", buttonId);
+    await showSubMenu(from, buttonId);
+    return;
+  }
+
   /* [GADU-WA-SUPPORT] Si hay un ticket ABIERTO, ignorar cualquier boton salvo
      los de "hablar con humano" (que re-confirman el ticket). */
   if (buttonId !== "action_humano" && buttonId !== "fallback_humano") {
@@ -2333,18 +2345,6 @@ async function handleButtonReply(from: string, buttonId: string) {
       await upsertSession(from, userId, "WAITING_CLIENT_ADVANCE", {});
       fireAndForget(sendWhatsApp(from, "$ Decime *de que cliente/obra* es el adelanto y *de cuanto*. Ej: \"Adelanto de 50000 de la obra Casa Perez\"."));
     }
-    return;
-  }
-
-  /* [GADU-WA-MENU] Volver al menu principal (debe ir ANTES del generico menu_*) */
-  if (buttonId === "menu_root") {
-    await showMainMenu(from, "Hola! Hola Soy tu asistente GADU. Que queres hacer hoy?");
-    return;
-  }
-
-  /* [GADU-WA-MENU] Navegacion jerarquica: categoria -> submenu */
-  if (buttonId.startsWith("menu_")) {
-    await showSubMenu(from, buttonId);
     return;
   }
 
@@ -3725,10 +3725,15 @@ async function processMessage(body: unknown) {
           if (wByName) workId = String(wByName.id);
         }
         console.log("[GADU-WA-ATT] FINAL employeeId:", employeeId, "  workId:", workId, "  data ok:", !!data);
-        data.attendance.unshift({
-          id: crypto.randomUUID(), employeeId, date: new Date().toISOString().slice(0, 10),
+        /* ID robusto: crypto.randomUUID() con fallback manual por si el runtime no lo expone */
+        let attId = "";
+        try { attId = crypto.randomUUID(); } catch (_e) { attId = "att-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10); }
+        const nuevoReg = {
+          id: attId, employeeId, date: new Date().toISOString().slice(0, 10),
           status: "presente", hours: [{ workId, hours }], notes: "",
-        });
+        };
+        console.log("[GADU-WA-ATT] JSON a insertar:", JSON.stringify(nuevoReg));
+        data.attendance.unshift(nuevoReg);
         const up = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
           method: "PATCH",
           headers: { Prefer: "return=minimal" },
