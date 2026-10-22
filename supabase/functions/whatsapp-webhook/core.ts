@@ -873,3 +873,32 @@ export function computeReporte(data: Record<string, any>, tipo: string, campos: 
 
   return "No pude procesar el reporte.";
 }
+
+/* Deudas de TODOS los empleados: haberes (horas × tarifa) − pagos/adelantos.
+   Devuelve un resumen formateado para WhatsApp. */
+export function calcularDeudasEmpleados(data: Record<string, any>): string {
+  const sum = (arr: any[]) => (arr || []).reduce((a, b) => a + (Number(b) || 0), 0);
+  const fmt = (n: number) => "$" + (Number(n) || 0).toLocaleString("es-AR");
+  const employees = (data.employees || []) as any[];
+  const attendance = (data.attendance || []) as any[];
+  const expenses = (data.expenses || []) as any[];
+  const esPago = (x: any) => x.expenseKind === "adelanto" || x.expenseKind === "pago" || x.expenseKind === "sueldo";
+  const nombreEmp = (e: any) => ((e.firstName || "") + " " + (e.lastName || "")).trim() || "Empleado";
+
+  const filas = employees.map(e => {
+    const att = attendance.filter(a => a.employeeId === e.id && a.status === "presente");
+    const horas = sum(att.flatMap((a: any) => (a.hours || []).map((h: any) => Number(h.hours) || 0)));
+    const devengado = horas * (Number(e.hourlyRate) || 0);
+    const pagado = sum(expenses.filter(x => x.employeeId === e.id && esPago(x)).map(x => Number(x.amount) || 0));
+    const deuda = Math.max(0, devengado - pagado);
+    return { nombre: nombreEmp(e), dias: att.length, horas, devengado, pagado, deuda };
+  }).filter(r => r.devengado > 0 || r.pagado > 0);
+
+  if (!filas.length) return "🧾 *Deudas de Empleados*\nNo hay jornadas ni pagos registrados.";
+
+  const total = sum(filas.map(r => r.deuda));
+  const body = filas.map(r =>
+    "• " + r.nombre + ": " + r.dias + "d · devengado " + fmt(r.devengado) + " · pagado -" + fmt(r.pagado) + " · *deuda " + fmt(r.deuda) + "*"
+  ).join("\n");
+  return "🧾 *Deudas de Empleados*\n\n" + body + "\n\n*Total a pagar: " + fmt(total) + "*";
+}

@@ -47,6 +47,7 @@ import {
   computeQuery,
   queryLink,
   computeReporte,
+  calcularDeudasEmpleados,
 } from "./core.ts";
 import { resolveIncomingText } from "./transcribe.ts";
 import { enqueueMessage, claimNext, markDone, markFailed, resetStaleProcessing } from "./queue.ts";
@@ -296,7 +297,7 @@ async function sendWhatsAppList(
    ============================================================ */
 const MENU_CATEGORIES = [
   { id: "menu_cargar", title: "💰 Cargar Movimiento", description: "Gasto, inversión, adelanto, cobro" },
-  { id: "menu_consultar", title: "📊 Consultar y Reportes", description: "Saldos, balances y deudas" },
+  { id: "menu_metricas", title: "📊 Consultar y Reportes", description: "Saldos, balances y deudas" },
   { id: "menu_gestionar", title: "🏗️ Gestionar", description: "Obra, presupuesto, contacto" },
 ];
 
@@ -308,10 +309,10 @@ const SUBMENUS: Record<string, Array<{ id: string; title: string; description?: 
     { id: "action_herramienta", title: "Registrar Herramienta" },
     { id: "action_ingreso", title: "Registrar Cobro" },
   ],
-  menu_consultar: [
+  menu_metricas: [
     { id: "action_consulta", title: "Consultar Saldo" },
     { id: "action_balance_obra", title: "Balance de Obra" },
-    { id: "action_deuda_empleado", title: "Deudas a Empleados" },
+    { id: "metricas_deudas", title: "Deudas de Empleados" },
   ],
   menu_gestionar: [
     { id: "action_nueva_obra", title: "Nueva Obra" },
@@ -333,7 +334,7 @@ async function showSubMenu(from: string, categoria: string): Promise<void> {
   if (!items.length) return;
   const titulos: Record<string, string> = {
     menu_cargar: "💰 Cargar Movimiento",
-    menu_consultar: "📊 Consultar y Reportes",
+    menu_metricas: "📊 Consultar y Reportes",
     menu_gestionar: "🏗️ Gestionar",
   };
   await sendWhatsAppList(from, "Elegí una opción 👇", items, { button: "Ver opciones", sectionTitle: titulos[categoria] || "Opciones" });
@@ -831,6 +832,22 @@ async function handleButtonReply(from: string, buttonId: string) {
     return;
   }
 
+  /* [GADU-WA-METRICAS] Deudas de TODOS los empleados (solo lectura) */
+  if (buttonId === "metricas_deudas") {
+    try {
+      const rDeudas = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+      const rowsDeudas = (await rDeudas.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+      const dDeudas = (Array.isArray(rowsDeudas) && rowsDeudas.length) ? (rowsDeudas[0].data || {}) : {};
+      const reply = calcularDeudasEmpleados(dDeudas);
+      console.log("[GADU-WA-METRICAS] deudas calculadas para", userId);
+      fireAndForget(sendWhatsApp(from, reply));
+    } catch (e) {
+      console.error("[GADU-WA-METRICAS] falló:", e);
+      fireAndForget(sendWhatsApp(from, "⚠️ No pude calcular las deudas. Probá de nuevo."));
+    }
+    return;
+  }
+
   /* [GADU-WA-MENU] Opciones del menú principal (lista interactiva unificada) */
   if (buttonId.startsWith("action_")) {
     const act = buttonId.slice("action_".length);
@@ -874,10 +891,6 @@ async function handleButtonReply(from: string, buttonId: string) {
     }
     if (act === "balance_obra") {
       fireAndForget(sendWhatsApp(from, "¿De qué obra querés el balance? Escribí por ejemplo: \"balance de la obra Casa Pérez\"."));
-      return;
-    }
-    if (act === "deuda_empleado") {
-      fireAndForget(sendWhatsApp(from, "¿De qué empleado querés la deuda? Escribí por ejemplo: \"¿cuánto le debo a Juan?\"."));
       return;
     }
     if (act === "ingreso") {

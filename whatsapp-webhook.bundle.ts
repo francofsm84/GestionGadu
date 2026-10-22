@@ -874,6 +874,35 @@ export function computeReporte(data: Record<string, any>, tipo: string, campos: 
   return "No pude procesar el reporte.";
 }
 
+/* Deudas de TODOS los empleados: haberes (horas  tarifa)  pagos/adelantos.
+   Devuelve un resumen formateado para WhatsApp. */
+export function calcularDeudasEmpleados(data: Record<string, any>): string {
+  const sum = (arr: any[]) => (arr || []).reduce((a, b) => a + (Number(b) || 0), 0);
+  const fmt = (n: number) => "$" + (Number(n) || 0).toLocaleString("es-AR");
+  const employees = (data.employees || []) as any[];
+  const attendance = (data.attendance || []) as any[];
+  const expenses = (data.expenses || []) as any[];
+  const esPago = (x: any) => x.expenseKind === "adelanto" || x.expenseKind === "pago" || x.expenseKind === "sueldo";
+  const nombreEmp = (e: any) => ((e.firstName || "") + " " + (e.lastName || "")).trim() || "Empleado";
+
+  const filas = employees.map(e => {
+    const att = attendance.filter(a => a.employeeId === e.id && a.status === "presente");
+    const horas = sum(att.flatMap((a: any) => (a.hours || []).map((h: any) => Number(h.hours) || 0)));
+    const devengado = horas * (Number(e.hourlyRate) || 0);
+    const pagado = sum(expenses.filter(x => x.employeeId === e.id && esPago(x)).map(x => Number(x.amount) || 0));
+    const deuda = Math.max(0, devengado - pagado);
+    return { nombre: nombreEmp(e), dias: att.length, horas, devengado, pagado, deuda };
+  }).filter(r => r.devengado > 0 || r.pagado > 0);
+
+  if (!filas.length) return "[ticket] *Deudas de Empleados*\nNo hay jornadas ni pagos registrados.";
+
+  const total = sum(filas.map(r => r.deuda));
+  const body = filas.map(r =>
+    "- " + r.nombre + ": " + r.dias + "d   devengado " + fmt(r.devengado) + "   pagado -" + fmt(r.pagado) + "   *deuda " + fmt(r.deuda) + "*"
+  ).join("\n");
+  return "[ticket] *Deudas de Empleados*\n\n" + body + "\n\n*Total a pagar: " + fmt(total) + "*";
+}
+
 
 // ============================================================
 // GADU   Transcribir notas de voz de WhatsApp con Gemini
@@ -1731,7 +1760,7 @@ async function sendWhatsAppList(
    ============================================================ */
 const MENU_CATEGORIES = [
   { id: "menu_cargar", title: "$ Cargar Movimiento", description: "Gasto, inversion, adelanto, cobro" },
-  { id: "menu_consultar", title: "[metricas] Consultar y Reportes", description: "Saldos, balances y deudas" },
+  { id: "menu_metricas", title: "[metricas] Consultar y Reportes", description: "Saldos, balances y deudas" },
   { id: "menu_gestionar", title: "[obra] Gestionar", description: "Obra, presupuesto, contacto" },
 ];
 
@@ -1743,10 +1772,10 @@ const SUBMENUS: Record<string, Array<{ id: string; title: string; description?: 
     { id: "action_herramienta", title: "Registrar Herramienta" },
     { id: "action_ingreso", title: "Registrar Cobro" },
   ],
-  menu_consultar: [
+  menu_metricas: [
     { id: "action_consulta", title: "Consultar Saldo" },
     { id: "action_balance_obra", title: "Balance de Obra" },
-    { id: "action_deuda_empleado", title: "Deudas a Empleados" },
+    { id: "metricas_deudas", title: "Deudas de Empleados" },
   ],
   menu_gestionar: [
     { id: "action_nueva_obra", title: "Nueva Obra" },
@@ -1768,7 +1797,7 @@ async function showSubMenu(from: string, categoria: string): Promise<void> {
   if (!items.length) return;
   const titulos: Record<string, string> = {
     menu_cargar: "$ Cargar Movimiento",
-    menu_consultar: "[metricas] Consultar y Reportes",
+    menu_metricas: "[metricas] Consultar y Reportes",
     menu_gestionar: "[obra] Gestionar",
   };
   await sendWhatsAppList(from, "Elegi una opcion [abajo]", items, { button: "Ver opciones", sectionTitle: titulos[categoria] || "Opciones" });
@@ -2266,6 +2295,22 @@ async function handleButtonReply(from: string, buttonId: string) {
     return;
   }
 
+  /* [GADU-WA-METRICAS] Deudas de TODOS los empleados (solo lectura) */
+  if (buttonId === "metricas_deudas") {
+    try {
+      const rDeudas = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+      const rowsDeudas = (await rDeudas.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+      const dDeudas = (Array.isArray(rowsDeudas) && rowsDeudas.length) ? (rowsDeudas[0].data || {}) : {};
+      const reply = calcularDeudasEmpleados(dDeudas);
+      console.log("[GADU-WA-METRICAS] deudas calculadas para", userId);
+      fireAndForget(sendWhatsApp(from, reply));
+    } catch (e) {
+      console.error("[GADU-WA-METRICAS] fallo:", e);
+      fireAndForget(sendWhatsApp(from, "[ALERTA] No pude calcular las deudas. Proba de nuevo."));
+    }
+    return;
+  }
+
   /* [GADU-WA-MENU] Opciones del menu principal (lista interactiva unificada) */
   if (buttonId.startsWith("action_")) {
     const act = buttonId.slice("action_".length);
@@ -2309,10 +2354,6 @@ async function handleButtonReply(from: string, buttonId: string) {
     }
     if (act === "balance_obra") {
       fireAndForget(sendWhatsApp(from, "De que obra queres el balance? Escribi por ejemplo: \"balance de la obra Casa Perez\"."));
-      return;
-    }
-    if (act === "deuda_empleado") {
-      fireAndForget(sendWhatsApp(from, "De que empleado queres la deuda? Escribi por ejemplo: \"cuanto le debo a Juan?\"."));
       return;
     }
     if (act === "ingreso") {
