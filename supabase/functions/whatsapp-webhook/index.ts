@@ -290,23 +290,53 @@ async function sendWhatsAppList(
 }
 
 /* Menú principal unificado (lista interactiva, hasta 10 filas) */
-const MENU_OPTS = [
-  { id: "action_nueva_obra", title: "Nueva Obra" },
-  { id: "action_nuevo_gasto", title: "Cargar Gasto" },
-  { id: "action_inversion", title: "Registrar Inversión" },
-  { id: "action_herramienta", title: "Registrar Herramienta" },
-  { id: "action_adelanto", title: "Pago / Adelanto" },
-  { id: "action_presupuesto", title: "Presupuesto" },
-  { id: "action_consulta", title: "Consultar Saldo" },
-  { id: "action_ingreso", title: "Registrar Cobro" },
-  { id: "action_contacto", title: "Nuevo Contacto / Directorio" },
-  { id: "action_humano", title: "Hablar con humano" },
+/* ============================================================
+   MENÚ JERÁRQUICO (3 categorías → submenús)
+   Evita el spam: UN solo mensaje interactivo por pantalla.
+   ============================================================ */
+const MENU_CATEGORIES = [
+  { id: "menu_cargar", title: "💰 Cargar Movimiento", description: "Gasto, inversión, adelanto, cobro" },
+  { id: "menu_consultar", title: "📊 Consultar y Reportes", description: "Saldos, balances y deudas" },
+  { id: "menu_gestionar", title: "🏗️ Gestionar", description: "Obra, presupuesto, contacto" },
 ];
 
-/* Envía el saludo/cabecera + la lista interactiva del menú principal */
+const SUBMENUS: Record<string, Array<{ id: string; title: string; description?: string }>> = {
+  menu_cargar: [
+    { id: "action_nuevo_gasto", title: "Cargar Gasto" },
+    { id: "action_inversion", title: "Registrar Inversión" },
+    { id: "action_adelanto", title: "Pago / Adelanto" },
+    { id: "action_herramienta", title: "Registrar Herramienta" },
+    { id: "action_ingreso", title: "Registrar Cobro" },
+  ],
+  menu_consultar: [
+    { id: "action_consulta", title: "Consultar Saldo" },
+    { id: "action_balance_obra", title: "Balance de Obra" },
+    { id: "action_deuda_empleado", title: "Deudas a Empleados" },
+  ],
+  menu_gestionar: [
+    { id: "action_nueva_obra", title: "Nueva Obra" },
+    { id: "action_presupuesto", title: "Presupuesto" },
+    { id: "action_contacto", title: "Nuevo Contacto" },
+    { id: "action_humano", title: "Hablar con humano" },
+  ],
+};
+
+/* Envía el saludo + el menú en UN SOLO mensaje interactivo (sin spam).
+   El cuerpo del mensaje es el saludo; las categorías van dentro de la lista. */
 async function showMainMenu(from: string, header: string): Promise<void> {
-  fireAndForget(sendWhatsApp(from, header));
-  await sendWhatsAppList(from, "Elegí una opción 👇", MENU_OPTS, { button: "Ver opciones", sectionTitle: "Menú" });
+  await sendWhatsAppList(from, header, MENU_CATEGORIES, { button: "Ver menú", sectionTitle: "¿Qué querés hacer?" });
+}
+
+/* Envía un submenú (segunda pantalla del menú jerárquico) */
+async function showSubMenu(from: string, categoria: string): Promise<void> {
+  const items = SUBMENUS[categoria] || [];
+  if (!items.length) return;
+  const titulos: Record<string, string> = {
+    menu_cargar: "💰 Cargar Movimiento",
+    menu_consultar: "📊 Consultar y Reportes",
+    menu_gestionar: "🏗️ Gestionar",
+  };
+  await sendWhatsAppList(from, "Elegí una opción 👇", items, { button: "Ver opciones", sectionTitle: titulos[categoria] || "Opciones" });
 }
 
 /* Busca el user_id por teléfono (variantes con/sin 9, con/sin +) */
@@ -795,6 +825,12 @@ async function handleButtonReply(from: string, buttonId: string) {
     return;
   }
 
+  /* [GADU-WA-MENU] Navegación jerárquica: categoría → submenú */
+  if (buttonId.startsWith("menu_")) {
+    await showSubMenu(from, buttonId);
+    return;
+  }
+
   /* [GADU-WA-MENU] Opciones del menú principal (lista interactiva unificada) */
   if (buttonId.startsWith("action_")) {
     const act = buttonId.slice("action_".length);
@@ -834,6 +870,14 @@ async function handleButtonReply(from: string, buttonId: string) {
     if (act === "consulta") {
       await upsertSession(from, userId, "WAITING_CONSULTA", {});
       fireAndForget(sendWhatsApp(from, "¿Qué querés consultar? Saldo de una obra, gastos de la semana, etc."));
+      return;
+    }
+    if (act === "balance_obra") {
+      fireAndForget(sendWhatsApp(from, "¿De qué obra querés el balance? Escribí por ejemplo: \"balance de la obra Casa Pérez\"."));
+      return;
+    }
+    if (act === "deuda_empleado") {
+      fireAndForget(sendWhatsApp(from, "¿De qué empleado querés la deuda? Escribí por ejemplo: \"¿cuánto le debo a Juan?\"."));
       return;
     }
     if (act === "ingreso") {
@@ -1114,12 +1158,24 @@ async function processMessage(body: unknown) {
        Si el mensaje es "hola, quiero cargar un gasto...", NO lo trata como saludo:
        deja que el wizard/IA procese el contenido. */
     if (/^(hola|holis|holi|buenas|buen\s*d[ií]a|buenos\s*d[ií]as|menu|men[uú]|empezar|ayuda|help|inicio)\s*[.!?,]*$/.test(menuText)) {
-      let hasActiveWizard = false;
+      let activeState = "";
+      let activeCtx: Record<string, unknown> = {};
       try {
         const sessMenu = await getSession(normalizePhone(inc.from));
-        if (sessMenu && sessMenu.state && String(sessMenu.state).startsWith("WAITING_")) hasActiveWizard = true;
+        if (sessMenu && sessMenu.state && String(sessMenu.state).startsWith("WAITING_")) {
+          activeState = String(sessMenu.state);
+          activeCtx = (sessMenu.context as Record<string, unknown>) || {};
+        }
       } catch (e) { /* sin sesión: no hay wizard */ }
-      if (!hasActiveWizard) {
+
+      /* Contexto: gasto pendiente de asignar a obra → recordar en vez de mostrar el menú */
+      if (activeState === "WAITING_GASTO_OBRA") {
+        const monto = String(activeCtx.monto || activeCtx.amount || "");
+        fireAndForget(sendWhatsApp(inc.from, "¡Hola! 👋 Antes de seguir, ¿a qué obra asignamos el gasto de $" + monto + " pendiente?"));
+        return json({ ok: true, from: inc.from });
+      }
+
+      if (!activeState) {
         try { await deleteSession(normalizePhone(inc.from)); } catch (e) { /* sin sesión: ok */ }
         await showMainMenu(inc.from, "¡Hola! 👋 Soy tu asistente GADU. ¿Qué querés hacer hoy?");
         return json({ ok: true, from: inc.from });
