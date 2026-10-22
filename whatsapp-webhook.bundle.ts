@@ -1823,10 +1823,16 @@ async function showMainMenu(from: string, header: string): Promise<void> {
   await sendWhatsAppList(from, header, MENU_CATEGORIES, { button: "Ver menu", sectionTitle: "Que queres hacer?" });
 }
 
-/* Envia un submenu (segunda pantalla del menu jerarquico) */
+/* Envia un submenu (segunda pantalla del menu jerarquico).
+   Si la categoria no existe, avisa y vuelve al menu principal (nunca queda mudo). */
 async function showSubMenu(from: string, categoria: string): Promise<void> {
   const items = SUBMENUS[categoria] || [];
-  if (!items.length) return;
+  if (!items.length) {
+    console.warn("[GADU-WA-SUBMENU] submenu no encontrado:", categoria);
+    fireAndForget(sendWhatsApp(from, "[BOT] Error: Submenu no encontrado. Volviendo al inicio."));
+    await showMainMenu(from, "Hola! Hola Soy tu asistente GADU. Que queres hacer hoy?");
+    return;
+  }
   const titulos: Record<string, string> = {
     menu_cargar: "$ Cargar Movimiento",
     menu_metricas: "[metricas] Consultar y Reportes",
@@ -2286,6 +2292,7 @@ function detectInteractive(body: unknown): { from: string; buttonId: string } | 
     const msg = p?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     if (!msg || msg.type !== "interactive") return null;
     const buttonId = String(msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id || "");
+    console.log("[GADU-WA-INTERACTIVE] list_reply.id:", JSON.stringify(msg.interactive?.list_reply?.id), "  button_reply.id:", JSON.stringify(msg.interactive?.button_reply?.id), "  buttonId resuelto:", buttonId);
     const from = String(msg.from || p?.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.wa_id || "");
     if (!buttonId || !from) return null;
     return { from: String(from).replace(/\D/g, ""), buttonId };
