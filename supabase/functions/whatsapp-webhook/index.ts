@@ -2209,9 +2209,23 @@ async function processMessage(body: unknown) {
           return json({ ok: true, from: inc.from, reply: "" });
         }
         if (!data || !Array.isArray(data.attendance)) data.attendance = [];
-        const employeeId = String(attHorasCtx.employeeId || "");
-        const workId = attHorasCtx.workId ? String(attHorasCtx.workId) : null;
-        console.log("[GADU-WA-ATT] employeeId:", employeeId, "· workId:", workId, "· data ok:", !!data);
+        /* IDs desde el contexto de sesión */
+        let employeeId = String(attHorasCtx.employeeId || "");
+        let workId = attHorasCtx.workId ? String(attHorasCtx.workId) : null;
+        /* AUTO-REPARO: si el contexto perdió el ID, re-derivarlo por NOMBRE */
+        if (!employeeId && attHorasCtx.employeeName) {
+          const empByName = (data.employees || []).find((e: any) =>
+            normStr(String((e.firstName || "") + " " + (e.lastName || "")).trim()).includes(normStr(String(attHorasCtx.employeeName)))
+          );
+          if (empByName) employeeId = String(empByName.id);
+        }
+        if (!workId && attHorasCtx.workName) {
+          const wByName = (data.works || []).find((w: any) =>
+            normStr(String(w.nombre || w.name || "")).includes(normStr(String(attHorasCtx.workName)))
+          );
+          if (wByName) workId = String(wByName.id);
+        }
+        console.log("[GADU-WA-ATT] FINAL employeeId:", employeeId, "· workId:", workId, "· data ok:", !!data);
         data.attendance.unshift({
           id: crypto.randomUUID(), employeeId, date: new Date().toISOString().slice(0, 10),
           status: "presente", hours: [{ workId, hours }], notes: "",
