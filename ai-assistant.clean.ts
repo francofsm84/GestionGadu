@@ -61,6 +61,8 @@ MAPEO DE CAMPOS POR MODULO:
     "Cuanto le debo a Y?" / "cuanto cobra Y" -> {"tipo":"deuda_empleado","empleado":"Y"}
   Si el tipo de calculo no esta en esta lista, NO uses "reporte".
 
+- NUEVA DEUDA: si el usuario quiere REGISTRAR una deuda en cuotas ("Cargame una deuda de 500000 en 12 cuotas para la heladera", "anota una deuda del cole de 100 mil en 10 cuotas"), usa modulo="nueva_deuda" con campos={"concepto":"heladera","monto":500000,"cuotas":12}. Si falta el concepto, el monto o las cuotas, pregunta lo que falte en vez de llamar la herramienta.
+
 - GASTO SIN VERBO: si el usuario escribe un NUMERO seguido de "de" y un concepto (ej. "45678 de nafta", "5000 de cemento"), asumi que es un GASTO. Extrae "monto" = el numero y "categoria" = el concepto. No preguntes.
 
 CONSULTAS (QUERY_DATA) - SOLO para preguntas que NO son calculos gerenciales:
@@ -129,7 +131,7 @@ function tools() {
       parameters: {
         type: "OBJECT",
         properties: {
-          modulo: { type: "STRING", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "inversion", "jornada", "adelanto", "consulta", "presupuesto_pdf", "asistencia", "reporte"], description: "Que formulario abrir o reporte generar. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = presupuesto en PDF. 'asistencia' = registrar horas trabajadas de empleados. 'reporte' = balance de obra, dias trabajados, pagos o deuda de un empleado." },
+          modulo: { type: "STRING", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "inversion", "jornada", "adelanto", "consulta", "presupuesto_pdf", "asistencia", "reporte", "nueva_deuda"], description: "Que formulario abrir o reporte generar. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = presupuesto en PDF. 'asistencia' = registrar horas trabajadas de empleados. 'reporte' = balance de obra, dias trabajados, pagos o deuda de un empleado. 'nueva_deuda' = registrar una deuda en cuotas (concepto, monto, cuotas)." },
           campos: {
             type: "OBJECT",
             description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol, cliente, obra, empleado, monto, concepto, categoria, horas, ubicacion, presupuesto, query_type, target, items (solo con modulo='presupuesto_pdf').",
@@ -195,7 +197,7 @@ function toolsOpenAI() {
       parameters: {
         type: "object",
         properties: {
-          modulo: { type: "string", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "inversion", "jornada", "adelanto", "consulta", "presupuesto_pdf", "asistencia", "reporte"], description: "Que formulario abrir o reporte generar. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = presupuesto en PDF. 'asistencia' = registrar horas trabajadas de empleados. 'reporte' = balance de obra, dias trabajados, pagos o deuda de un empleado." },
+          modulo: { type: "string", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "inversion", "jornada", "adelanto", "consulta", "presupuesto_pdf", "asistencia", "reporte", "nueva_deuda"], description: "Que formulario abrir o reporte generar. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = presupuesto en PDF. 'asistencia' = registrar horas trabajadas de empleados. 'reporte' = balance de obra, dias trabajados, pagos o deuda de un empleado. 'nueva_deuda' = registrar una deuda en cuotas (concepto, monto, cuotas)." },
           campos: {
             type: "object",
             description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol, cliente, obra, empleado, monto, concepto, categoria, horas, ubicacion, presupuesto, query_type, target, items (solo con modulo='presupuesto_pdf').",

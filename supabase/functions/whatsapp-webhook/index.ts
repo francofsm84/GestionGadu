@@ -49,6 +49,7 @@ import {
   computeReporte,
   calcularDeudasEmpleados,
   calcularCuotas,
+  num,
 } from "./core.ts";
 import { resolveIncomingText } from "./transcribe.ts";
 import { enqueueMessage, claimNext, markDone, markFailed, resetStaleProcessing } from "./queue.ts";
@@ -307,6 +308,7 @@ const SUBMENUS: Record<string, Array<{ id: string; title: string; description?: 
     { id: "action_nuevo_gasto", title: "Cargar Gasto" },
     { id: "action_inversion", title: "Registrar Inversión" },
     { id: "action_adelanto", title: "Pago / Adelanto" },
+    { id: "action_nueva_deuda", title: "Registrar Deuda" },
     { id: "action_herramienta", title: "Registrar Herramienta" },
     { id: "action_ingreso", title: "Registrar Cobro" },
   ],
@@ -979,6 +981,11 @@ async function handleButtonReply(from: string, buttonId: string) {
     if (act === "ingreso") {
       await upsertSession(from, userId, "WAITING_INGRESO", {});
       fireAndForget(sendWhatsApp(from, "¿De cuánto es el cobro? (ej. 50000)"));
+      return;
+    }
+    if (act === "nueva_deuda") {
+      await upsertSession(from, userId, "WAITING_DEBT_CONCEPT", {});
+      fireAndForget(sendWhatsApp(from, "¿Cuál es el concepto de la deuda? (Ej: Heladera, Préstamo Banco). Escribí *cancelar* para abortar."));
       return;
     }
     if (act === "contacto") {
@@ -2260,6 +2267,71 @@ async function processMessage(body: unknown) {
       }
     }
 
+    /* [GADU-WA-DEBT] Deuda paso 1: concepto (WAITING_DEBT_CONCEPT) */
+    let enWizardDebtConcept = false;
+    try {
+      const sessDC = await getSession(normalizePhone(inc.from));
+      if (sessDC && sessDC.state === "WAITING_DEBT_CONCEPT") enWizardDebtConcept = true;
+    } catch (e) {}
+    if (enWizardDebtConcept) {
+      const t = String(inc.text || "").trim();
+      if (!t) { fireAndForget(sendWhatsApp(inc.from, "🤖 ¿Cuál es el concepto de la deuda? (Ej: Heladera)")); return json({ ok: true, from: inc.from, reply: "" }); }
+      await upsertSession(inc.from, row.user_id, "WAITING_DEBT_TOTAL", { concepto: t });
+      fireAndForget(sendWhatsApp(inc.from, "¿Cuál es el monto total de la deuda? (Ej: 500000)"));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* Deuda paso 2: monto total (WAITING_DEBT_TOTAL) */
+    let enWizardDebtTotal = false;
+    let debtTotalCtx: Record<string, unknown> = {};
+    try {
+      const sessDT = await getSession(normalizePhone(inc.from));
+      if (sessDT && sessDT.state === "WAITING_DEBT_TOTAL") { enWizardDebtTotal = true; debtTotalCtx = (sessDT.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardDebtTotal) {
+      const monto = num(inc.text);
+      if (!(monto > 0)) { fireAndForget(sendWhatsApp(inc.from, "🤖 Eso no es un monto válido. ¿Cuál es el monto total? (ej. 500000)")); return json({ ok: true, from: inc.from, reply: "" }); }
+      await upsertSession(inc.from, row.user_id, "WAITING_DEBT_INSTALLMENTS", { concepto: debtTotalCtx.concepto, montoTotal: monto });
+      fireAndForget(sendWhatsApp(inc.from, "¿En cuántas cuotas se paga? (Ej: 12)"));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* Deuda paso 3: cuotas → guardar (WAITING_DEBT_INSTALLMENTS) */
+    let enWizardDebtInst = false;
+    let debtInstCtx: Record<string, unknown> = {};
+    try {
+      const sessDI = await getSession(normalizePhone(inc.from));
+      if (sessDI && sessDI.state === "WAITING_DEBT_INSTALLMENTS") { enWizardDebtInst = true; debtInstCtx = (sessDI.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardDebtInst) {
+      const cuotas = parseInt(rawDigits(inc.text), 10);
+      if (!(cuotas > 0)) { fireAndForget(sendWhatsApp(inc.from, "🤖 Ingresá una cantidad de cuotas válida (ej. 12).")); return json({ ok: true, from: inc.from, reply: "" }); }
+      const montoTotal = Number(debtInstCtx.montoTotal) || 0;
+      const concepto = String(debtInstCtx.concepto || "Deuda");
+      /* fechaVencimiento = hoy + 1 mes (clamp de día a fin de mes) */
+      const hoy = new Date();
+      const venc = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+      const lastDay = new Date(venc.getFullYear(), venc.getMonth() + 1, 0).getDate();
+      const fechaVencimiento = venc.getFullYear() + "-" + String(venc.getMonth() + 1).padStart(2, "0") + "-" + String(Math.min(hoy.getDate(), lastDay)).padStart(2, "0");
+      const nuevoDebt = {
+        id: crypto.randomUUID(), concepto, tipo: "Personal", montoTotal,
+        cuotasTotales: cuotas, cuotaActual: 1,
+        montoPorCuota: Math.round((montoTotal / cuotas) * 100) / 100,
+        fechaVencimiento, finalizada: false,
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      };
+      console.log("[GADU-WA-DEBT] JSON a insertar:", JSON.stringify(nuevoDebt));
+      (data.debts || (data.debts = [])).unshift(nuevoDebt);
+      await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+      });
+      await deleteSession(normalizePhone(inc.from));
+      fireAndForget(sendWhatsApp(inc.from, "✅ Deuda registrada: " + concepto + " por $" + montoTotal.toLocaleString("es-AR") + " en " + cuotas + " cuotas. Podés verla y pagarla desde la sección 'Deudas y Cuotas' de la app."));
+      return json({ ok: true, from: inc.from, reply: "deuda guardada" });
+    }
+
     /* [GADU-WA-EXPORT] Exportar gastos a Excel (comando "excel" / "exportar gastos") */
     if (/\b(excel|planilla|xlsx)\b/i.test(inc.text) || /exportar\s+(gastos|movimientos|todo|mis\s+datos)/i.test(inc.text)) {
       console.log("[GADU-WA-EXPORT] pedido de exportación:", inc.text);
@@ -2301,7 +2373,7 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
     }
 
-    const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra", "inversion", "reporte"];
+    const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra", "inversion", "reporte", "nueva_deuda"];
     console.log("[GADU-WA-INTENT] texto a interpretar:", JSON.stringify(inc.text));
 
     const aiController = new AbortController();
@@ -2514,6 +2586,36 @@ async function processMessage(body: unknown) {
       console.log("[GADU-WA-REPORTE] tipo:", rc.tipo, "· campos:", JSON.stringify(rc));
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
+    }
+
+    /* [GADU-WA-DEBT] Deuda one-shot (IA): "Cargame una deuda de 500000 en 12 cuotas..." */
+    if (action && action.modulo === "nueva_deuda") {
+      const cDebt = (action.campos || {}) as Record<string, unknown>;
+      const concepto = String(cDebt.concepto || cDebt.nombre || "").trim();
+      const monto = Number(cDebt.monto || cDebt.montoTotal) || 0;
+      const cuotas = parseInt(String(cDebt.cuotas || cDebt.cuotasTotales || ""), 10) || 0;
+      if (concepto && monto > 0 && cuotas > 0) {
+        const hoyD = new Date();
+        const vencD = new Date(hoyD.getFullYear(), hoyD.getMonth() + 1, 1);
+        const lastD = new Date(vencD.getFullYear(), vencD.getMonth() + 1, 0).getDate();
+        const fechaVenc = vencD.getFullYear() + "-" + String(vencD.getMonth() + 1).padStart(2, "0") + "-" + String(Math.min(hoyD.getDate(), lastD)).padStart(2, "0");
+        (data.debts || (data.debts = [])).unshift({
+          id: crypto.randomUUID(), concepto, tipo: "Personal", montoTotal: monto,
+          cuotasTotales: cuotas, cuotaActual: 1,
+          montoPorCuota: Math.round((monto / cuotas) * 100) / 100,
+          fechaVencimiento: fechaVenc, finalizada: false,
+          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        });
+        await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+        });
+        fireAndForget(sendWhatsApp(inc.from, "✅ Deuda registrada: " + concepto + " por $" + monto.toLocaleString("es-AR") + " en " + cuotas + " cuotas."));
+      } else {
+        fireAndForget(sendWhatsApp(inc.from, "🤖 Me falta un dato de la deuda (concepto, monto o cuotas). Decímelo completo, ej: \"deuda de 500000 en 12 cuotas para la heladera\"."));
+      }
+      return json({ ok: true, from: inc.from, reply: "" });
     }
 
     if (action && ["gasto", "ingreso", "empleado", "adelanto", "obra", "inversion"].includes(action.modulo)) {

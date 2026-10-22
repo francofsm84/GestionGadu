@@ -104,6 +104,32 @@ export function rawDigits(p: unknown): string {
   return String(p == null ? "" : p).replace(/\D/g, "");
 }
 
+/* Parser robusto de números (AR): maneja "19813.47", "19.813,47", "19.813",
+   "500000", "500 lucas", etc. Punto=miles · coma=decimal cuando corresponde. */
+export function num(s: unknown): number {
+  let t = String(s == null ? "" : s).trim();
+  if (!t) return 0;
+  if (t.includes(".") && t.includes(",")) {
+    /* AR: "19.813,47" → 19813.47 (punto=miles, coma=decimal) */
+    t = t.replace(/\./g, "").replace(",", ".");
+  } else if (t.includes(",")) {
+    const parts = t.split(",");
+    if (parts.length === 2 && parts[1].length >= 1 && parts[1].length <= 2) t = t.replace(",", ".");
+    else t = t.replace(/,/g, "");
+  } else if (t.includes(".")) {
+    const lastDot = t.lastIndexOf(".");
+    const decimals = t.length - lastDot - 1;
+    if (decimals >= 1 && decimals <= 2 && lastDot > 0) {
+      const intPart = t.slice(0, lastDot).replace(/\./g, "");
+      t = intPart + "." + t.slice(lastDot + 1);
+    } else {
+      t = t.replace(/\./g, "");
+    }
+  }
+  const n = Number(t);
+  return isFinite(n) ? n : 0;
+}
+
 /* `to` para Meta en cuentas de PRUEBA de Argentina: descarta el "9" saliente
    de móvil. "5493547469000" (13 dígitos) → "543547469000" (12 dígitos).
    En sandbox de Meta a veces el destinatario permitido se registra SIN el 9. */
