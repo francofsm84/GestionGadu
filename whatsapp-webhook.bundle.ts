@@ -2295,7 +2295,7 @@ function detectInteractive(body: unknown): { from: string; buttonId: string } | 
 }
 
 async function handleButtonReply(from: string, buttonId: string) {
-  console.log("[GADU-WA-BUTTONS] boton:", buttonId, "de", from);
+  console.log("[GADU-WA-BUTTONS] ID recibido:", buttonId, "  de:", from);
 
   /* 1) Buscar usuario (helper compartido) */
   const userId = await findUserId(from);
@@ -2326,6 +2326,12 @@ async function handleButtonReply(from: string, buttonId: string) {
       await upsertSession(from, userId, "WAITING_CLIENT_ADVANCE", {});
       fireAndForget(sendWhatsApp(from, "$ Decime *de que cliente/obra* es el adelanto y *de cuanto*. Ej: \"Adelanto de 50000 de la obra Casa Perez\"."));
     }
+    return;
+  }
+
+  /* [GADU-WA-MENU] Volver al menu principal (debe ir ANTES del generico menu_*) */
+  if (buttonId === "menu_root") {
+    await showMainMenu(from, "Hola! Hola Soy tu asistente GADU. Que queres hacer hoy?");
     return;
   }
 
@@ -2407,12 +2413,6 @@ async function handleButtonReply(from: string, buttonId: string) {
       console.error("[GADU-WA-METRICAS] fallo:", e);
       fireAndForget(sendWhatsApp(from, "[ALERTA] No pude calcular las cuotas. Proba de nuevo."));
     }
-    return;
-  }
-
-  /* [GADU-WA-MENU] Volver al menu principal */
-  if (buttonId === "menu_root") {
-    await showMainMenu(from, "Hola! Hola Soy tu asistente GADU. Que queres hacer hoy?");
     return;
   }
 
@@ -2553,6 +2553,15 @@ async function handleButtonReply(from: string, buttonId: string) {
     fireAndForget(notifyAdminNewTicket(from));   // avisar al admin por WhatsApp
     fireAndForget(sendWhatsApp(from, "OK Tu pedido fue enviado. Un asesor de GADU te contactara por este medio a la brevedad."));
     await deleteSession(normalizePhone(from));
+    return;
+  }
+
+  /* [GADU-WA-FALLBACK] Solo los botones de asignacion de obra llegan hasta aca.
+     Cualquier otro ID es desconocido -> avisar y volver al menu principal. */
+  if (!buttonId.startsWith("assign_work:") && buttonId !== "assign_general") {
+    console.warn("[GADU-WA-BUTTONS] boton no reconocido:", buttonId);
+    fireAndForget(sendWhatsApp(from, "[BOT] Opcion no reconocida, volviendo al menu."));
+    await showMainMenu(from, "Hola! Hola Soy tu asistente GADU. Que queres hacer hoy?");
     return;
   }
 
