@@ -489,6 +489,7 @@ async function askForWork(phone: string, userId: string, data: Record<string, an
       title: String(w.nombre || w.name || "Obra"),
     }));
     works.push({ id: "assign_general", title: "Gasto General" });
+    works.push({ id: "menu_root", title: "🏠 Volver al menú", description: "Cancelar y volver al inicio" });
     await upsertSession(phone, userId, "WAITING_WORK", {});
     await sendWhatsAppList(phone, "¿A qué obra asignamos el gasto?", works);
     return;
@@ -1073,6 +1074,7 @@ async function handleButtonReply(from: string, buttonId: string) {
         { id: "contact_role:subcontratista", title: "Subcontratista" },
         { id: "contact_role:socio", title: "Socio" },
         { id: "contact_role:empleado", title: "Empleado" },
+        { id: "menu_root", title: "🏠 Volver al menú", description: "Cancelar y volver al inicio" },
       ], { button: "Elegir tipo", sectionTitle: "Contacto" });
       return;
     }
@@ -2190,7 +2192,9 @@ async function processMessage(body: unknown) {
           return json({ ok: true, from: inc.from, reply: "" });
         }
         await upsertSession(inc.from, row.user_id, "WAITING_ATTENDANCE_WORK", { employeeId: nuevoId, employeeName: nombreEmp });
-        await sendWhatsAppList(inc.from, "✅ " + nombreEmp + " registrado. ¿En qué obra trabajó?", obras.map((w: any) => ({ id: "att_work:" + String(w.id), title: String(w.nombre || w.name || "Obra") })), { button: "Elegir obra", sectionTitle: "Obras activas" });
+        const obraRowsResume = obras.map((w: any) => ({ id: "att_work:" + String(w.id), title: String(w.nombre || w.name || "Obra") }));
+        obraRowsResume.push({ id: "menu_root", title: "🏠 Volver al menú", description: "Cancelar y volver al inicio" });
+        await sendWhatsAppList(inc.from, "✅ " + nombreEmp + " registrado. ¿En qué obra trabajó?", obraRowsResume, { button: "Elegir obra", sectionTitle: "Obras activas" });
         return json({ ok: true, from: inc.from, reply: "" });
       }
 
