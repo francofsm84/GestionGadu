@@ -1864,12 +1864,13 @@ const SUBMENUS: Record<string, Array<{ id: string; title: string; description?: 
     { id: "action_nueva_deuda", title: "Registrar Deuda" },
     { id: "action_herramienta", title: "Registrar Herramienta" },
     { id: "action_ingreso", title: "Registrar Cobro" },
+    { id: "menu_root", title: " Volver al menu" },
   ],
   menu_metricas: [
     { id: "action_balance_obra", title: "Consultar Saldo Obra" },
     { id: "metricas_deudas", title: "Deudas Empleados" },
     { id: "metricas_cuotas", title: "Cuotas" },
-    { id: "menu_root", title: "Volver al menu" },
+    { id: "menu_root", title: " Volver al menu" },
   ],
   menu_gestionar: [
     { id: "action_nueva_obra", title: "Nueva Obra" },
@@ -1877,6 +1878,7 @@ const SUBMENUS: Record<string, Array<{ id: string; title: string; description?: 
     { id: "action_contacto", title: "Nuevo Contacto" },
     { id: "action_asistencia", title: "Registrar Asistencia" },
     { id: "action_humano", title: "Hablar con humano" },
+    { id: "menu_root", title: " Volver al menu" },
   ],
 };
 
@@ -2378,6 +2380,8 @@ async function handleButtonReply(from: string, buttonId: string) {
   /* [GADU-WA-MENU] Navegacion jerarquica: SIEMPRE PRIMERO, antes de cualquier
      otro chequeo (soporte, wizards, etc.). menu_root + menu_* no caen a texto. */
   if (buttonId === "menu_root") {
+    /* Volver al menu limpia cualquier wizard en curso (evita quedarse colgado) */
+    try { await deleteSession(normalizePhone(from)); } catch (e) {}
     await showMainMenu(from, "Hola! Hola Soy tu asistente GADU. Que queres hacer hoy?");
     return;
   }
@@ -2471,7 +2475,9 @@ async function handleButtonReply(from: string, buttonId: string) {
         return;
       }
       await upsertSession(from, userId, "WAITING_ATTENDANCE_WORK", { employeeId: empId, employeeName: empName });
-      await sendWhatsAppList(from, "En que obra trabajo " + empName + "?", obras.map((w: any) => ({ id: "att_work:" + String(w.id), title: String(w.nombre || w.name || "Obra") })), { button: "Elegir obra", sectionTitle: "Obras activas" });
+      const obraRows = obras.map((w: any) => ({ id: "att_work:" + String(w.id), title: String(w.nombre || w.name || "Obra") }));
+      obraRows.push({ id: "menu_root", title: " Volver al menu", description: "Cancelar y volver al inicio" });
+      await sendWhatsAppList(from, "En que obra trabajo " + empName + "?", obraRows, { button: "Elegir obra", sectionTitle: "Obras activas" });
     } catch (e) {
       fireAndForget(sendWhatsApp(from, "[ALERTA] No pude cargar las obras. Proba de nuevo."));
     }
@@ -2595,11 +2601,13 @@ async function handleButtonReply(from: string, buttonId: string) {
           fireAndForget(sendWhatsApp(from, "[BOT] No tenes deudas activas en cuotas."));
           return;
         }
-        await sendWhatsAppList(from, "Que deuda queres pagar?", activas.map((d: any) => ({
+        const deudaRows = activas.map((d: any) => ({
           id: "paydebt_" + String(d.id),
           title: String(d.concepto || "Deuda"),
           description: "Cuota " + d.cuotaActual + "/" + d.cuotasTotales + "   " + (d.montoPorCuota ? "$" + Number(d.montoPorCuota).toLocaleString("es-AR") : ""),
-        })), { button: "Elegir deuda", sectionTitle: "Deudas activas" });
+        }));
+        deudaRows.push({ id: "menu_root", title: " Volver al menu", description: "Cancelar y volver al inicio" });
+        await sendWhatsAppList(from, "Que deuda queres pagar?", deudaRows, { button: "Elegir deuda", sectionTitle: "Deudas activas" });
       } catch (e) {
         fireAndForget(sendWhatsApp(from, "[ALERTA] No pude cargar las deudas. Proba de nuevo."));
       }
@@ -2629,6 +2637,7 @@ async function handleButtonReply(from: string, buttonId: string) {
         await upsertSession(from, userId, "WAITING_ATTENDANCE_EMPLOYEE", {});
         const empRows = emps.map((e: any) => ({ id: "att_emp:" + String(e.id), title: String((e.firstName || "") + " " + (e.lastName || "")).trim() }));
         empRows.push({ id: "att_new_emp", title: "+ Agregar nuevo empleado", description: "Darlo de alta y seguir con la asistencia" });
+        empRows.push({ id: "menu_root", title: " Volver al menu", description: "Cancelar y volver al inicio" });
         await sendWhatsAppList(from, "Que empleado trabajo?", empRows, { button: "Elegir empleado", sectionTitle: "Empleados" });
       } catch (e) {
         fireAndForget(sendWhatsApp(from, "[ALERTA] No pude cargar los empleados. Proba de nuevo."));
@@ -3855,10 +3864,10 @@ async function processMessage(body: unknown) {
       try {
         console.log("[GADU-WA-ATT] contexto WAITING_ATTENDANCE_HOURS:", JSON.stringify(attHorasCtx));
         const t = String(inc.text || "").trim();
-        const horas = Number(t.replace(/[^\d.,]/g, "").replace(",", "."));
+        const horas = num(t);   // parser robusto: enteros y decimales ("8", "8.5", "8,5")
         console.log("[GADU-WA-ATT] horas parseadas:", horas, "  texto:", JSON.stringify(t));
         if (!horas || horas <= 0 || !isFinite(horas)) {
-          fireAndForget(sendWhatsApp(inc.from, "[BOT] Eso no es un numero de horas valido. Cuantas horas trabajo? (ej. 8)"));
+          fireAndForget(sendWhatsApp(inc.from, "[BOT] Eso no es un numero de horas valido. Cuantas horas trabajo? (ej. 8 o 6.5)"));
           return json({ ok: true, from: inc.from, reply: "" });
         }
         if (!data || !Array.isArray(data.attendance)) data.attendance = [];
