@@ -922,10 +922,12 @@
       return;
     }
     if (k === 'contabilidad') {
+      /* "Consultar saldo" → responde de inmediato con el resumen financiero */
       const pend = bubble('', 'bot');
       appendLog(pend);
       scrollToEnd();
-      startLedgerMenu(pend);
+      busy = true;
+      handleFinancialSummary(pend);
       return;
     }
     if (k === 'herramientas') {
@@ -1446,6 +1448,41 @@
   }
   function cashInfo() {
     try { const t = G.store.totals(); return { ingresos: t.incomes, gastos: t.expenses, neto: t.net }; } catch (e) { return null; }
+  }
+  /* Resumen financiero inmediato: caja + deudas (cuotas y empleados) */
+  function financialSummary() {
+    try {
+      const S = G.store;
+      const t = S.totals();
+      const debts = (S.data.debts || []).filter(d => !d.finalizada);
+      const cuotasPend = debts.reduce((s, d) => {
+        const faltan = Math.max(0, (Number(d.cuotasTotales) || 0) - (Number(d.cuotaActual) || 0) + 1);
+        return s + faltan * (Number(d.montoPorCuota) || 0);
+      }, 0);
+      const deudaEmp = (S.data.employees || []).reduce((s, e) => {
+        const m = S.employeeMonth ? S.employeeMonth(e.id) : null;
+        const devengado = (m ? (m.hours || 0) : 0) * (Number(e.hourlyRate) || 0);
+        return s + Math.max(0, devengado - (m ? ((m.salary || 0) + (m.advances || 0)) : 0));
+      }, 0);
+      return { ingresos: t.incomes, gastos: t.expenses, neto: t.net, cuotasPend, deudaEmp };
+    } catch (e) { return null; }
+  }
+  function handleFinancialSummary(pend) {
+    const info = financialSummary();
+    const fmt = (G.ui && G.ui.fmtMoney) ? G.ui.fmtMoney : (v => '$' + v);
+    if (!info) { pend.innerHTML = 'No pude calcular el resumen.'; busy = false; return; }
+    pend.innerHTML =
+      '📊 <b>Resumen financiero</b><br>' +
+      '• Ingresos: <b class="pos">' + fmt(info.ingresos) + '</b><br>' +
+      '• Gastos: <b class="neg">−' + fmt(info.gastos) + '</b><br>' +
+      '• Balance neto: <b class="' + (info.neto >= 0 ? 'pos' : 'neg') + '">' + fmt(info.neto) + '</b>' +
+      (info.cuotasPend ? '<br>• Deudas en cuotas: <b class="neg">' + fmt(info.cuotasPend) + '</b>' : '') +
+      (info.deudaEmp ? '<br>• Deuda a empleados: <b class="neg">' + fmt(info.deudaEmp) + '</b>' : '') +
+      '<br><span class="muted small">Decime "libro contable" para ver todos los movimientos, o tocá una acción rápida.</span>';
+    rememberTurn('usuario', 'resumen financiero');
+    rememberTurn('asistente', 'resumen: neto ' + info.neto);
+    busy = false;
+    scrollToEnd();
   }
   function handleCashAnswer(pend) {
     const info = cashInfo();
