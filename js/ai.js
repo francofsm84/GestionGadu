@@ -392,6 +392,23 @@
         if (ok) { const b = ok.querySelector('[data-widget-ok]'); if (b) b.click(); }
       }
     });
+    /* Indicador "Escribiendo...": muestra 3 puntos mientras `busy` está activo */
+    let typingEl = null;
+    const syncTyping = () => {
+      try {
+        if (busy && !typingEl) {
+          typingEl = document.createElement('div');
+          typingEl.className = 'ai-msg ai-bot ai-typing';
+          typingEl.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+          log.appendChild(typingEl);
+          scrollToEnd();
+        } else if (!busy && typingEl) {
+          typingEl.remove();
+          typingEl = null;
+        }
+      } catch (e) {}
+    };
+    setInterval(syncTyping, 150);
     /* Botones del flujo guiado (wizard): delegación de clicks */
     log.addEventListener('click', (e) => {
       /* Formulario dinámico: abrir ("📝 Completar formulario") */
@@ -1103,6 +1120,15 @@
     try { return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
     catch (e) { return String(s || '').toLowerCase(); }
   }
+  /* Normalización FUZZY para búsqueda tolerante: minúsculas, sin tildes,
+     sin artículos/preposiciones ("de","la","el","casa","obra"...). */
+  function normText(s) {
+    return flatText(s)
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\b(?:de|del|la|el|los|las|en|a|con|y|e|al|un|una|casa|obra|obras|proyecto|the|of|para|por|mi|mis)\b/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
   /* Nombre de obra con fallback seguro de propiedades:
      `nombre || name || titulo || nombreObra` — y rechaza los valores
      basura "undefined"/"null" que dejan los registros viejos (así
@@ -1141,9 +1167,18 @@
     const d = (G.store && G.store.data) || {};
     const works = (d.works || []).filter(w => w && workLabel(w));
     if (!works.length) return null;
-    const ft = flatText(t);
-    const nm = w => flatText(workLabel(w));
-    let hit = works.find(w => ft.includes(nm(w)) && nm(w).length >= 3);
+    const ftn = normText(t);
+    /* 1) Fuzzy exacto bidireccional (normalizado sin preposiciones/artículos) */
+    let hit = works.find(w => {
+      const n = normText(workLabel(w));
+      return n.length >= 3 && (ftn.includes(n) || n.includes(ftn));
+    });
+    if (hit) return workLabel(hit);
+    /* 2) Fallback por token significativo (≥4 chars) */
+    hit = works.find(w => {
+      const n = normText(workLabel(w));
+      return n.split(/\s+/).some(tk => tk.length >= 4 && ftn.includes(tk));
+    });
     if (hit) return workLabel(hit);
     /* "obra de Pablo Molina" → busca por el cliente de la obra */
     const cm = t.match(/obra\s+(?:de|del)\s+([a-záéíóúñ][\wáéíóúñ\s'-]*?)(?=\s*(?:hoy|ayer|mañana|para|,|\.|$))/i);
