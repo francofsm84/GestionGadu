@@ -4008,6 +4008,13 @@ async function processMessage(body: unknown) {
           if (wByName) workId = String(wByName.id);
         }
         console.log("[GADU-WA-ATT] FINAL employeeId:", employeeId, "  workId:", workId, "  data ok:", !!data);
+        /* Validacion: sin empleado valido NO se inserta un registro roto */
+        if (!employeeId) {
+          console.error("[GADU-WA-ATT] employeeId vacio tras auto-reparo -> no se inserta");
+          fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 No encontre a ese empleado. Primero cargalo con \"nuevo empleado [nombre]\"."));
+          try { await deleteSession(normalizePhone(inc.from)); } catch (e) {}
+          return json({ ok: true, from: inc.from, reply: "" });
+        }
         /* ID robusto: crypto.randomUUID() con fallback manual por si el runtime no lo expone */
         let attId = "";
         try { attId = crypto.randomUUID(); } catch (_e) { attId = "att-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10); }
@@ -4018,12 +4025,28 @@ async function processMessage(body: unknown) {
         };
         console.log("[GADU-WA-ATT] JSON a insertar:", JSON.stringify(nuevoReg));
         data.attendance.unshift(nuevoReg);
-        const up = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+        /* PATCH con REINTENTO (2 intentos, 500ms de separacion) */
+        const patchBody = JSON.stringify({ data, updated_at: new Date().toISOString() });
+        let up = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
           method: "PATCH",
           headers: { Prefer: "return=minimal" },
-          body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+          body: patchBody,
         });
+        if (!up.ok) {
+          console.warn("[GADU-WA-ATT] PATCH fallo (intento 1):", up.status, "-> reintentando");
+          await new Promise(r => setTimeout(r, 500));
+          up = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+            method: "PATCH",
+            headers: { Prefer: "return=minimal" },
+            body: patchBody,
+          });
+        }
         console.log("[GADU-WA-ATT] PATCH app_data status:", up.status);
+        if (!up.ok) {
+          console.error("[GADU-WA-ATT] PATCH fallo definitivamente:", up.status);
+          fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar en la nube (error " + up.status + "). Proba de nuevo en unos segundos."));
+          return json({ ok: true, from: inc.from, reply: "" });
+        }
         await deleteSession(normalizePhone(inc.from));
         const empNameAtt = String(attHorasCtx.employeeName || "Empleado");
         const workNameAtt = String(attHorasCtx.workName || "");
