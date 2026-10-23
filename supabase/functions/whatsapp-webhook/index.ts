@@ -537,12 +537,36 @@ function normStr(s: unknown): string {
     .trim();
 }
 function resolveFecha(raw: string): string {
-  const r = String(raw || "hoy").toLowerCase();
+  const r = String(raw || "hoy").toLowerCase().trim();
   const hoy = new Date();
-  if (r === "hoy" || !r) return hoy.toISOString().slice(0, 10);
-  if (r === "ayer") return new Date(hoy.getTime() - 86400000).toISOString().slice(0, 10);
+  const toISO = (d: Date) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  if (!r || r === "hoy") return toISO(hoy);
+  if (r === "ayer") return toISO(new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 1));
+  if (r === "anteayer" || r === "antier") return toISO(new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 2));
+  /* Días de la semana ("lunes", "miercoles", "sabado") → el más reciente */
+  const dias: Record<string, number> = { domingo: 0, lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6 };
+  const diaKey = flatStr(r);
+  if (dias[diaKey] !== undefined) {
+    let delta = dias[diaKey] - hoy.getDay();
+    if (delta > 0) delta -= 7;   // ya pasó esta semana → semana anterior
+    return toISO(new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + delta));
+  }
+  /* DD/MM/YYYY o DD/MM (año actual si no se da) */
+  let m = r.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?$/);
+  if (m) {
+    const day = Number(m[1]), month = Number(m[2]), year = m[3] ? Number(m[3]) : hoy.getFullYear();
+    const d = new Date(year, month - 1, day);
+    if (d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day) return toISO(d);
+  }
+  /* YYYY-MM-DD */
   if (/^\d{4}-\d{2}-\d{2}$/.test(r)) return r;
-  return hoy.toISOString().slice(0, 10);
+  /* Número suelto → día del mes actual (ej. "20") */
+  m = r.match(/^(\d{1,2})$/);
+  if (m) {
+    const day = Number(m[1]);
+    if (day >= 1 && day <= 31) return toISO(new Date(hoy.getFullYear(), hoy.getMonth(), day));
+  }
+  return toISO(hoy);
 }
 function findWorkByName(data: Record<string, any>, target: string): Record<string, any> | null {
   const ws = (data.works || []) as Array<Record<string, any>>;
@@ -981,8 +1005,27 @@ async function handleButtonReply(from: string, buttonId: string) {
       const dAtt = (Array.isArray(rowsAtt) && rowsAtt.length) ? (rowsAtt[0].data || {}) : {};
       const work = (dAtt.works || []).find((w: any) => String(w.id) === workId);
       const workName = work ? String(work.nombre || work.name || "la obra") : "la obra";
-      await upsertSession(from, userId, "WAITING_ATTENDANCE_HOURS", { employeeId: ctxAtt.employeeId, employeeName: empName, workId, workName });
-      fireAndForget(sendWhatsApp(from, "¿Cuántas horas trabajó " + empName + " en " + workName + "? (Ej: 8)"));
+      await upsertSession(from, userId, "WAITING_ATTENDANCE_FECHA", { employeeId: ctxAtt.employeeId, employeeName: empName, workId, workName });
+      await sendWhatsAppButtons(from, "¿La asistencia es de hoy o de otra fecha?", [
+        { id: "att_fecha:hoy", title: "Hoy" },
+        { id: "att_fecha:ayer", title: "Ayer" },
+      ]);
+      fireAndForget(sendWhatsApp(from, "También podés escribir la fecha (ej. *20/10*, *lunes*, *anteayer*)."));
+    } catch (e) {
+      fireAndForget(sendWhatsApp(from, "⚠️ No pude continuar. Probá de nuevo."));
+    }
+    return;
+  }
+
+  /* [GADU-WA-ATT] Fecha elegida por botón (att_fecha:hoy / att_fecha:ayer) */
+  if (buttonId.startsWith("att_fecha:")) {
+    const fechaKey = buttonId.slice("att_fecha:".length);
+    try {
+      const sessAF = await getSession(normalizePhone(from));
+      const ctxAF = ((sessAF && sessAF.context) || {}) as Record<string, unknown>;
+      const fecha = fechaKey === "ayer" ? resolveFecha("ayer") : resolveFecha("hoy");
+      await upsertSession(from, userId, "WAITING_ATTENDANCE_HOURS", { ...ctxAF, fecha });
+      fireAndForget(sendWhatsApp(from, "¿Cuántas horas trabajó " + String(ctxAF.employeeName || "el empleado") + " en " + String(ctxAF.workName || "la obra") + "? (Ej: 8)"));
     } catch (e) {
       fireAndForget(sendWhatsApp(from, "⚠️ No pude continuar. Probá de nuevo."));
     }
@@ -2351,6 +2394,22 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply: "jornada guardada" });
     }
 
+    /* [GADU-WA-ATTENDANCE] Asistencia paso intermedio: fecha (WAITING_ATTENDANCE_FECHA)
+       Se activa si el usuario escribió la fecha en vez de tocar "Hoy"/"Ayer". */
+    let enWizardAttFecha = false;
+    let attFechaCtx: Record<string, unknown> = {};
+    try {
+      const sessAF = await getSession(normalizePhone(inc.from));
+      if (sessAF && sessAF.state === "WAITING_ATTENDANCE_FECHA") { enWizardAttFecha = true; attFechaCtx = (sessAF.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardAttFecha) {
+      const fecha = resolveFecha(inc.text);
+      console.log("[GADU-WA-ATT] fecha interpretada:", fecha, "· texto:", JSON.stringify(inc.text));
+      await upsertSession(inc.from, row.user_id, "WAITING_ATTENDANCE_HOURS", { ...attFechaCtx, fecha });
+      fireAndForget(sendWhatsApp(inc.from, "¿Cuántas horas trabajó " + String(attFechaCtx.employeeName || "el empleado") + " en " + String(attFechaCtx.workName || "la obra") + "? (Ej: 8)"));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
     /* [GADU-WA-ATTENDANCE] Asistencia paso 3: horas → guardar (WAITING_ATTENDANCE_HOURS) */
     let enWizardAttHoras = false;
     let attHorasCtx: Record<string, unknown> = {};
@@ -2392,8 +2451,9 @@ async function processMessage(body: unknown) {
         /* ID robusto: crypto.randomUUID() con fallback manual por si el runtime no lo expone */
         let attId = "";
         try { attId = crypto.randomUUID(); } catch (_e) { attId = "att-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10); }
+        const fechaAtt = String(attHorasCtx.fecha || new Date().toISOString().slice(0, 10));
         const nuevoReg = {
-          id: attId, employeeId, date: new Date().toISOString().slice(0, 10),
+          id: attId, employeeId, date: fechaAtt,
           status: "presente", hours: [{ workId, hours }], notes: "",
         };
         console.log("[GADU-WA-ATT] JSON a insertar:", JSON.stringify(nuevoReg));
@@ -2407,7 +2467,7 @@ async function processMessage(body: unknown) {
         await deleteSession(normalizePhone(inc.from));
         const empNameAtt = String(attHorasCtx.employeeName || "Empleado");
         const workNameAtt = String(attHorasCtx.workName || "");
-        fireAndForget(sendWhatsApp(inc.from, "✅ Asistencia registrada: " + empNameAtt + " trabajó " + horas + " horas" + (workNameAtt ? " en " + workNameAtt : "")));
+        fireAndForget(sendWhatsApp(inc.from, "✅ Asistencia registrada: " + empNameAtt + " trabajó " + horas + " horas" + (workNameAtt ? " en " + workNameAtt : "") + " · " + fechaAtt));
         return json({ ok: true, from: inc.from, reply: "asistencia guardada" });
       } catch (err) {
         console.error("[GADU-WA-ATT] ERROR en WAITING_ATTENDANCE_HOURS:", err);
