@@ -525,6 +525,17 @@
         try { if (input && input.focus) input.focus(); } catch (e2) {}
         return;
       }
+      /* Alta rápida de empleado desde el selector: abre el alta y retoma después */
+      const ne = e.target && e.target.closest ? e.target.closest('[data-new-emp]') : null;
+      if (ne) {
+        const moduloPrev = pendingOp ? pendingOp.modulo : null;
+        cancelWizard();
+        try {
+          if (G.actions.employee) G.actions.employee();
+          if (G.ui && G.ui.toast) G.ui.toast('Cargá el empleado y volvé a preguntarme "' + (moduloPrev === 'jornada' ? 'quién trabajó hoy' : 'lo que necesites') + '"', 'info');
+        } catch (e2) {}
+        return;
+      }
       const b = e.target && e.target.closest ? e.target.closest('[data-wiz]') : null;
       if (!b) return;
       const v = b.dataset.wiz;
@@ -2498,6 +2509,14 @@
       b.className = 'btn btn-soft btn-sm'; b.textContent = lb;
       b.dataset.wiz = lb; wrap.appendChild(b);
     });
+    /* Selector de empleados: alta rápida sin reiniciar el flujo */
+    if (s.empsList) {
+      const nb = document.createElement('button');
+      nb.className = 'btn btn-soft-info btn-sm';
+      nb.textContent = '➕ Agregar nuevo empleado';
+      nb.dataset.newEmp = '1';
+      wrap.appendChild(nb);
+    }
     /* Paso de horas: widget numérico + opción "Escribir horas" que enfoca
        el input del chat (ingreso manual libre de la cantidad) */
     if (s.key === 'horas') {
