@@ -302,6 +302,22 @@
     if (chatHistory.length > 8) chatHistory.shift();
   }
 
+  /* Historial de acciones recientes (para chips de acceso rápido) */
+  const RECENT_KEY = 'gadu_ai_recent';
+  function recordAction(k) {
+    try {
+      const map = JSON.parse(localStorage.getItem(RECENT_KEY) || '{}');
+      map[k] = (Number(map[k]) || 0) + 1;
+      localStorage.setItem(RECENT_KEY, JSON.stringify(map));
+    } catch (e) {}
+  }
+  function recentActions() {
+    try {
+      const map = JSON.parse(localStorage.getItem(RECENT_KEY) || '{}');
+      return Object.keys(map).sort((a, b) => (Number(map[b]) || 0) - (Number(map[a]) || 0)).slice(0, 3);
+    } catch (e) { return []; }
+  }
+
   function bubble(html, who) {
     const div = document.createElement('div');
     div.className = 'ai-msg ai-' + who;
@@ -374,6 +390,7 @@
       '<div class="ai-head"><span class="ai-head-logo"><img src="' + AVATAR_SRC + '" alt="" class="ai-avatar"></span>' +
       '<div class="ai-head-txt"><strong>Asistente GADU</strong><span class="muted small" id="aiSub">Te guío paso a paso</span></div>' +
       '</div>' +
+      '<div class="ai-offline" id="aiOffline" hidden>⚠️ Sin conexión — tus acciones se guardan localmente y se sincronizan al reconectar.</div>' +
       '<div class="ai-log" id="aiLog"></div>' +
       '<div class="ai-foot">' +
       '<input class="input" id="aiInput" placeholder="Escribí tu mensaje…">' +
@@ -409,6 +426,22 @@
       } catch (e) {}
     };
     setInterval(syncTyping, 150);
+
+    /* Indicador de conectividad: banner si navigator.onLine es false.
+       El store ya encola localmente; acá solo mostramos el aviso. */
+    const syncOnline = () => {
+      try {
+        const off = document.getElementById('aiOffline');
+        if (!off) return;
+        const online = typeof navigator === 'undefined' || navigator.onLine !== false;
+        off.hidden = online;
+      } catch (e) {}
+    };
+    syncOnline();
+    try {
+      window.addEventListener('online', syncOnline);
+      window.addEventListener('offline', syncOnline);
+    } catch (e) {}
     /* Botones del flujo guiado (wizard): delegación de clicks */
     log.addEventListener('click', (e) => {
       /* Formulario dinámico: abrir ("📝 Completar formulario") */
@@ -922,6 +955,7 @@
 
   function firePill(k) {
     resetFlows();   // cambio de flujo → limpiar estados anteriores colgados
+    recordAction(k);   // registrar para los chips de acceso rápido
     /* Pills de contexto de obra (URL #/obra/<id>) */
     if (k.indexOf('__adv_') === 0) {
       const wid = k.slice(6);
@@ -1038,8 +1072,24 @@
     const waTip = admin ? '' :
       '<div class="ai-tip">💡 Tip: También podés usar nuestro bot de WhatsApp para dictar audios y sacar fotos.</div>';
 
+    /* Chips de acciones recientes (últimas 2-3 más usadas) */
+    const labelMap = {};
+    pillsUser.forEach(p => { labelMap[p.k] = p; });
+    pillsAdmin.forEach(p => { labelMap[p.k] = p; });
+    const recents = recentActions()
+      .map(k => labelMap[k])
+      .filter(Boolean)
+      .filter(p => p.k !== 'contabilidad' && p.k !== 'admin-metrics')
+      .slice(0, 3);
+    const recentsRow = (!admin && !ctxWork && recents.length)
+      ? '<div class="ai-recents"><span class="ai-recents-label">Recientes</span>' +
+        recents.map(p => '<button class="btn btn-soft btn-sm" data-act="' + p.k + '">' + p.e + ' ' + p.l + '</button>').join('') +
+        '</div>'
+      : '';
+
     const bot = bubble(
       saludo + '<br>' +
+      recentsRow +
       '<div class="ai-grid">' + pills.map(p => '<button class="btn btn-soft btn-sm" data-act="' + p.k + '">' + p.e + ' ' + p.l + '</button>').join('') + waPill + '</div>' +
       waTip,
       'bot');
