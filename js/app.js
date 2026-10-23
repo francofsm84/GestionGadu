@@ -218,6 +218,12 @@
         try { G.router.navigate('#/herramientas'); } catch (err) { console.error(err); }
       });
     });
+    /* Enlaces con pestaña destino (ej. "Inversiones" → pestaña inversion de Gastos) */
+    document.querySelectorAll('.nav-link[data-tab]').forEach(el => {
+      el.addEventListener('click', () => {
+        try { sessionStorage.setItem('gadu_gastos_tab', el.getAttribute('data-tab')); } catch (err) {}
+      });
+    });
   }
 
   /* ---------- Topbar ---------- */

@@ -31,63 +31,57 @@
     </div>
     <nav class="nav">
       <a class="nav-link" href="#/dashboard" data-route="dashboard"><span class="nav-ico" data-icon="grid"></span><span class="nav-label">Dashboard</span></a>
-      <a class="nav-link" href="#/agenda" data-route="agenda"><span class="nav-ico" data-icon="calendar"></span><span class="nav-label">Agenda</span></a>
-      <a class="nav-link" href="#/jornadas" data-route="jornadas"><span class="nav-ico" data-icon="calendar-plus"></span><span class="nav-label">Jornadas y Asistencia</span></a>
-
-      <div class="nav-group" data-group="obras">
-        <button type="button" class="nav-group-head">
-          <span class="nav-ico" data-icon="hard-hat"></span><span class="nav-label">Obras</span>
-          <span class="badge badge-info" id="badgeObras" hidden>0</span><span class="nav-chev" aria-hidden="true"></span>
-        </button>
-        <div class="nav-group-body"><div class="nav-group-inner">
-          <a class="nav-link" href="#/obras" data-route="obras"><span class="nav-ico" data-icon="hard-hat"></span><span class="nav-label">Todas las obras</span></a>
-          <a class="nav-link" href="#/presupuestos" data-route="presupuestos"><span class="nav-ico" data-icon="file-text"></span><span class="nav-label">Presupuestos</span></a>
-        </div></div>
-      </div>
 
       <div class="nav-group" data-group="contabilidad">
         <button type="button" class="nav-group-head">
-          <span class="nav-ico" data-icon="receipt"></span><span class="nav-label">Contabilidad</span><span class="nav-chev" aria-hidden="true"></span>
+          <span class="nav-ico" data-icon="trending-up"></span><span class="nav-label">📊 Contabilidad / Finanzas</span><span class="nav-chev" aria-hidden="true"></span>
         </button>
         <div class="nav-group-body"><div class="nav-group-inner">
           <a class="nav-link" href="#/libro" data-route="libro"><span class="nav-ico" data-icon="book"></span><span class="nav-label">Libro contable</span></a>
           <a class="nav-link" href="#/ingresos" data-route="ingresos"><span class="nav-ico" data-icon="trending-up"></span><span class="nav-label">Ingresos</span></a>
           <a class="nav-link" href="#/gastos" data-route="gastos"><span class="nav-ico" data-icon="receipt"></span><span class="nav-label">Gastos</span></a>
-          <a class="nav-link" href="#/bandeja" data-route="bandeja"><span class="nav-ico" data-icon="inbox"></span><span class="nav-label">Bandeja WhatsApp</span></a>
+          <a class="nav-link" href="#/gastos" data-route="gastos" data-tab="inversion"><span class="nav-ico" data-icon="activity"></span><span class="nav-label">Inversiones</span></a>
           <a class="nav-link" href="#/deudas" data-route="deudas"><span class="nav-ico" data-icon="wallet"></span><span class="nav-label">Deudas y Cuotas</span></a>
+          <a class="nav-link" href="#/bandeja" data-route="bandeja"><span class="nav-ico" data-icon="inbox"></span><span class="nav-label">Bandeja WhatsApp</span></a>
+        </div></div>
+      </div>
+
+      <div class="nav-group" data-group="obras">
+        <button type="button" class="nav-group-head">
+          <span class="nav-ico" data-icon="hard-hat"></span><span class="nav-label">🏗️ Obras y Negocio</span>
+          <span class="badge badge-info" id="badgeObras" hidden>0</span><span class="nav-chev" aria-hidden="true"></span>
+        </button>
+        <div class="nav-group-body"><div class="nav-group-inner">
+          <a class="nav-link" href="#/obras" data-route="obras"><span class="nav-ico" data-icon="hard-hat"></span><span class="nav-label">Obras activas</span></a>
+          <a class="nav-link" href="#/presupuestos" data-route="presupuestos"><span class="nav-ico" data-icon="file-text"></span><span class="nav-label">Presupuestos</span></a>
         </div></div>
       </div>
 
       <div class="nav-group" data-group="personal">
         <button type="button" class="nav-group-head">
-          <span class="nav-ico" data-icon="users"></span><span class="nav-label">Recursos Humanos</span><span class="nav-chev" aria-hidden="true"></span>
+          <span class="nav-ico" data-icon="users"></span><span class="nav-label">👥 Personal / Equipo</span><span class="nav-chev" aria-hidden="true"></span>
         </button>
         <div class="nav-group-body"><div class="nav-group-inner">
-          <a class="nav-link" href="#/directorio" data-route="directorio"><span class="nav-ico" data-icon="book"></span><span class="nav-label">Directorio de contactos</span></a>
           <a class="nav-link" href="#/empleados" data-route="empleados"><span class="nav-ico" data-icon="user"></span><span class="nav-label">Empleados</span></a>
+          <a class="nav-link" href="#/clientes" data-route="clientes"><span class="nav-ico" data-icon="briefcase"></span><span class="nav-label">Clientes</span></a>
           <a class="nav-link" href="#/socios" data-route="socios"><span class="nav-ico" data-icon="users"></span><span class="nav-label">Socios y reparto</span><span class="badge badge-danger" id="badgeLiquidaciones" hidden>0</span></a>
+          <a class="nav-link" href="#/directorio" data-route="directorio"><span class="nav-ico" data-icon="book"></span><span class="nav-label">Directorio de contactos</span></a>
         </div></div>
       </div>
 
       <div class="nav-group" data-group="recursos">
         <button type="button" class="nav-group-head">
-          <span class="nav-ico" data-icon="wrench"></span><span class="nav-label">Recursos</span><span class="nav-chev" aria-hidden="true"></span>
+          <span class="nav-ico" data-icon="wrench"></span><span class="nav-label">🛠️ Herramientas y Agenda</span><span class="nav-chev" aria-hidden="true"></span>
         </button>
         <div class="nav-group-body"><div class="nav-group-inner">
-          <div class="nav-group" data-group="herramientas-maquinas">
-            <button type="button" class="nav-group-head">
-              <span class="nav-ico" data-icon="wrench"></span><span class="nav-label">Herramientas y Máquinas</span><span class="nav-chev" aria-hidden="true"></span>
-            </button>
-            <div class="nav-group-body"><div class="nav-group-inner">
-              <a class="nav-link" href="#/herramientas" data-route="herramientas"><span class="nav-ico" data-icon="eye"></span><span class="nav-label">Ver herramientas</span></a>
-              <a class="nav-link" href="#/herramientas" data-nueva-herramienta="1"><span class="nav-ico" data-icon="plus"></span><span class="nav-label">Cargar nueva herramienta</span></a>
-            </div></div>
-          </div>
+          <a class="nav-link" href="#/herramientas" data-route="herramientas"><span class="nav-ico" data-icon="eye"></span><span class="nav-label">Herramientas y Máquinas</span></a>
+          <a class="nav-link" href="#/agenda" data-route="agenda"><span class="nav-ico" data-icon="calendar"></span><span class="nav-label">Agenda</span></a>
+          <a class="nav-link" href="#/jornadas" data-route="jornadas"><span class="nav-ico" data-icon="calendar-plus"></span><span class="nav-label">Jornadas y Asistencia</span></a>
           <a class="nav-link" href="#/seguros" data-route="seguros"><span class="nav-ico" data-icon="shield"></span><span class="nav-label">Seguros y vencimientos</span><span class="badge badge-danger" id="badgeSeguros" hidden>0</span></a>
-          <a class="nav-link" href="#/planes" data-route="planes"><span class="nav-ico" data-icon="wallet"></span><span class="nav-label">Mi Suscripción</span></a>
         </div></div>
       </div>
 
+      <a class="nav-link" href="#/planes" data-route="planes"><span class="nav-ico" data-icon="wallet"></span><span class="nav-label">Mi Suscripción</span></a>
       <a class="nav-link" href="#/admin" data-route="admin" id="navAdmin" hidden><span class="nav-ico" data-icon="settings"></span><span class="nav-label">Administración</span></a>
       <button class="nav-link nav-btn" id="btnBackup"><span class="nav-ico" data-icon="database"></span><span class="nav-label">Respaldos y datos</span></button>
     </nav>

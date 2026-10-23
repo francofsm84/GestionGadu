@@ -67,6 +67,11 @@
   }
 
   function render(view) {
+    /* Pestaña destino desde el menú lateral (ej. "Inversiones" → pestaña inversion) */
+    try {
+      const tab = sessionStorage.getItem('gadu_gastos_tab');
+      if (tab && ['obra', 'general', 'inversion'].includes(tab)) { state.tab = tab; sessionStorage.removeItem('gadu_gastos_tab'); }
+    } catch (e) {}
     view.innerHTML =
       '<div class="tabs page-tabs">' +
       '<button class="tab ' + (state.tab === 'obra' ? 'active' : '') + '" data-tab="obra">Gastos por obra</button>' +
