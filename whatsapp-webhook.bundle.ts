@@ -1836,7 +1836,7 @@ async function sendWhatsAppList(
           rows: works.slice(0, 10).map(w => ({
             id: w.id,
             title: w.title.slice(0, 24),
-            description: w.description || "Seleccionar opcion",
+            ...(w.description ? { description: w.description } : {}),
           })),
         }],
       },
@@ -2848,30 +2848,36 @@ async function handleButtonReply(from: string, buttonId: string) {
   const monto = Number(target.amount) || 0;
 
   /* 4) Asignar segun el boton */
+  let confirmMsg = "";
   if (buttonId.startsWith("assign_work:")) {
     const workId = buttonId.slice("assign_work:".length);
     const work = (data.works || []).find((w: Record<string, any>) => String(w.id) === workId);
     const workName = String(work?.nombre || work?.name || "la obra");
     target.workId = workId;
     if (!esIngreso) target.type = "obra";
-    fireAndForget(sendWhatsApp(from, "\u2705 Listo, " + (esIngreso ? "el ingreso" : "el gasto") + " de $" + monto + " fue asignado a la obra " + workName + "."));
+    confirmMsg = "\u2705 Listo, " + (esIngreso ? "el ingreso" : "el gasto") + " de $" + monto + " fue asignado a la obra " + workName + ".";
   } else if (buttonId === "assign_general") {
     target.workId = null;
     if (!esIngreso) target.type = "general";
-    fireAndForget(sendWhatsApp(from, "\u2705 Listo, " + (esIngreso ? "el ingreso" : "el gasto") + " de $" + monto + " quedo registrado como " + (esIngreso ? "ingreso sin obra" : "Gasto General") + "."));
+    confirmMsg = "\u2705 Listo, " + (esIngreso ? "el ingreso" : "el gasto") + " de $" + monto + " quedo registrado como " + (esIngreso ? "ingreso sin obra" : "Gasto General") + ".";
   } else {
     console.warn("[GADU-WA-BUTTONS] boton desconocido:", buttonId);
     return;
   }
 
-  /* 5) Guardar el JSON actualizado */
+  /* 5) Guardar el JSON actualizado ANTES de confirmar (validacion real) */
   const up = await rest("app_data?user_id=eq." + encodeURIComponent(userId), {
     method: "PATCH",
     headers: { Prefer: "return=minimal" },
     body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
   });
-  if (!up.ok) console.error("[GADU-WA-BUTTONS] fallo PATCH app_data:", up.status);
-  else console.log("[GADU-WA-BUTTONS] gasto asignado OK:", buttonId);
+  if (!up.ok) {
+    console.error("[GADU-WA-BUTTONS] fallo PATCH app_data:", up.status);
+    fireAndForget(sendWhatsApp(from, "\u26A0\uFE0F No pude guardar en la nube (error " + up.status + "). El movimiento quedo pendiente de asignar."));
+    return;   // NO limpia la sesion -> el WAITING_WORK queda para reintentar
+  }
+  console.log("[GADU-WA-BUTTONS] gasto asignado OK:", buttonId);
+  fireAndForget(sendWhatsApp(from, confirmMsg));
 
   /* 6) Limpiar el estado WAITING_WORK */
   await deleteSession(normalizePhone(from));
@@ -3168,11 +3174,16 @@ async function processMessage(body: unknown) {
       if (localGasto && localGasto.modulo === "gasto") {
         const resG = executeAction(data, localGasto, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
         if (resG.ok) {
-          await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+          const upG = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
             method: "PATCH",
             headers: { Prefer: "return=minimal" },
             body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
           });
+          if (!upG.ok) {
+            console.error("[GADU-WA-GASTO] fallo PATCH app_data:", upG.status);
+            fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar en la nube (error " + upG.status + "). Proba de nuevo."));
+            return json({ ok: true, from: inc.from, reply: "" });
+          }
           await deleteSession(normalizePhone(inc.from));
           const reply = "\u2705 " + resG.label;
           fireAndForget(sendWhatsApp(inc.from, reply));
@@ -3229,11 +3240,16 @@ async function processMessage(body: unknown) {
       const actionG = { modulo: "gasto", campos: { monto: gastoObraCtx.monto, categoria: gastoObraCtx.categoria, obra: esGeneral ? "" : t } };
       const resG = executeAction(data, actionG, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
       if (resG.ok) {
-        await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+        const upGO = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
           method: "PATCH",
           headers: { Prefer: "return=minimal" },
           body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
         });
+        if (!upGO.ok) {
+          console.error("[GADU-WA-GASTO] fallo PATCH obra:", upGO.status);
+          fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar en la nube (error " + upGO.status + "). Proba de nuevo."));
+          return json({ ok: true, from: inc.from, reply: "" });
+        }
         await deleteSession(normalizePhone(inc.from));
         fireAndForget(sendWhatsApp(inc.from, "\u2705 " + resG.label));
         return json({ ok: true, from: inc.from, reply: "\u2705 " + resG.label });
@@ -3253,11 +3269,15 @@ async function processMessage(body: unknown) {
       if (localIng && localIng.modulo === "ingreso") {
         const res = executeAction(data, localIng, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
         if (res.ok) {
-          await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+          const upIng = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
             method: "PATCH",
             headers: { Prefer: "return=minimal" },
             body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
           });
+          if (!upIng.ok) {
+            fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar en la nube (error " + upIng.status + "). Proba de nuevo."));
+            return json({ ok: true, from: inc.from, reply: "" });
+          }
           await deleteSession(normalizePhone(inc.from));
           fireAndForget(sendWhatsApp(inc.from, "\u2705 " + res.label));
           return json({ ok: true, from: inc.from, reply: "\u2705 " + res.label });
@@ -3306,11 +3326,15 @@ async function processMessage(body: unknown) {
       const actionI = { modulo: "ingreso", campos: { monto: ingObraCtx.monto, concepto: ingObraCtx.concepto, obra: t } };
       const res = executeAction(data, actionI, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
       if (res.ok) {
-        await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+        const upIngO = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
           method: "PATCH",
           headers: { Prefer: "return=minimal" },
           body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
         });
+        if (!upIngO.ok) {
+          fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar en la nube (error " + upIngO.status + "). Proba de nuevo."));
+          return json({ ok: true, from: inc.from, reply: "" });
+        }
         await deleteSession(normalizePhone(inc.from));
         fireAndForget(sendWhatsApp(inc.from, "\u2705 " + res.label));
         return json({ ok: true, from: inc.from, reply: "\u2705 " + res.label });
@@ -3336,11 +3360,15 @@ async function processMessage(body: unknown) {
       if (localInv && localInv.modulo === "inversion") {
         const resI = executeAction(data, localInv, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
         if (resI.ok) {
-          await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+          const upInv = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
             method: "PATCH",
             headers: { Prefer: "return=minimal" },
             body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
           });
+          if (!upInv.ok) {
+            fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar en la nube (error " + upInv.status + "). Proba de nuevo."));
+            return json({ ok: true, from: inc.from, reply: "" });
+          }
           await deleteSession(normalizePhone(inc.from));
           fireAndForget(sendWhatsApp(inc.from, "\u2705 " + resI.label));
           return json({ ok: true, from: inc.from, reply: "\u2705 " + resI.label });
@@ -3381,11 +3409,15 @@ async function processMessage(body: unknown) {
       const actionI = { modulo: "inversion", campos: { monto: invConcCtx.monto, categoria: t } };
       const resI = executeAction(data, actionI, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
       if (resI.ok) {
-        await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+        const upInvC = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
           method: "PATCH",
           headers: { Prefer: "return=minimal" },
           body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
         });
+        if (!upInvC.ok) {
+          fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar en la nube (error " + upInvC.status + "). Proba de nuevo."));
+          return json({ ok: true, from: inc.from, reply: "" });
+        }
         await deleteSession(normalizePhone(inc.from));
         fireAndForget(sendWhatsApp(inc.from, "\u2705 " + resI.label));
         return json({ ok: true, from: inc.from, reply: "\u2705 " + resI.label });
@@ -3420,11 +3452,15 @@ async function processMessage(body: unknown) {
           purchaseDate: new Date().toISOString().slice(0, 10), cost: costo,
           status: "operativo", supplierId: null, notes: "", maintenance: [],
         });
-        await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+        const upHer = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
           method: "PATCH",
           headers: { Prefer: "return=minimal" },
           body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
         });
+        if (!upHer.ok) {
+          fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar en la nube (error " + upHer.status + "). Proba de nuevo."));
+          return json({ ok: true, from: inc.from, reply: "" });
+        }
         await deleteSession(normalizePhone(inc.from));
         fireAndForget(sendWhatsApp(inc.from, "\u2705 Herramienta registrada: " + nombreRaw + " (" + categoria + ")   $" + costo.toLocaleString("es-AR")));
         return json({ ok: true, from: inc.from, reply: "herramienta guardada" });
@@ -3468,11 +3504,15 @@ async function processMessage(body: unknown) {
         purchaseDate: new Date().toISOString().slice(0, 10), cost: costo,
         status: "operativo", supplierId: null, notes: "", maintenance: [],
       });
-      await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+      const upHC = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
         method: "PATCH",
         headers: { Prefer: "return=minimal" },
         body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
       });
+      if (!upHC.ok) {
+        fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar en la nube (error " + upHC.status + "). Proba de nuevo."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
       await deleteSession(normalizePhone(inc.from));
       fireAndForget(sendWhatsApp(inc.from, "\u2705 Herramienta registrada: " + nombreRaw + " (" + categoria + ")   $" + costo.toLocaleString("es-AR")));
       return json({ ok: true, from: inc.from, reply: "herramienta guardada" });
@@ -3545,11 +3585,15 @@ async function processMessage(body: unknown) {
       if (parsed && parsed.monto > 0) {
         const res = executeAction(data, { modulo: "ingreso", campos: { concepto: "Adelanto", monto: parsed.monto, cliente: parsed.nombre, obra: parsed.nombre } }, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
         if (res.ok) {
-          await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+          const upCA = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
             method: "PATCH",
             headers: { Prefer: "return=minimal" },
             body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
           });
+          if (!upCA.ok) {
+            fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar en la nube (error " + upCA.status + "). Proba de nuevo."));
+            return json({ ok: true, from: inc.from, reply: "" });
+          }
           await deleteSession(normalizePhone(inc.from));
           fireAndForget(sendWhatsApp(inc.from, "\u2705 " + res.label));
           return json({ ok: true, from: inc.from, reply: "\u2705 " + res.label });
@@ -3573,11 +3617,15 @@ async function processMessage(body: unknown) {
       if (parsed && parsed.nombre && parsed.monto > 0) {
         const res = executeAction(data, { modulo: "adelanto", campos: { empleado: parsed.nombre, monto: parsed.monto } }, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
         if (res.ok) {
-          await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+          const upAdv = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
             method: "PATCH",
             headers: { Prefer: "return=minimal" },
             body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
           });
+          if (!upAdv.ok) {
+            fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar en la nube (error " + upAdv.status + "). Proba de nuevo."));
+            return json({ ok: true, from: inc.from, reply: "" });
+          }
           await deleteSession(normalizePhone(inc.from));
           fireAndForget(sendWhatsApp(inc.from, "\u2705 " + res.label));
           return json({ ok: true, from: inc.from, reply: "\u2705 " + res.label });
@@ -3625,11 +3673,15 @@ async function processMessage(body: unknown) {
       const actionA = { modulo: "adelanto", campos: { empleado: advObraCtx.empleado, monto: advObraCtx.monto, obra: esGeneral ? "" : t } };
       const res = executeAction(data, actionA, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
       if (res.ok) {
-        await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+        const upAO = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
           method: "PATCH",
           headers: { Prefer: "return=minimal" },
           body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
         });
+        if (!upAO.ok) {
+          fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar en la nube (error " + upAO.status + "). Proba de nuevo."));
+          return json({ ok: true, from: inc.from, reply: "" });
+        }
         await deleteSession(normalizePhone(inc.from));
         fireAndForget(sendWhatsApp(inc.from, "\u2705 " + res.label));
         return json({ ok: true, from: inc.from, reply: "\u2705 " + res.label });
@@ -3700,11 +3752,15 @@ async function processMessage(body: unknown) {
       }
       const res = executeAction(data, { modulo: "obra", campos: { nombre: String(obraPreCtx.nombre || ""), ubicacion: String(obraPreCtx.ubicacion || ""), presupuesto } }, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
       if (res.ok) {
-        await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+        const upObra = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
           method: "PATCH",
           headers: { Prefer: "return=minimal" },
           body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
         });
+        if (!upObra.ok) {
+          fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar en la nube (error " + upObra.status + "). Proba de nuevo."));
+          return json({ ok: true, from: inc.from, reply: "" });
+        }
         await deleteSession(normalizePhone(inc.from));
         fireAndForget(sendWhatsApp(inc.from, "\u2705 " + res.label));
         return json({ ok: true, from: inc.from, reply: "\u2705 " + res.label });
@@ -3774,11 +3830,15 @@ async function processMessage(body: unknown) {
           phone, email: "", source: "whatsapp",
         });
       }
-      await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+      const upCt = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
         method: "PATCH",
         headers: { Prefer: "return=minimal" },
         body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
       });
+      if (!upCt.ok) {
+        fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar en la nube (error " + upCt.status + "). Proba de nuevo."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
       await deleteSession(normalizePhone(inc.from));
       const label = contactType === "empleado" ? "Empleado" : (contactType === "socio" ? "Socio" : (contactType === "proveedor" ? "Proveedor" : (contactType === "subcontratista" ? "Subcontratista" : "Cliente")));
       fireAndForget(sendWhatsApp(inc.from, "\u2705 Contacto guardado correctamente: " + label + " '" + name + "'."));
@@ -3897,11 +3957,15 @@ async function processMessage(body: unknown) {
         titulo: String(agendaObraCtx.titulo || "Compromiso"), lugar: "", contactoId: work ? String(work.id) : null,
         notas: sinRef ? "" : t, estado: "pendiente", createdAt: new Date().toISOString(),
       });
-      await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+      const upAg = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
         method: "PATCH",
         headers: { Prefer: "return=minimal" },
         body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
       });
+      if (!upAg.ok) {
+        fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar en la nube (error " + upAg.status + "). Proba de nuevo."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
       await deleteSession(normalizePhone(inc.from));
       fireAndForget(sendWhatsApp(inc.from, "\u2705 Compromiso agendado: " + String(agendaObraCtx.titulo || "") + " (" + String(agendaObraCtx.fecha || "") + ")"));
       return json({ ok: true, from: inc.from, reply: "compromiso guardado" });
@@ -3957,11 +4021,15 @@ async function processMessage(body: unknown) {
         id: crypto.randomUUID(), employeeId: String((emp as any).id || ""), date: new Date().toISOString().slice(0, 10),
         status: "presente", hours: [{ workId: work ? String((work as any).id) : null, hours: Number(jorObraCtx.horas) || 0 }], notes: "",
       });
-      await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+      const upJor = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
         method: "PATCH",
         headers: { Prefer: "return=minimal" },
         body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
       });
+      if (!upJor.ok) {
+        fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar en la nube (error " + upJor.status + "). Proba de nuevo."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
       await deleteSession(normalizePhone(inc.from));
       const empName = String((emp as any).firstName || "") + " " + String((emp as any).lastName || "");
       fireAndForget(sendWhatsApp(inc.from, "\u2705 Jornada registrada: " + empName.trim() + "   " + Number(jorObraCtx.horas) + "h" + (work ? " en " + String((work as any).nombre || (work as any).name || "") : "")));
@@ -4128,11 +4196,15 @@ async function processMessage(body: unknown) {
       };
       console.log("[GADU-WA-DEBT] JSON a insertar:", JSON.stringify(nuevoDebt));
       (data.debts || (data.debts = [])).unshift(nuevoDebt);
-      await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+      const upDebt = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
         method: "PATCH",
         headers: { Prefer: "return=minimal" },
         body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
       });
+      if (!upDebt.ok) {
+        fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar en la nube (error " + upDebt.status + "). Proba de nuevo."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
       await deleteSession(normalizePhone(inc.from));
       fireAndForget(sendWhatsApp(inc.from, "\u2705 Deuda registrada: " + concepto + " por $" + montoTotal.toLocaleString("es-AR") + " en " + cuotas + " cuotas. Podes verla y pagarla desde la seccion 'Deudas y Cuotas' de la app."));
       return json({ ok: true, from: inc.from, reply: "deuda guardada" });
@@ -4309,7 +4381,11 @@ async function processMessage(body: unknown) {
           headers: { Prefer: "return=minimal" },
           body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
         });
-        if (!up.ok) console.error("[GADU-WA-BUDGET] fallo PATCH app_data:", up.status);
+        if (!up.ok) {
+          console.error("[GADU-WA-BUDGET] fallo PATCH app_data:", up.status);
+          fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar el presupuesto en la nube (error " + up.status + "). Proba de nuevo."));
+          return json({ ok: true, from: inc.from, reply: "" });
+        }
 
         const pdf = await generateBudgetPDF({ cliente, items });
         const filename = "Presupuesto_" + String(cliente || "gadu").replace(/[^a-z0-9aeioun ]/gi, "").replace(/\s+/g, "_") + ".pdf";
@@ -4365,7 +4441,11 @@ async function processMessage(body: unknown) {
         headers: { Prefer: "return=minimal" },
         body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
       });
-      if (!up.ok) console.error("[GADU-WA-ATT] fallo PATCH app_data:", up.status);
+      if (!up.ok) {
+        console.error("[GADU-WA-ATT] fallo PATCH app_data:", up.status);
+        fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar la asistencia en la nube (error " + up.status + "). Proba de nuevo."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
       const partes = registrados.map(r => r.nombre + " (" + r.horas + "hs" + (r.workLabel ? " en " + r.workLabel : " sin obra asignada") + ")");
       let reply = "\u2705 Asistencia registrada: " + (partes.join(", ") || "nadie") + ".";
       if (noEncontrados.length) reply += " (No encontre a " + noEncontrados.join(", ") + " en tu lista de empleados).";
@@ -4422,11 +4502,15 @@ async function processMessage(body: unknown) {
           fechaVencimiento: fechaVenc, finalizada: false,
           createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
         });
-        await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+        const upDebt2 = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
           method: "PATCH",
           headers: { Prefer: "return=minimal" },
           body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
         });
+        if (!upDebt2.ok) {
+          fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar en la nube (error " + upDebt2.status + "). Proba de nuevo."));
+          return json({ ok: true, from: inc.from, reply: "" });
+        }
         fireAndForget(sendWhatsApp(inc.from, "\u2705 Deuda registrada: " + concepto + " por $" + monto.toLocaleString("es-AR") + " en " + cuotas + " cuotas."));
       } else {
         fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Me falta un dato de la deuda (concepto, monto o cuotas). Decimelo completo, ej: \"deuda de 500000 en 12 cuotas para la heladera\"."));
