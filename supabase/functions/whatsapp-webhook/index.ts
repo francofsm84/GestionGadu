@@ -851,32 +851,64 @@ async function handleButtonReply(from: string, buttonId: string) {
     return;
   }
 
-  /* [GADU-WA-PAYDEBT] Pagar una deuda específica desde la lista */
+  /* [GADU-WA-PAYDEBT] Ejecutar el pago de N cuotas (paydebt_n_<id>_<n>) */
+  if (buttonId.startsWith("paydebt_n_")) {
+    const restId = buttonId.slice("paydebt_n_".length);
+    const idxSep = restId.lastIndexOf("_");
+    const debtId = restId.slice(0, idxSep);
+    const nCuotas = restId.slice(idxSep + 1);
+    try {
+      const rPn = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+      const rowsPn = (await rPn.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+      const dPn = (Array.isArray(rowsPn) && rowsPn.length) ? (rowsPn[0].data || {}) : {};
+      const res = pagarDeuda(dPn, debtId, nCuotas);
+      if (res.ok) {
+        const upPn = await rest("app_data?user_id=eq." + encodeURIComponent(userId), {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ data: dPn, updated_at: new Date().toISOString() }),
+        });
+        if (!upPn.ok) {
+          console.error("[GADU-WA-PAYDEBT] PATCH falló:", upPn.status);
+          fireAndForget(sendWhatsApp(from, "⚠️ No pude guardar el pago en la nube. Reintentá."));
+          return;
+        }
+        fireAndForget(sendWhatsApp(from, "✅ Pago registrado: " + res.label + ". Se registró el gasto en tu caja general."));
+      } else {
+        fireAndForget(sendWhatsApp(from, "🤖 " + (res.error || "No pude pagar esa deuda.")));
+      }
+    } catch (e) {
+      console.error("[GADU-WA-PAYDEBT] error:", e);
+      fireAndForget(sendWhatsApp(from, "⚠️ No pude procesar el pago. Probá de nuevo."));
+    }
+    return;
+  }
+
+  /* [GADU-WA-PAYDEBT] Elegir deuda → preguntar cuántas cuotas pagar */
   if (buttonId.startsWith("paydebt_")) {
     const debtId = buttonId.slice("paydebt_".length);
     try {
       const rPd = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
       const rowsPd = (await rPd.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
       const dPd = (Array.isArray(rowsPd) && rowsPd.length) ? (rowsPd[0].data || {}) : {};
-      const res = pagarDeuda(dPd, debtId);
-      if (res.ok) {
-        const upPd = await rest("app_data?user_id=eq." + encodeURIComponent(userId), {
-          method: "PATCH",
-          headers: { Prefer: "return=minimal" },
-          body: JSON.stringify({ data: dPd, updated_at: new Date().toISOString() }),
-        });
-        if (!upPd.ok) {
-          console.error("[GADU-WA-PAYDEBT] PATCH falló:", upPd.status);
-          fireAndForget(sendWhatsApp(from, "⚠️ No pude guardar el pago en la nube. Reintentá."));
-          return;
-        }
-        fireAndForget(sendWhatsApp(from, "✅ Cuota pagada: " + res.label + ". Se registró el gasto en tu caja general."));
-      } else {
-        fireAndForget(sendWhatsApp(from, "🤖 " + (res.error || "No pude pagar esa cuota.")));
+      const d = (dPd.debts || []).find((x: any) => String(x.id) === debtId);
+      if (!d || d.finalizada) {
+        fireAndForget(sendWhatsApp(from, "🤖 No encontré esa deuda o ya está finalizada."));
+        return;
       }
+      const restantes = Math.max(0, (Number(d.cuotasTotales) || 0) - (Number(d.cuotaActual) || 0));
+      const montoCuota = Number(d.montoPorCuota) || 0;
+      const fmt = (n: number) => "$" + n.toLocaleString("es-AR");
+      const opts: Array<{ id: string; title: string; description: string }> = [];
+      if (restantes >= 1) opts.push({ id: "paydebt_n_" + debtId + "_1", title: "1 cuota", description: fmt(montoCuota) });
+      if (restantes >= 2) opts.push({ id: "paydebt_n_" + debtId + "_2", title: "2 cuotas", description: fmt(montoCuota * 2) });
+      if (restantes >= 3) opts.push({ id: "paydebt_n_" + debtId + "_3", title: "3 cuotas", description: fmt(montoCuota * 3) });
+      if (restantes > 3) opts.push({ id: "paydebt_n_" + debtId + "_all", title: "Todas (" + restantes + ")", description: fmt(montoCuota * restantes) });
+      opts.push({ id: "menu_root", title: "🏠 Volver al menú", description: "Cancelar y volver al inicio" });
+      await sendWhatsAppList(from, "¿Cuántas cuotas de " + (d.concepto || "Deuda") + " querés pagar?", opts, { button: "Elegir cuotas", sectionTitle: "Cuotas a pagar" });
     } catch (e) {
       console.error("[GADU-WA-PAYDEBT] error:", e);
-      fireAndForget(sendWhatsApp(from, "⚠️ No pude procesar el pago. Probá de nuevo."));
+      fireAndForget(sendWhatsApp(from, "⚠️ No pude cargar la deuda. Probá de nuevo."));
     }
     return;
   }

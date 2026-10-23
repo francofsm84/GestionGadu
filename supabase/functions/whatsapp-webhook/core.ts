@@ -972,24 +972,34 @@ export function addMonthsISO(iso: unknown, n: number): string {
 /* Paga una cuota de una deuda: avanza cuotaActual +1, avanza la fecha un mes,
    crea el gasto general (category "Deuda") y marca finalizada si corresponde.
    MUTA data (expenses + debts) y devuelve el resultado para confirmar. */
-export function pagarDeuda(data: Record<string, any>, debtId: string): { ok: boolean; label?: string; error?: string } {
+export function pagarDeuda(data: Record<string, any>, debtId: string, nCuotas?: number): { ok: boolean; label?: string; error?: string } {
   const debts = (data.debts || []) as any[];
   const d = debts.find(x => String(x.id) === String(debtId));
   if (!d) return { ok: false, error: "No encontré esa deuda." };
   if (d.finalizada) return { ok: false, error: "Esa deuda ya está finalizada." };
   const cuotaPrev = Number(d.cuotaActual) || 0;
-  const cuotaActual = cuotaPrev + 1;
-  const finalizada = cuotaActual > (Number(d.cuotasTotales) || 0);
+  const cuotasTotales = Number(d.cuotasTotales) || 0;
+  const restantes = Math.max(0, cuotasTotales - cuotaPrev);
+  /* Cantidad de cuotas a abonar: por defecto 1; "all" → todas las restantes.
+     Se limita a lo que queda pendiente. */
+  let n = Number(nCuotas) || 1;
+  if (nCuotas === "all" || n > restantes) n = Math.max(1, restantes);
   const montoCuota = Number(d.montoPorCuota) || 0;
+  const total = n * montoCuota;
+  const cuotaActual = cuotaPrev + n;
+  const finalizada = cuotaActual >= cuotasTotales;
+  const descripcion = n === 1
+    ? "Pago cuota " + cuotaPrev + "/" + cuotasTotales + " - " + d.concepto
+    : "Pago cuotas " + (cuotaPrev + 1) + "-" + cuotaActual + "/" + cuotasTotales + " - " + d.concepto;
   (data.expenses || (data.expenses = [])).unshift({
     id: crypto.randomUUID(), type: "general", workId: null, date: new Date().toISOString().slice(0, 10),
-    amount: montoCuota, category: "Deuda", providerId: null, employeeId: null,
-    description: "Pago cuota " + cuotaPrev + "/" + d.cuotasTotales + " - " + d.concepto,
+    amount: total, category: "Deuda", providerId: null, employeeId: null,
+    description: descripcion,
     invoiceNumber: "", paymentMethod: "Efectivo", expenseKind: null, source: "whatsapp",
   });
   d.cuotaActual = cuotaActual;
-  d.fechaVencimiento = addMonthsISO(d.fechaVencimiento, 1);
+  d.fechaVencimiento = addMonthsISO(d.fechaVencimiento, n);
   d.finalizada = finalizada;
   d.updatedAt = new Date().toISOString();
-  return { ok: true, label: "cuota " + cuotaPrev + "/" + d.cuotasTotales + " de " + (d.concepto || "Deuda") + (finalizada ? " (deuda finalizada)" : "") };
+  return { ok: true, label: n + " cuota(s) (" + (d.concepto || "Deuda") + ")" + (finalizada ? " · deuda finalizada" : "") };
 }
