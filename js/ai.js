@@ -2472,8 +2472,12 @@
         pend.appendChild(wrap);
         return;
       }
-      /* Empleados frecuentes primero (más actividad reciente) */
-      buttons = frequentEmployees(emps).map(e => ((e.firstName || '') + ' ' + (e.lastName || '')).trim());
+      /* Empleados frecuentes PRIMERO: los 3-4 más recurrentes aparecen arriba.
+         El hint "💡 Frecuentes" destaca cuáles son sin ensuciar el valor capturado. */
+      const frec = frequentEmployees(emps);
+      const nombre = e => ((e.firstName || '') + ' ' + (e.lastName || '')).trim();
+      buttons = frec.map(e => nombre(e));
+      if (frec.length) hint = '💡 Frecuentes: ' + frec.slice(0, 4).map(e => '<b>' + esc(nombre(e)) + '</b>').join(' · ');
     } else if (s.catsList) {
       /* Categorías REALES del store (obra + generales) + Herramientas/Equipamiento */
       const cats = ['Herramientas / Equipamiento']
