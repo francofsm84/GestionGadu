@@ -806,7 +806,9 @@ function detectInteractive(body: unknown): { from: string; buttonId: string } | 
     const p = body as Record<string, any>;
     const msg = p?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
     if (!msg || msg.type !== "interactive") return null;
-    const buttonId = String(msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id || "");
+    /* Log del objeto interactive completo para diagnóstico (list_reply vs button_reply) */
+    console.log("[GADU-WA-INTERACTIVE] interactive completo:", JSON.stringify(msg.interactive || {}));
+    const buttonId = String(msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id || msg.interactive?.nfm_reply?.response_json || "");
     console.log("[GADU-WA-INTERACTIVE] list_reply.id:", JSON.stringify(msg.interactive?.list_reply?.id), "· button_reply.id:", JSON.stringify(msg.interactive?.button_reply?.id), "· buttonId resuelto:", buttonId);
     const from = String(msg.from || p?.entry?.[0]?.changes?.[0]?.value?.contacts?.[0]?.wa_id || "");
     if (!buttonId || !from) return null;
@@ -2768,8 +2770,9 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
     }
 
-      /* 5) Fallback: desplegar el menú principal unificado (misma lista) */
-      const reply = aiReply || "🤖 No estoy seguro de qué querés hacer.";
+      /* 5) Fallback: desplegar el menú principal unificado (misma lista).
+         Nunca responde con texto plano "no entiendo": siempre menú interactivo. */
+      const reply = aiReply || "¿En qué te ayudo hoy? Tocá *Ver menú* para ver las opciones.";
       await showMainMenu(inc.from, reply);
       return json({ ok: true, from: inc.from, reply });
   } catch (error) {
