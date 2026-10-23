@@ -1168,6 +1168,8 @@
     const works = (d.works || []).filter(w => w && workLabel(w));
     if (!works.length) return null;
     const ftn = normText(t);
+    const ft = flatText(t);
+    const nm = w => flatText(workLabel(w));
     /* 1) Fuzzy exacto bidireccional (normalizado sin preposiciones/artículos) */
     let hit = works.find(w => {
       const n = normText(workLabel(w));
