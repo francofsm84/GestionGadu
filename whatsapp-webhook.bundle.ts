@@ -3018,6 +3018,20 @@ async function processMessage(body: unknown) {
       }
     } catch (e) { /* sin sesion: seguimos normal */ }
 
+    /* Guard de sesion activa: PRIORIDAD ABSOLUTA del wizard sobre texto libre/IA.
+       Registra el estado activo para diagnostico y evita que un WAITING_* huerfano
+       caiga a la IA (se limpia en el fallback). */
+    let activeWizardState = "";
+    try {
+      const sessGuard = await getSession(normalizePhone(inc.from));
+      if (sessGuard && String(sessGuard.state || "").startsWith("WAITING_")) {
+        activeWizardState = String(sessGuard.state);
+      }
+    } catch (e) {}
+    if (activeWizardState) {
+      console.log("[GADU-WA-SESSION] estado activo:", activeWizardState, "  texto:", JSON.stringify(inc.text));
+    }
+
     /* 2d) RESTAURAR: recuperar el ultimo registro de la papelera */
     if (String(inc.text || "").trim().toUpperCase() === "RESTAURAR") {
       const trash = Array.isArray(data.trash) ? data.trash : [];
@@ -4055,6 +4069,16 @@ async function processMessage(body: unknown) {
       await upsertSession(inc.from, row.user_id, "WAITING_ADVANCE", {});
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
+    }
+
+    /* Blindaje: si llegamos hasta aca con un WAITING_* activo que NINGUN wizard
+       intercepto (estado huerfano), lo limpiamos y volvemos al menu. Evita que
+       una respuesta numerica caiga a la IA o cambie de flujo. */
+    if (activeWizardState) {
+      console.warn("[GADU-WA-SESSION] estado huerfano sin interceptor:", activeWizardState);
+      try { await deleteSession(normalizePhone(inc.from)); } catch (e) {}
+      await showMainMenu(inc.from, "Hola! \uD83D\uDC4B Soy tu asistente GADU. Que queres hacer hoy?");
+      return json({ ok: true, from: inc.from, reply: "" });
     }
 
     /* Consultas analiticas (SOLO LECTURA): detectar + calcular ANTES de la IA.
