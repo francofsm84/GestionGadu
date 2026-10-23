@@ -437,8 +437,15 @@
             resumePendingGoal();
           });
         } else {
-          /* Widget genérico: envía el valor como respuesta del usuario */
-          try { input.value = String(val); send(); } catch (e2) {}
+          /* Widget genérico: envía el valor como respuesta del usuario.
+             Se desactiva al instante para evitar envíos duplicados. */
+          try {
+            const btn = widget.querySelector('[data-widget-ok]');
+            if (btn) { btn.disabled = true; btn.textContent = 'Enviado…'; }
+            if (inp) inp.disabled = true;
+            input.value = String(val);
+            send();
+          } catch (e2) {}
         }
         return;
       }
