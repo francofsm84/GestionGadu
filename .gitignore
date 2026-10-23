@@ -5,6 +5,9 @@ _publicar/
 tt-*.html
 node_modules/
 
+# Archivos temporales del CLI de Supabase
+supabase/.temp/
+
 # Logos originales de trabajo (la app usa las versiones optimizadas logo*.png)
 logo png gadu.png
 logo gadu (1000 x 500 px).png
