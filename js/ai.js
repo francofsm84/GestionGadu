@@ -898,8 +898,8 @@
       pend.innerHTML = summaryCardHtml(res);
       if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
     } else {
-      pend.innerHTML = '⚠️ Guardé ' + res.label + ' en tu dispositivo, pero la nube no respondió y todavía no se sincronizó. Se va a reintentar solo cuando vuelva la conexión.';
-      if (G.ui && G.ui.toast) G.ui.toast('Guardado local (sin conexión): ' + res.label, 'warning');
+      pend.innerHTML = '⚠️ Guardé ' + esc(res.label) + ' en tu dispositivo, pero la nube falló: ' + esc(String(res.error || 'sin conexión')) + '. Se reintentará solo cuando vuelva la conexión.';
+      if (G.ui && G.ui.toast) G.ui.toast('Guardado local (nube con error): ' + res.label, 'warning');
     }
     return true;
   }
@@ -2721,7 +2721,7 @@
         wizardBubble(summaryCardHtml(res));
         if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
       } else {
-        wizardBubble('⚠️ Guardé ' + res.label + ' en tu dispositivo, pero la nube no respondió y todavía no se sincronizó. Se reintentará solo cuando vuelva la conexión.');
+        wizardBubble('⚠️ Guardé ' + res.label + ' en tu dispositivo, pero la nube falló: ' + esc(String(res.error || 'sin conexión')) + '. Se reintentará solo cuando vuelva la conexión.');
       }
       rememberTurn('asistente', 'guardado ' + res.label);
     } else {
