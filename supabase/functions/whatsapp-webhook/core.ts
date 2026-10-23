@@ -958,3 +958,38 @@ export function calcularCuotas(data: Record<string, any>): string {
   }, 0);
   return "💰 *Cuotas pendientes*\n\n" + lineas.join("\n") + "\n\n*Total pendiente: " + fmt(total) + "*";
 }
+
+/* Avanza una fecha ISO (YYYY-MM-DD) N meses, clampando el día al fin de mes. */
+export function addMonthsISO(iso: unknown, n: number): string {
+  const parts = String(iso || "").split("-").map(Number);
+  if (parts.length !== 3 || !parts[0]) return String(iso || "");
+  const target = new Date(parts[0], parts[1] - 1 + n, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  const day = Math.min(parts[2], lastDay);
+  return target.getFullYear() + "-" + String(target.getMonth() + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+}
+
+/* Paga una cuota de una deuda: avanza cuotaActual +1, avanza la fecha un mes,
+   crea el gasto general (category "Deuda") y marca finalizada si corresponde.
+   MUTA data (expenses + debts) y devuelve el resultado para confirmar. */
+export function pagarDeuda(data: Record<string, any>, debtId: string): { ok: boolean; label?: string; error?: string } {
+  const debts = (data.debts || []) as any[];
+  const d = debts.find(x => String(x.id) === String(debtId));
+  if (!d) return { ok: false, error: "No encontré esa deuda." };
+  if (d.finalizada) return { ok: false, error: "Esa deuda ya está finalizada." };
+  const cuotaPrev = Number(d.cuotaActual) || 0;
+  const cuotaActual = cuotaPrev + 1;
+  const finalizada = cuotaActual > (Number(d.cuotasTotales) || 0);
+  const montoCuota = Number(d.montoPorCuota) || 0;
+  (data.expenses || (data.expenses = [])).unshift({
+    id: crypto.randomUUID(), type: "general", workId: null, date: new Date().toISOString().slice(0, 10),
+    amount: montoCuota, category: "Deuda", providerId: null, employeeId: null,
+    description: "Pago cuota " + cuotaPrev + "/" + d.cuotasTotales + " - " + d.concepto,
+    invoiceNumber: "", paymentMethod: "Efectivo", expenseKind: null, source: "whatsapp",
+  });
+  d.cuotaActual = cuotaActual;
+  d.fechaVencimiento = addMonthsISO(d.fechaVencimiento, 1);
+  d.finalizada = finalizada;
+  d.updatedAt = new Date().toISOString();
+  return { ok: true, label: "cuota " + cuotaPrev + "/" + d.cuotasTotales + " de " + (d.concepto || "Deuda") + (finalizada ? " (deuda finalizada)" : "") };
+}

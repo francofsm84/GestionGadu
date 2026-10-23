@@ -959,6 +959,41 @@ export function calcularCuotas(data: Record<string, any>): string {
   return "$ *Cuotas pendientes*\n\n" + lineas.join("\n") + "\n\n*Total pendiente: " + fmt(total) + "*";
 }
 
+/* Avanza una fecha ISO (YYYY-MM-DD) N meses, clampando el dia al fin de mes. */
+export function addMonthsISO(iso: unknown, n: number): string {
+  const parts = String(iso || "").split("-").map(Number);
+  if (parts.length !== 3 || !parts[0]) return String(iso || "");
+  const target = new Date(parts[0], parts[1] - 1 + n, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  const day = Math.min(parts[2], lastDay);
+  return target.getFullYear() + "-" + String(target.getMonth() + 1).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+}
+
+/* Paga una cuota de una deuda: avanza cuotaActual +1, avanza la fecha un mes,
+   crea el gasto general (category "Deuda") y marca finalizada si corresponde.
+   MUTA data (expenses + debts) y devuelve el resultado para confirmar. */
+export function pagarDeuda(data: Record<string, any>, debtId: string): { ok: boolean; label?: string; error?: string } {
+  const debts = (data.debts || []) as any[];
+  const d = debts.find(x => String(x.id) === String(debtId));
+  if (!d) return { ok: false, error: "No encontre esa deuda." };
+  if (d.finalizada) return { ok: false, error: "Esa deuda ya esta finalizada." };
+  const cuotaPrev = Number(d.cuotaActual) || 0;
+  const cuotaActual = cuotaPrev + 1;
+  const finalizada = cuotaActual > (Number(d.cuotasTotales) || 0);
+  const montoCuota = Number(d.montoPorCuota) || 0;
+  (data.expenses || (data.expenses = [])).unshift({
+    id: crypto.randomUUID(), type: "general", workId: null, date: new Date().toISOString().slice(0, 10),
+    amount: montoCuota, category: "Deuda", providerId: null, employeeId: null,
+    description: "Pago cuota " + cuotaPrev + "/" + d.cuotasTotales + " - " + d.concepto,
+    invoiceNumber: "", paymentMethod: "Efectivo", expenseKind: null, source: "whatsapp",
+  });
+  d.cuotaActual = cuotaActual;
+  d.fechaVencimiento = addMonthsISO(d.fechaVencimiento, 1);
+  d.finalizada = finalizada;
+  d.updatedAt = new Date().toISOString();
+  return { ok: true, label: "cuota " + cuotaPrev + "/" + d.cuotasTotales + " de " + (d.concepto || "Deuda") + (finalizada ? " (deuda finalizada)" : "") };
+}
+
 
 // ============================================================
 // GADU   Transcribir notas de voz de WhatsApp con Gemini
@@ -1825,6 +1860,7 @@ const SUBMENUS: Record<string, Array<{ id: string; title: string; description?: 
     { id: "action_nuevo_gasto", title: "Cargar Gasto" },
     { id: "action_inversion", title: "Registrar Inversion" },
     { id: "action_adelanto", title: "Pago / Adelanto" },
+    { id: "action_pagar_deuda", title: "Pagar Deuda" },
     { id: "action_nueva_deuda", title: "Registrar Deuda" },
     { id: "action_herramienta", title: "Registrar Herramienta" },
     { id: "action_ingreso", title: "Registrar Cobro" },
@@ -2351,6 +2387,50 @@ async function handleButtonReply(from: string, buttonId: string) {
     return;
   }
 
+  /* [GADU-WA-CANCEL] Cancelar flujo: resetea sesion y vuelve al menu (siempre disponible) */
+  if (buttonId === "action_cancel") {
+    try { await deleteSession(normalizePhone(from)); } catch (e) {}
+    await showMainMenu(from, " Operacion cancelada. En que te ayudo?");
+    return;
+  }
+
+  /* [GADU-WA-PAYDEBT] Pagar una deuda especifica desde la lista */
+  if (buttonId.startsWith("paydebt_")) {
+    const debtId = buttonId.slice("paydebt_".length);
+    try {
+      const rPd = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+      const rowsPd = (await rPd.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+      const dPd = (Array.isArray(rowsPd) && rowsPd.length) ? (rowsPd[0].data || {}) : {};
+      const res = pagarDeuda(dPd, debtId);
+      if (res.ok) {
+        const upPd = await rest("app_data?user_id=eq." + encodeURIComponent(userId), {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ data: dPd, updated_at: new Date().toISOString() }),
+        });
+        if (!upPd.ok) {
+          console.error("[GADU-WA-PAYDEBT] PATCH fallo:", upPd.status);
+          fireAndForget(sendWhatsApp(from, "[ALERTA] No pude guardar el pago en la nube. Reintenta."));
+          return;
+        }
+        fireAndForget(sendWhatsApp(from, "OK Cuota pagada: " + res.label + ". Se registro el gasto en tu caja general."));
+      } else {
+        fireAndForget(sendWhatsApp(from, "[BOT] " + (res.error || "No pude pagar esa cuota.")));
+      }
+    } catch (e) {
+      console.error("[GADU-WA-PAYDEBT] error:", e);
+      fireAndForget(sendWhatsApp(from, "[ALERTA] No pude procesar el pago. Proba de nuevo."));
+    }
+    return;
+  }
+
+  /* [GADU-WA-ATT] Alta rapida de empleado desde el selector de asistencia */
+  if (buttonId === "att_new_emp") {
+    await upsertSession(from, userId, "WAITING_EMP_OFICIO", { resumeAttendance: true });
+    fireAndForget(sendWhatsApp(from, "[empleado] Dale! Cual es el nombre del nuevo empleado? (ej. Juan Perez)"));
+    return;
+  }
+
   /* [GADU-WA-SUPPORT] Si hay un ticket ABIERTO, ignorar cualquier boton salvo
      los de "hablar con humano" (que re-confirman el ticket). */
   if (buttonId !== "action_humano" && buttonId !== "fallback_humano") {
@@ -2505,6 +2585,26 @@ async function handleButtonReply(from: string, buttonId: string) {
       fireAndForget(sendWhatsApp(from, "Cual es el concepto de la deuda? (Ej: Heladera, Prestamo Banco). Escribi *cancelar* para abortar."));
       return;
     }
+    if (act === "pagar_deuda") {
+      try {
+        const rPag = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+        const rowsPag = (await rPag.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+        const dPag = (Array.isArray(rowsPag) && rowsPag.length) ? (rowsPag[0].data || {}) : {};
+        const activas = (dPag.debts || []).filter((d: any) => !d.finalizada).slice(0, 10);
+        if (!activas.length) {
+          fireAndForget(sendWhatsApp(from, "[BOT] No tenes deudas activas en cuotas."));
+          return;
+        }
+        await sendWhatsAppList(from, "Que deuda queres pagar?", activas.map((d: any) => ({
+          id: "paydebt_" + String(d.id),
+          title: String(d.concepto || "Deuda"),
+          description: "Cuota " + d.cuotaActual + "/" + d.cuotasTotales + "   " + (d.montoPorCuota ? "$" + Number(d.montoPorCuota).toLocaleString("es-AR") : ""),
+        })), { button: "Elegir deuda", sectionTitle: "Deudas activas" });
+      } catch (e) {
+        fireAndForget(sendWhatsApp(from, "[ALERTA] No pude cargar las deudas. Proba de nuevo."));
+      }
+      return;
+    }
     if (act === "contacto") {
       await upsertSession(from, userId, "WAITING_CONTACT_ROLE", {});
       await sendWhatsAppList(from, "Que tipo de contacto queres registrar?", [
@@ -2527,7 +2627,9 @@ async function handleButtonReply(from: string, buttonId: string) {
           return;
         }
         await upsertSession(from, userId, "WAITING_ATTENDANCE_EMPLOYEE", {});
-        await sendWhatsAppList(from, "Que empleado trabajo?", emps.map((e: any) => ({ id: "att_emp:" + String(e.id), title: String((e.firstName || "") + " " + (e.lastName || "")).trim() })), { button: "Elegir empleado", sectionTitle: "Empleados" });
+        const empRows = emps.map((e: any) => ({ id: "att_emp:" + String(e.id), title: String((e.firstName || "") + " " + (e.lastName || "")).trim() }));
+        empRows.push({ id: "att_new_emp", title: "+ Agregar nuevo empleado", description: "Darlo de alta y seguir con la asistencia" });
+        await sendWhatsAppList(from, "Que empleado trabajo?", empRows, { button: "Elegir empleado", sectionTitle: "Empleados" });
       } catch (e) {
         fireAndForget(sendWhatsApp(from, "[ALERTA] No pude cargar los empleados. Proba de nuevo."));
       }
@@ -3568,7 +3670,7 @@ async function processMessage(body: unknown) {
     if (enWizardEmpOficio) {
       const t = String(inc.text || "").trim();
       if (!t) { fireAndForget(sendWhatsApp(inc.from, "[BOT] Cual es su oficio? (ej. Albanil, Pintor, Plomero)")); return json({ ok: true, from: inc.from, reply: "" }); }
-      await upsertSession(inc.from, row.user_id, "WAITING_EMP_TARIFA", { nombre: empOficioCtx.nombre, oficio: t });
+      await upsertSession(inc.from, row.user_id, "WAITING_EMP_TARIFA", { nombre: empOficioCtx.nombre, oficio: t, resumeAttendance: empOficioCtx.resumeAttendance });
       fireAndForget(sendWhatsApp(inc.from, "Cuanto cobra por hora? (ej. 1500)"));
       return json({ ok: true, from: inc.from, reply: "" });
     }
@@ -3584,7 +3686,7 @@ async function processMessage(body: unknown) {
       const t = String(inc.text || "").trim();
       const tarifa = Number(t.replace(/\./g, "").replace(",", "."));
       if (!tarifa || tarifa <= 0) { fireAndForget(sendWhatsApp(inc.from, "[BOT] Eso no es un monto valido. Cuanto cobra por hora?")); return json({ ok: true, from: inc.from, reply: "" }); }
-      await upsertSession(inc.from, row.user_id, "WAITING_EMP_TELEFONO", { nombre: empTarifaCtx.nombre, oficio: empTarifaCtx.oficio, tarifa });
+      await upsertSession(inc.from, row.user_id, "WAITING_EMP_TELEFONO", { nombre: empTarifaCtx.nombre, oficio: empTarifaCtx.oficio, tarifa, resumeAttendance: empTarifaCtx.resumeAttendance });
       fireAndForget(sendWhatsApp(inc.from, "Su telefono / WhatsApp? (o escribi *omitir*)"));
       return json({ ok: true, from: inc.from, reply: "" });
     }
@@ -3600,18 +3702,38 @@ async function processMessage(body: unknown) {
       const t = String(inc.text || "").trim();
       const phone = /^omitir$/i.test(t) ? "" : t;
       const parsed = formatProperName(String(empTelCtx.nombre || ""));
+      const nuevoId = crypto.randomUUID();
       (data.employees || (data.employees = [])).push({
-        id: crypto.randomUUID(), firstName: parsed.firstName, lastName: parsed.lastName,
+        id: nuevoId, firstName: parsed.firstName, lastName: parsed.lastName,
         phone, role: String(empTelCtx.oficio || parsed.role || "empleado"),
         hourlyRate: Number(empTelCtx.tarifa) || 0, paymentData: "", active: true, source: "whatsapp",
       });
-      await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+      const upEmp = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
         method: "PATCH",
         headers: { Prefer: "return=minimal" },
         body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
       });
-      await deleteSession(normalizePhone(inc.from));
+      if (!upEmp.ok) {
+        console.error("[GADU-WA-EMP] PATCH fallo:", upEmp.status);
+        fireAndForget(sendWhatsApp(inc.from, "[ALERTA] No pude guardar el empleado en la nube. Reintenta."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
       const nombreEmp = (parsed.firstName + " " + parsed.lastName).trim();
+
+      /* Alta rapida desde asistencia: retomar el registro de asistencia */
+      if (empTelCtx.resumeAttendance) {
+        const obras = (data.works || []).filter((w: any) => w.status === "activa").slice(0, 10);
+        if (!obras.length) {
+          await deleteSession(normalizePhone(inc.from));
+          fireAndForget(sendWhatsApp(inc.from, "OK " + nombreEmp + " registrado, pero no tenes obras activas para cargarle asistencia."));
+          return json({ ok: true, from: inc.from, reply: "" });
+        }
+        await upsertSession(inc.from, row.user_id, "WAITING_ATTENDANCE_WORK", { employeeId: nuevoId, employeeName: nombreEmp });
+        await sendWhatsAppList(inc.from, "OK " + nombreEmp + " registrado. En que obra trabajo?", obras.map((w: any) => ({ id: "att_work:" + String(w.id), title: String(w.nombre || w.name || "Obra") })), { button: "Elegir obra", sectionTitle: "Obras activas" });
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+
+      await deleteSession(normalizePhone(inc.from));
       fireAndForget(sendWhatsApp(inc.from, "OK Empleado registrado: " + nombreEmp + " (" + String(empTelCtx.oficio || "empleado") + ")" + (Number(empTelCtx.tarifa) ? "   $" + Number(empTelCtx.tarifa) + "/h" : "")));
       return json({ ok: true, from: inc.from, reply: "empleado guardado" });
     }

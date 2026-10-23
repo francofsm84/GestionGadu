@@ -50,6 +50,8 @@ import {
   calcularDeudasEmpleados,
   calcularCuotas,
   num,
+  pagarDeuda,
+  addMonthsISO,
 } from "./core.ts";
 import { resolveIncomingText } from "./transcribe.ts";
 import { enqueueMessage, claimNext, markDone, markFailed, resetStaleProcessing } from "./queue.ts";
@@ -308,6 +310,7 @@ const SUBMENUS: Record<string, Array<{ id: string; title: string; description?: 
     { id: "action_nuevo_gasto", title: "Cargar Gasto" },
     { id: "action_inversion", title: "Registrar Inversión" },
     { id: "action_adelanto", title: "Pago / Adelanto" },
+    { id: "action_pagar_deuda", title: "Pagar Deuda" },
     { id: "action_nueva_deuda", title: "Registrar Deuda" },
     { id: "action_herramienta", title: "Registrar Herramienta" },
     { id: "action_ingreso", title: "Registrar Cobro" },
@@ -834,6 +837,50 @@ async function handleButtonReply(from: string, buttonId: string) {
     return;
   }
 
+  /* [GADU-WA-CANCEL] Cancelar flujo: resetea sesión y vuelve al menú (siempre disponible) */
+  if (buttonId === "action_cancel") {
+    try { await deleteSession(normalizePhone(from)); } catch (e) {}
+    await showMainMenu(from, "✋ Operación cancelada. ¿En qué te ayudo?");
+    return;
+  }
+
+  /* [GADU-WA-PAYDEBT] Pagar una deuda específica desde la lista */
+  if (buttonId.startsWith("paydebt_")) {
+    const debtId = buttonId.slice("paydebt_".length);
+    try {
+      const rPd = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+      const rowsPd = (await rPd.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+      const dPd = (Array.isArray(rowsPd) && rowsPd.length) ? (rowsPd[0].data || {}) : {};
+      const res = pagarDeuda(dPd, debtId);
+      if (res.ok) {
+        const upPd = await rest("app_data?user_id=eq." + encodeURIComponent(userId), {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ data: dPd, updated_at: new Date().toISOString() }),
+        });
+        if (!upPd.ok) {
+          console.error("[GADU-WA-PAYDEBT] PATCH falló:", upPd.status);
+          fireAndForget(sendWhatsApp(from, "⚠️ No pude guardar el pago en la nube. Reintentá."));
+          return;
+        }
+        fireAndForget(sendWhatsApp(from, "✅ Cuota pagada: " + res.label + ". Se registró el gasto en tu caja general."));
+      } else {
+        fireAndForget(sendWhatsApp(from, "🤖 " + (res.error || "No pude pagar esa cuota.")));
+      }
+    } catch (e) {
+      console.error("[GADU-WA-PAYDEBT] error:", e);
+      fireAndForget(sendWhatsApp(from, "⚠️ No pude procesar el pago. Probá de nuevo."));
+    }
+    return;
+  }
+
+  /* [GADU-WA-ATT] Alta rápida de empleado desde el selector de asistencia */
+  if (buttonId === "att_new_emp") {
+    await upsertSession(from, userId, "WAITING_EMP_OFICIO", { resumeAttendance: true });
+    fireAndForget(sendWhatsApp(from, "👷 ¡Dale! ¿Cuál es el nombre del nuevo empleado? (ej. Juan Pérez)"));
+    return;
+  }
+
   /* [GADU-WA-SUPPORT] Si hay un ticket ABIERTO, ignorar cualquier botón salvo
      los de "hablar con humano" (que re-confirman el ticket). */
   if (buttonId !== "action_humano" && buttonId !== "fallback_humano") {
@@ -988,6 +1035,26 @@ async function handleButtonReply(from: string, buttonId: string) {
       fireAndForget(sendWhatsApp(from, "¿Cuál es el concepto de la deuda? (Ej: Heladera, Préstamo Banco). Escribí *cancelar* para abortar."));
       return;
     }
+    if (act === "pagar_deuda") {
+      try {
+        const rPag = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+        const rowsPag = (await rPag.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+        const dPag = (Array.isArray(rowsPag) && rowsPag.length) ? (rowsPag[0].data || {}) : {};
+        const activas = (dPag.debts || []).filter((d: any) => !d.finalizada).slice(0, 10);
+        if (!activas.length) {
+          fireAndForget(sendWhatsApp(from, "🤖 No tenés deudas activas en cuotas."));
+          return;
+        }
+        await sendWhatsAppList(from, "¿Qué deuda querés pagar?", activas.map((d: any) => ({
+          id: "paydebt_" + String(d.id),
+          title: String(d.concepto || "Deuda"),
+          description: "Cuota " + d.cuotaActual + "/" + d.cuotasTotales + " · " + (d.montoPorCuota ? "$" + Number(d.montoPorCuota).toLocaleString("es-AR") : ""),
+        })), { button: "Elegir deuda", sectionTitle: "Deudas activas" });
+      } catch (e) {
+        fireAndForget(sendWhatsApp(from, "⚠️ No pude cargar las deudas. Probá de nuevo."));
+      }
+      return;
+    }
     if (act === "contacto") {
       await upsertSession(from, userId, "WAITING_CONTACT_ROLE", {});
       await sendWhatsAppList(from, "¿Qué tipo de contacto querés registrar?", [
@@ -1010,7 +1077,9 @@ async function handleButtonReply(from: string, buttonId: string) {
           return;
         }
         await upsertSession(from, userId, "WAITING_ATTENDANCE_EMPLOYEE", {});
-        await sendWhatsAppList(from, "¿Qué empleado trabajó?", emps.map((e: any) => ({ id: "att_emp:" + String(e.id), title: String((e.firstName || "") + " " + (e.lastName || "")).trim() })), { button: "Elegir empleado", sectionTitle: "Empleados" });
+        const empRows = emps.map((e: any) => ({ id: "att_emp:" + String(e.id), title: String((e.firstName || "") + " " + (e.lastName || "")).trim() }));
+        empRows.push({ id: "att_new_emp", title: "➕ Agregar nuevo empleado", description: "Darlo de alta y seguir con la asistencia" });
+        await sendWhatsAppList(from, "¿Qué empleado trabajó?", empRows, { button: "Elegir empleado", sectionTitle: "Empleados" });
       } catch (e) {
         fireAndForget(sendWhatsApp(from, "⚠️ No pude cargar los empleados. Probá de nuevo."));
       }
@@ -2051,7 +2120,7 @@ async function processMessage(body: unknown) {
     if (enWizardEmpOficio) {
       const t = String(inc.text || "").trim();
       if (!t) { fireAndForget(sendWhatsApp(inc.from, "🤖 ¿Cuál es su oficio? (ej. Albañil, Pintor, Plomero)")); return json({ ok: true, from: inc.from, reply: "" }); }
-      await upsertSession(inc.from, row.user_id, "WAITING_EMP_TARIFA", { nombre: empOficioCtx.nombre, oficio: t });
+      await upsertSession(inc.from, row.user_id, "WAITING_EMP_TARIFA", { nombre: empOficioCtx.nombre, oficio: t, resumeAttendance: empOficioCtx.resumeAttendance });
       fireAndForget(sendWhatsApp(inc.from, "¿Cuánto cobra por hora? (ej. 1500)"));
       return json({ ok: true, from: inc.from, reply: "" });
     }
@@ -2067,7 +2136,7 @@ async function processMessage(body: unknown) {
       const t = String(inc.text || "").trim();
       const tarifa = Number(t.replace(/\./g, "").replace(",", "."));
       if (!tarifa || tarifa <= 0) { fireAndForget(sendWhatsApp(inc.from, "🤖 Eso no es un monto válido. ¿Cuánto cobra por hora?")); return json({ ok: true, from: inc.from, reply: "" }); }
-      await upsertSession(inc.from, row.user_id, "WAITING_EMP_TELEFONO", { nombre: empTarifaCtx.nombre, oficio: empTarifaCtx.oficio, tarifa });
+      await upsertSession(inc.from, row.user_id, "WAITING_EMP_TELEFONO", { nombre: empTarifaCtx.nombre, oficio: empTarifaCtx.oficio, tarifa, resumeAttendance: empTarifaCtx.resumeAttendance });
       fireAndForget(sendWhatsApp(inc.from, "¿Su teléfono / WhatsApp? (o escribí *omitir*)"));
       return json({ ok: true, from: inc.from, reply: "" });
     }
@@ -2083,18 +2152,38 @@ async function processMessage(body: unknown) {
       const t = String(inc.text || "").trim();
       const phone = /^omitir$/i.test(t) ? "" : t;
       const parsed = formatProperName(String(empTelCtx.nombre || ""));
+      const nuevoId = crypto.randomUUID();
       (data.employees || (data.employees = [])).push({
-        id: crypto.randomUUID(), firstName: parsed.firstName, lastName: parsed.lastName,
+        id: nuevoId, firstName: parsed.firstName, lastName: parsed.lastName,
         phone, role: String(empTelCtx.oficio || parsed.role || "empleado"),
         hourlyRate: Number(empTelCtx.tarifa) || 0, paymentData: "", active: true, source: "whatsapp",
       });
-      await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+      const upEmp = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
         method: "PATCH",
         headers: { Prefer: "return=minimal" },
         body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
       });
-      await deleteSession(normalizePhone(inc.from));
+      if (!upEmp.ok) {
+        console.error("[GADU-WA-EMP] PATCH falló:", upEmp.status);
+        fireAndForget(sendWhatsApp(inc.from, "⚠️ No pude guardar el empleado en la nube. Reintentá."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
       const nombreEmp = (parsed.firstName + " " + parsed.lastName).trim();
+
+      /* Alta rápida desde asistencia: retomar el registro de asistencia */
+      if (empTelCtx.resumeAttendance) {
+        const obras = (data.works || []).filter((w: any) => w.status === "activa").slice(0, 10);
+        if (!obras.length) {
+          await deleteSession(normalizePhone(inc.from));
+          fireAndForget(sendWhatsApp(inc.from, "✅ " + nombreEmp + " registrado, pero no tenés obras activas para cargarle asistencia."));
+          return json({ ok: true, from: inc.from, reply: "" });
+        }
+        await upsertSession(inc.from, row.user_id, "WAITING_ATTENDANCE_WORK", { employeeId: nuevoId, employeeName: nombreEmp });
+        await sendWhatsAppList(inc.from, "✅ " + nombreEmp + " registrado. ¿En qué obra trabajó?", obras.map((w: any) => ({ id: "att_work:" + String(w.id), title: String(w.nombre || w.name || "Obra") })), { button: "Elegir obra", sectionTitle: "Obras activas" });
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+
+      await deleteSession(normalizePhone(inc.from));
       fireAndForget(sendWhatsApp(inc.from, "✅ Empleado registrado: " + nombreEmp + " (" + String(empTelCtx.oficio || "empleado") + ")" + (Number(empTelCtx.tarifa) ? " · $" + Number(empTelCtx.tarifa) + "/h" : "")));
       return json({ ok: true, from: inc.from, reply: "empleado guardado" });
     }
