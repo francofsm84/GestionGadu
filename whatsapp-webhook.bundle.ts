@@ -249,7 +249,7 @@ export function localIntent(text: string): { modulo: string; campos?: Record<str
   if (/^(hola|holis|holi|buenas|buen\s*d[ii]a|buenos\s*d[ii]as|que\s*tal|c[oo]mo\s+(est[aa]s|est[aa]n|va)|hey|alo)\s*[.!?,]*$/.test(f)) {
     return {
       modulo: "saludo",
-      reply: "Hola! Hola Soy GADU, tu asistente de obra. Podes cargarme gastos o ingresos por aca, por ejemplo:\n- \"Gaste 15000 en cemento\"\n- \"Cobre 50000 por la obra\"\n\nEn que te ayudo?",
+      reply: "Hola! \uD83D\uDC4B Soy GADU, tu asistente de obra. Podes cargarme gastos o ingresos por aca, por ejemplo:\n- \"Gaste 15000 en cemento\"\n- \"Cobre 50000 por la obra\"\n\nEn que te ayudo?",
     };
   }
 
@@ -858,7 +858,7 @@ export function computeReporte(data: Record<string, any>, tipo: string, campos: 
     if (!w) return "No encontre la obra \"" + nombre + "\".";
     const ing = sum(incomes.filter(i => i.workId === w.id).map(i => i.amount));
     const cos = sum(expenses.filter(x => x.workId === w.id).map(x => x.amount));
-    return "$ *Balance: " + (w.name || w.nombre) + "*\n" +
+    return "\uD83D\uDCB0 *Balance: " + (w.name || w.nombre) + "*\n" +
       "- Cobros: " + fmt(ing) + "\n" +
       "- Gastos: -" + fmt(cos) + "\n" +
       "- Saldo: " + fmt(ing - cos);
@@ -872,7 +872,7 @@ export function computeReporte(data: Record<string, any>, tipo: string, campos: 
     const desde = periodStart(String(campos.periodo || ""));
     const dias = attendance.filter(a => a.employeeId === e.id && a.status === "presente" && (!desde || (a.date || "") >= desde)).length;
     const label = campos.periodo === "semana" ? "esta semana" : (campos.periodo === "mes" ? "este mes" : "en total");
-    return "[empleado] *" + nombreEmp(e) + "*\n- Dias trabajados " + label + ": " + dias;
+    return "\uD83D\uDC77 *" + nombreEmp(e) + "*\n- Dias trabajados " + label + ": " + dias;
   }
 
   if (tipo === "pagos_empleado") {
@@ -884,7 +884,7 @@ export function computeReporte(data: Record<string, any>, tipo: string, campos: 
     const pagos = expenses.filter(x => x.employeeId === e.id && esPago(x) && (!desde || (x.date || "") >= desde));
     const total = sum(pagos.map(x => x.amount));
     const label = campos.periodo === "semana" ? "esta semana" : (campos.periodo === "mes" ? "este mes" : "en total");
-    return "$ *Pagos a " + nombreEmp(e) + "* (" + label + ")\n" +
+    return "\uD83D\uDCB8 *Pagos a " + nombreEmp(e) + "* (" + label + ")\n" +
       "- Total: " + fmt(total) + "\n" +
       "- " + pagos.length + " pago(s)";
   }
@@ -899,7 +899,7 @@ export function computeReporte(data: Record<string, any>, tipo: string, campos: 
     const devengado = horas * (Number(e.hourlyRate) || 0);
     const pagado = sum(expenses.filter(x => x.employeeId === e.id && esPago(x)).map(x => x.amount));
     const deuda = Math.max(0, devengado - pagado);
-    return "[ticket] *Deuda a " + nombreEmp(e) + "*\n" +
+    return "\uD83E\uDDFE *Deuda a " + nombreEmp(e) + "*\n" +
       "- Dias trabajados: " + att.length + "\n" +
       "- Horas: " + horas + "\n" +
       "- Devengado: " + fmt(devengado) + "\n" +
@@ -910,7 +910,7 @@ export function computeReporte(data: Record<string, any>, tipo: string, campos: 
   return "No pude procesar el reporte.";
 }
 
-/* Deudas de TODOS los empleados: haberes (horas  tarifa)  pagos/adelantos.
+/* Deudas de TODOS los empleados: haberes (horas \u00D7 tarifa) \u2212 pagos/adelantos.
    Devuelve un resumen formateado para WhatsApp. */
 export function calcularDeudasEmpleados(data: Record<string, any>): string {
   const sum = (arr: any[]) => (arr || []).reduce((a, b) => a + (Number(b) || 0), 0);
@@ -930,13 +930,13 @@ export function calcularDeudasEmpleados(data: Record<string, any>): string {
     return { nombre: nombreEmp(e), dias: att.length, horas, devengado, pagado, deuda };
   }).filter(r => r.devengado > 0 || r.pagado > 0);
 
-  if (!filas.length) return "[ticket] *Deudas de Empleados*\nNo hay jornadas ni pagos registrados.";
+  if (!filas.length) return "\uD83E\uDDFE *Deudas de Empleados*\nNo hay jornadas ni pagos registrados.";
 
   const total = sum(filas.map(r => r.deuda));
   const body = filas.map(r =>
     "- " + r.nombre + ": " + r.dias + "d   devengado " + fmt(r.devengado) + "   pagado -" + fmt(r.pagado) + "   *deuda " + fmt(r.deuda) + "*"
   ).join("\n");
-  return "[ticket] *Deudas de Empleados*\n\n" + body + "\n\n*Total a pagar: " + fmt(total) + "*";
+  return "\uD83E\uDDFE *Deudas de Empleados*\n\n" + body + "\n\n*Total a pagar: " + fmt(total) + "*";
 }
 
 /* Cuotas pendientes de "Deudas y Cuotas" (data.debts): monto restante
@@ -945,7 +945,7 @@ export function calcularCuotas(data: Record<string, any>): string {
   const fmt = (n: number) => "$" + (Number(n) || 0).toLocaleString("es-AR");
   const debts = (data.debts || []) as any[];
   const activas = debts.filter(d => !d.finalizada);
-  if (!activas.length) return "$ *Cuotas pendientes*\nNo tenes deudas activas en cuotas.";
+  if (!activas.length) return "\uD83D\uDCB0 *Cuotas pendientes*\nNo tenes deudas activas en cuotas.";
 
   const lineas = activas.map(d => {
     const faltan = Math.max(0, (Number(d.cuotasTotales) || 0) - (Number(d.cuotaActual) || 0) + 1);
@@ -956,7 +956,7 @@ export function calcularCuotas(data: Record<string, any>): string {
     const faltan = Math.max(0, (Number(d.cuotasTotales) || 0) - (Number(d.cuotaActual) || 0) + 1);
     return s + faltan * (Number(d.montoPorCuota) || 0);
   }, 0);
-  return "$ *Cuotas pendientes*\n\n" + lineas.join("\n") + "\n\n*Total pendiente: " + fmt(total) + "*";
+  return "\uD83D\uDCB0 *Cuotas pendientes*\n\n" + lineas.join("\n") + "\n\n*Total pendiente: " + fmt(total) + "*";
 }
 
 /* Avanza una fecha ISO (YYYY-MM-DD) N meses, clampando el dia al fin de mes. */
@@ -1052,7 +1052,7 @@ async function getMediaUrl(mediaId: string): Promise<string> {
     const j = await res.json();
     const url = String((j as { url?: string }).url || "");
     if (!url) throw new Error("getMediaUrl sin url");
-    console.log("[GADU-WA-AUDIO] OK URL del media obtenida:", url.slice(0, 80) + "...");
+    console.log("[GADU-WA-AUDIO] \u2705 URL del media obtenida:", url.slice(0, 80) + "...");
     return url;
   } catch (e) {
     console.error("[GADU-WA-CRITICAL-FIX] getMediaUrl timeout/error:", e);
@@ -1083,7 +1083,7 @@ async function downloadMedia(url: string): Promise<{ buffer: ArrayBuffer; mimeTy
     const buffer = await res.arrayBuffer();
     const rawMime = res.headers.get("content-type") || "application/octet-stream";
     const mimeType = String(rawMime).split(";")[0].trim().toLowerCase();
-    console.log("[GADU-WA-MEDIA] OK media descargado:", buffer.byteLength, "bytes   mime:", mimeType, "(raw:", rawMime + ")");
+    console.log("[GADU-WA-MEDIA] \u2705 media descargado:", buffer.byteLength, "bytes   mime:", mimeType, "(raw:", rawMime + ")");
     return { buffer, mimeType };
   } catch (e) {
     console.error("[GADU-WA-CRITICAL-FIX] downloadMedia timeout/error:", e);
@@ -1130,7 +1130,7 @@ async function geminiTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<
     }
     const j = await res.json();
     const text = j?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    if (text) console.log("[GADU-WA-AUDIO] OK transcripcion Gemini:", text.slice(0, 80));
+    if (text) console.log("[GADU-WA-AUDIO] \u2705 transcripcion Gemini:", text.slice(0, 80));
     else console.warn("[GADU-WA-AUDIO] Gemini respondio 200 pero sin texto:", JSON.stringify(j).slice(0, 200));
     return String(text).trim();
   } catch (e) {
@@ -1172,7 +1172,7 @@ async function groqTranscribe(buffer: ArrayBuffer, mimeType: string): Promise<st
     }
     const j = await res.json();
     const text = String((j as { text?: string }).text || "").trim();
-    if (text) console.log("[GADU-WA-GROQ] OK transcripcion:", text.slice(0, 80));
+    if (text) console.log("[GADU-WA-GROQ] \u2705 transcripcion:", text.slice(0, 80));
     else console.warn("[GADU-WA-GROQ] 200 pero sin text:", JSON.stringify(j).slice(0, 200));
     return text;
   } catch (e) {
@@ -1281,7 +1281,7 @@ async function geminiAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption
     }
     const j = await res.json();
     const text = j?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    if (text) console.log("[GADU-WA-IMAGE] OK analisis Gemini:", text.slice(0, 80));
+    if (text) console.log("[GADU-WA-IMAGE] \u2705 analisis Gemini:", text.slice(0, 80));
     else console.warn("[GADU-WA-IMAGE] Gemini respondio 200 pero sin texto:", JSON.stringify(j).slice(0, 200));
     return String(text).trim();
   } catch (e) {
@@ -1343,7 +1343,7 @@ async function groqAnalyzeImage(buffer: ArrayBuffer, mimeType: string, caption: 
     }
     const j = await res.json();
     const text = String(j?.choices?.[0]?.message?.content || "").trim();
-    if (text) console.log("[GADU-WA-GROQ] OK vision:", text.slice(0, 80));
+    if (text) console.log("[GADU-WA-GROQ] \u2705 vision:", text.slice(0, 80));
     else console.warn("[GADU-WA-GROQ] 200 pero sin contenido:", JSON.stringify(j).slice(0, 200));
     return text;
   } catch (e) {
@@ -1860,9 +1860,9 @@ async function sendWhatsAppList(
    Evita el spam: UN solo mensaje interactivo por pantalla.
    ============================================================ */
 const MENU_CATEGORIES = [
-  { id: "menu_cargar", title: "$ Cargar Movimiento", description: "Gasto, inversion, adelanto, cobro" },
-  { id: "menu_metricas", title: "[metricas] Consultar y Reportes", description: "Saldos, balances y deudas" },
-  { id: "menu_gestionar", title: "[obra] Gestionar", description: "Obra, presupuesto, contacto" },
+  { id: "menu_cargar", title: "\uD83D\uDCB0 Cargar Movimiento", description: "Gasto, inversion, adelanto, cobro" },
+  { id: "menu_metricas", title: "\uD83D\uDCCA Consultar y Reportes", description: "Saldos, balances y deudas" },
+  { id: "menu_gestionar", title: "\uD83C\uDFD7\uFE0F Gestionar", description: "Obra, presupuesto, contacto" },
 ];
 
 const SUBMENUS: Record<string, Array<{ id: string; title: string; description?: string }>> = {
@@ -1874,13 +1874,13 @@ const SUBMENUS: Record<string, Array<{ id: string; title: string; description?: 
     { id: "action_nueva_deuda", title: "Registrar Deuda" },
     { id: "action_herramienta", title: "Registrar Herramienta" },
     { id: "action_ingreso", title: "Registrar Cobro" },
-    { id: "menu_root", title: " Volver al menu" },
+    { id: "menu_root", title: "\uD83C\uDFE0 Volver al menu" },
   ],
   menu_metricas: [
     { id: "action_balance_obra", title: "Consultar Saldo Obra" },
     { id: "metricas_deudas", title: "Deudas Empleados" },
     { id: "metricas_cuotas", title: "Cuotas" },
-    { id: "menu_root", title: " Volver al menu" },
+    { id: "menu_root", title: "\uD83C\uDFE0 Volver al menu" },
   ],
   menu_gestionar: [
     { id: "action_nueva_obra", title: "Nueva Obra" },
@@ -1888,7 +1888,7 @@ const SUBMENUS: Record<string, Array<{ id: string; title: string; description?: 
     { id: "action_contacto", title: "Nuevo Contacto" },
     { id: "action_asistencia", title: "Registrar Asistencia" },
     { id: "action_humano", title: "Hablar con humano" },
-    { id: "menu_root", title: " Volver al menu" },
+    { id: "menu_root", title: "\uD83C\uDFE0 Volver al menu" },
   ],
 };
 
@@ -1904,16 +1904,16 @@ async function showSubMenu(from: string, categoria: string): Promise<void> {
   const items = SUBMENUS[categoria] || [];
   if (!items.length) {
     console.warn("[GADU-WA-SUBMENU] submenu no encontrado:", categoria);
-    fireAndForget(sendWhatsApp(from, "[BOT] Error: Submenu no encontrado. Volviendo al inicio."));
-    await showMainMenu(from, "Hola! Hola Soy tu asistente GADU. Que queres hacer hoy?");
+    fireAndForget(sendWhatsApp(from, "\uD83E\uDD16 Error: Submenu no encontrado. Volviendo al inicio."));
+    await showMainMenu(from, "Hola! \uD83D\uDC4B Soy tu asistente GADU. Que queres hacer hoy?");
     return;
   }
   const titulos: Record<string, string> = {
-    menu_cargar: "$ Cargar Movimiento",
-    menu_metricas: "[metricas] Consultar y Reportes",
-    menu_gestionar: "[obra] Gestionar",
+    menu_cargar: "\uD83D\uDCB0 Cargar Movimiento",
+    menu_metricas: "\uD83D\uDCCA Consultar y Reportes",
+    menu_gestionar: "\uD83C\uDFD7\uFE0F Gestionar",
   };
-  await sendWhatsAppList(from, "Elegi una opcion [abajo]", items, { button: "Ver opciones", sectionTitle: titulos[categoria] || "Opciones" });
+  await sendWhatsAppList(from, "Elegi una opcion \uD83D\uDC47", items, { button: "Ver opciones", sectionTitle: titulos[categoria] || "Opciones" });
 }
 
 /* Busca el user_id por telefono (variantes con/sin 9, con/sin +) */
@@ -2014,7 +2014,7 @@ async function notifyAdminNewTicket(phone: string): Promise<void> {
       messaging_product: "whatsapp",
       to: ADMIN_WHATSAPP,
       type: "text",
-      text: { body: "[alerta] Nueva solicitud de soporte de " + phone + ". Revisa el panel para responder." },
+      text: { body: "\uD83D\uDD14 Nueva solicitud de soporte de " + phone + ". Revisa el panel para responder." },
     };
     const res = await fetchWithTimeout(`https://graph.facebook.com/${apiVersion}/${phoneId}/messages`, {
       method: "POST",
@@ -2049,7 +2049,7 @@ async function askForWork(phone: string, userId: string, data: Record<string, an
       title: String(w.nombre || w.name || "Obra"),
     }));
     works.push({ id: "assign_general", title: "Gasto General" });
-    works.push({ id: "menu_root", title: " Volver al menu", description: "Cancelar y volver al inicio" });
+    works.push({ id: "menu_root", title: "\uD83C\uDFE0 Volver al menu", description: "Cancelar y volver al inicio" });
     await upsertSession(phone, userId, "WAITING_WORK", {});
     await sendWhatsAppList(phone, "A que obra asignamos el gasto?", works);
     return;
@@ -2116,32 +2116,32 @@ function findWorkByName(data: Record<string, any>, target: string): Record<strin
 }
 function queryBalanceWork(data: Record<string, any>, target: string): string {
   const w = findWorkByName(data, target);
-  if (!w) return "[BOT] No encontre esa obra.";
+  if (!w) return "\uD83E\uDD16 No encontre esa obra.";
   const cobrado = (data.incomes || []).filter((i: any) => i.workId === w.id).reduce((s: number, i: any) => s + (Number(i.amount) || 0), 0);
   const gastos = (data.expenses || []).filter((e: any) => e.type === "obra" && e.workId === w.id).reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
-  return "[metricas] El saldo de la obra *" + (w.name || w.nombre || "sin nombre") + "* es de *" + money(cobrado - gastos) + "* (Cobrado: " + money(cobrado) + ", Gastos: " + money(gastos) + ")";
+  return "\uD83D\uDCCA El saldo de la obra *" + (w.name || w.nombre || "sin nombre") + "* es de *" + money(cobrado - gastos) + "* (Cobrado: " + money(cobrado) + ", Gastos: " + money(gastos) + ")";
 }
 function queryExpensesWeek(data: Record<string, any>): string {
   const cutoff = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
   const list = (data.expenses || []).filter((e: any) => String(e.date || "") >= cutoff);
-  if (!list.length) return "$ No tenes gastos en los ultimos 7 dias.";
+  if (!list.length) return "\uD83D\uDCB0 No tenes gastos en los ultimos 7 dias.";
   const total = list.reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
   const detalle = list.slice(0, 5).map((e: any) => "  " + (e.category || e.description || "gasto") + ": " + money(e.amount)).join("\n");
-  return "$ Gastaste *" + money(total) + "* en los ultimos 7 dias (" + list.length + " gastos):\n" + detalle;
+  return "\uD83D\uDCB0 Gastaste *" + money(total) + "* en los ultimos 7 dias (" + list.length + " gastos):\n" + detalle;
 }
 function queryAttendanceToday(data: Record<string, any>): string {
   const hoy = new Date().toISOString().slice(0, 10);
   const att = (data.attendance || []).filter((a: any) => String(a.date || "").slice(0, 10) === hoy && a.status !== "ausente");
-  if (!att.length) return "[empleado] Hoy no registraste jornadas.";
+  if (!att.length) return "\uD83D\uDC77 Hoy no registraste jornadas.";
   const names = att.map((a: any) => {
     const emp = (data.employees || []).find((e: any) => e.id === a.employeeId);
     return emp ? ((emp.firstName || "") + " " + (emp.lastName || "")).trim() : "empleado";
   });
-  return "[empleado] Hoy trabajaron: *" + names.join(", ") + "*";
+  return "\uD83D\uDC77 Hoy trabajaron: *" + names.join(", ") + "*";
 }
 function queryPendingSalaries(data: Record<string, any>, target: string): string {
   const emps = (data.employees || []) as Array<Record<string, any>>;
-  if (!emps.length) return "[BOT] No tenes empleados cargados.";
+  if (!emps.length) return "\uD83E\uDD16 No tenes empleados cargados.";
   const t = String(target || "").toLowerCase();
   const emp = (t && emps.find((e) => String((e.firstName || "") + " " + (e.lastName || "")).toLowerCase().includes(t))) || emps[0];
   const nombre = ((emp.firstName || "") + " " + (emp.lastName || "")).trim();
@@ -2157,7 +2157,7 @@ function queryPendingSalaries(data: Record<string, any>, target: string): string
   const adelantos = pays.filter((x: any) => x.expenseKind === "adelanto").reduce((s: number, x: any) => s + (Number(x.amount) || 0), 0);
 
   const deuda = generado - (pagado + adelantos);
-  return "$ *" + nombre + "*: Trabajo " + horas + " hs. Genero " + money(generado) + ". Pagado/Adelantado " + money(pagado + adelantos) + ". *Saldo pendiente: " + money(deuda) + "*";
+  return "\uD83D\uDCB8 *" + nombre + "*: Trabajo " + horas + " hs. Genero " + money(generado) + ". Pagado/Adelantado " + money(pagado + adelantos) + ". *Saldo pendiente: " + money(deuda) + "*";
 }
 
 /* ===== Presupuesto en PDF (pdf-lib) + envio de documentos ===== */
@@ -2386,7 +2386,7 @@ async function handleButtonReply(from: string, buttonId: string) {
   const userId = await findUserId(from);
   if (!userId) {
     console.warn("[GADU-WA-BUTTONS] usuario no encontrado para", from);
-    fireAndForget(sendWhatsApp(from, "[BOT] No pude identificar tu cuenta."));
+    fireAndForget(sendWhatsApp(from, "\uD83E\uDD16 No pude identificar tu cuenta."));
     return;
   }
 
@@ -2395,7 +2395,7 @@ async function handleButtonReply(from: string, buttonId: string) {
   if (buttonId === "menu_root") {
     /* Volver al menu limpia cualquier wizard en curso (evita quedarse colgado) */
     try { await deleteSession(normalizePhone(from)); } catch (e) {}
-    await showMainMenu(from, "Hola! Hola Soy tu asistente GADU. Que queres hacer hoy?");
+    await showMainMenu(from, "Hola! \uD83D\uDC4B Soy tu asistente GADU. Que queres hacer hoy?");
     return;
   }
   if (buttonId.startsWith("menu_")) {
@@ -2407,7 +2407,7 @@ async function handleButtonReply(from: string, buttonId: string) {
   /* [GADU-WA-CANCEL] Cancelar flujo: resetea sesion y vuelve al menu (siempre disponible) */
   if (buttonId === "action_cancel") {
     try { await deleteSession(normalizePhone(from)); } catch (e) {}
-    await showMainMenu(from, " Operacion cancelada. En que te ayudo?");
+    await showMainMenu(from, "\u270B Operacion cancelada. En que te ayudo?");
     return;
   }
 
@@ -2430,16 +2430,16 @@ async function handleButtonReply(from: string, buttonId: string) {
         });
         if (!upPn.ok) {
           console.error("[GADU-WA-PAYDEBT] PATCH fallo:", upPn.status);
-          fireAndForget(sendWhatsApp(from, "[ALERTA] No pude guardar el pago en la nube. Reintenta."));
+          fireAndForget(sendWhatsApp(from, "\u26A0\uFE0F No pude guardar el pago en la nube. Reintenta."));
           return;
         }
-        fireAndForget(sendWhatsApp(from, "OK Pago registrado: " + res.label + ". Se registro el gasto en tu caja general."));
+        fireAndForget(sendWhatsApp(from, "\u2705 Pago registrado: " + res.label + ". Se registro el gasto en tu caja general."));
       } else {
-        fireAndForget(sendWhatsApp(from, "[BOT] " + (res.error || "No pude pagar esa deuda.")));
+        fireAndForget(sendWhatsApp(from, "\uD83E\uDD16 " + (res.error || "No pude pagar esa deuda.")));
       }
     } catch (e) {
       console.error("[GADU-WA-PAYDEBT] error:", e);
-      fireAndForget(sendWhatsApp(from, "[ALERTA] No pude procesar el pago. Proba de nuevo."));
+      fireAndForget(sendWhatsApp(from, "\u26A0\uFE0F No pude procesar el pago. Proba de nuevo."));
     }
     return;
   }
@@ -2453,7 +2453,7 @@ async function handleButtonReply(from: string, buttonId: string) {
       const dPd = (Array.isArray(rowsPd) && rowsPd.length) ? (rowsPd[0].data || {}) : {};
       const d = (dPd.debts || []).find((x: any) => String(x.id) === debtId);
       if (!d || d.finalizada) {
-        fireAndForget(sendWhatsApp(from, "[BOT] No encontre esa deuda o ya esta finalizada."));
+        fireAndForget(sendWhatsApp(from, "\uD83E\uDD16 No encontre esa deuda o ya esta finalizada."));
         return;
       }
       const restantes = Math.max(0, (Number(d.cuotasTotales) || 0) - (Number(d.cuotaActual) || 0));
@@ -2464,11 +2464,11 @@ async function handleButtonReply(from: string, buttonId: string) {
       if (restantes >= 2) opts.push({ id: "paydebt_n_" + debtId + "_2", title: "2 cuotas", description: fmt(montoCuota * 2) });
       if (restantes >= 3) opts.push({ id: "paydebt_n_" + debtId + "_3", title: "3 cuotas", description: fmt(montoCuota * 3) });
       if (restantes > 3) opts.push({ id: "paydebt_n_" + debtId + "_all", title: "Todas (" + restantes + ")", description: fmt(montoCuota * restantes) });
-      opts.push({ id: "menu_root", title: " Volver al menu", description: "Cancelar y volver al inicio" });
+      opts.push({ id: "menu_root", title: "\uD83C\uDFE0 Volver al menu", description: "Cancelar y volver al inicio" });
       await sendWhatsAppList(from, "Cuantas cuotas de " + (d.concepto || "Deuda") + " queres pagar?", opts, { button: "Elegir cuotas", sectionTitle: "Cuotas a pagar" });
     } catch (e) {
       console.error("[GADU-WA-PAYDEBT] error:", e);
-      fireAndForget(sendWhatsApp(from, "[ALERTA] No pude cargar la deuda. Proba de nuevo."));
+      fireAndForget(sendWhatsApp(from, "\u26A0\uFE0F No pude cargar la deuda. Proba de nuevo."));
     }
     return;
   }
@@ -2476,7 +2476,7 @@ async function handleButtonReply(from: string, buttonId: string) {
   /* [GADU-WA-ATT] Alta rapida de empleado desde el selector de asistencia */
   if (buttonId === "att_new_emp") {
     await upsertSession(from, userId, "WAITING_EMP_OFICIO", { resumeAttendance: true });
-    fireAndForget(sendWhatsApp(from, "[empleado] Dale! Cual es el nombre del nuevo empleado? (ej. Juan Perez)"));
+    fireAndForget(sendWhatsApp(from, "\uD83D\uDC77 Dale! Cual es el nombre del nuevo empleado? (ej. Juan Perez)"));
     return;
   }
 
@@ -2496,10 +2496,10 @@ async function handleButtonReply(from: string, buttonId: string) {
     const tipo = buttonId.slice("advance_type:".length);
     if (tipo === "empleado") {
       await upsertSession(from, userId, "WAITING_ADVANCE", {});
-      fireAndForget(sendWhatsApp(from, "$ Decime *a que empleado* y *de cuanto* es el adelanto. Ej: \"Adelanto de Hugo de 12000\"."));
+      fireAndForget(sendWhatsApp(from, "\uD83D\uDCB8 Decime *a que empleado* y *de cuanto* es el adelanto. Ej: \"Adelanto de Hugo de 12000\"."));
     } else if (tipo === "cliente") {
       await upsertSession(from, userId, "WAITING_CLIENT_ADVANCE", {});
-      fireAndForget(sendWhatsApp(from, "$ Decime *de que cliente/obra* es el adelanto y *de cuanto*. Ej: \"Adelanto de 50000 de la obra Casa Perez\"."));
+      fireAndForget(sendWhatsApp(from, "\uD83D\uDCB0 Decime *de que cliente/obra* es el adelanto y *de cuanto*. Ej: \"Adelanto de 50000 de la obra Casa Perez\"."));
     }
     return;
   }
@@ -2515,16 +2515,16 @@ async function handleButtonReply(from: string, buttonId: string) {
       const empName = emp ? String((emp.firstName || "") + " " + (emp.lastName || "")).trim() : "el empleado";
       const obras = (dAtt.works || []).filter((w: any) => w.status === "activa").slice(0, 10);
       if (!obras.length) {
-        fireAndForget(sendWhatsApp(from, "[BOT] No tenes obras activas. Crea una con \"nueva obra [nombre]\"."));
+        fireAndForget(sendWhatsApp(from, "\uD83E\uDD16 No tenes obras activas. Crea una con \"nueva obra [nombre]\"."));
         await deleteSession(normalizePhone(from));
         return;
       }
       await upsertSession(from, userId, "WAITING_ATTENDANCE_WORK", { employeeId: empId, employeeName: empName });
       const obraRows = obras.map((w: any) => ({ id: "att_work:" + String(w.id), title: String(w.nombre || w.name || "Obra") }));
-      obraRows.push({ id: "menu_root", title: " Volver al menu", description: "Cancelar y volver al inicio" });
+      obraRows.push({ id: "menu_root", title: "\uD83C\uDFE0 Volver al menu", description: "Cancelar y volver al inicio" });
       await sendWhatsAppList(from, "En que obra trabajo " + empName + "?", obraRows, { button: "Elegir obra", sectionTitle: "Obras activas" });
     } catch (e) {
-      fireAndForget(sendWhatsApp(from, "[ALERTA] No pude cargar las obras. Proba de nuevo."));
+      fireAndForget(sendWhatsApp(from, "\u26A0\uFE0F No pude cargar las obras. Proba de nuevo."));
     }
     return;
   }
@@ -2544,7 +2544,7 @@ async function handleButtonReply(from: string, buttonId: string) {
       await upsertSession(from, userId, "WAITING_ATTENDANCE_HOURS", { employeeId: ctxAtt.employeeId, employeeName: empName, workId, workName });
       fireAndForget(sendWhatsApp(from, "Cuantas horas trabajo " + empName + " en " + workName + "? (Ej: 8)"));
     } catch (e) {
-      fireAndForget(sendWhatsApp(from, "[ALERTA] No pude continuar. Proba de nuevo."));
+      fireAndForget(sendWhatsApp(from, "\u26A0\uFE0F No pude continuar. Proba de nuevo."));
     }
     return;
   }
@@ -2560,7 +2560,7 @@ async function handleButtonReply(from: string, buttonId: string) {
       fireAndForget(sendWhatsApp(from, reply));
     } catch (e) {
       console.error("[GADU-WA-METRICAS] fallo:", e);
-      fireAndForget(sendWhatsApp(from, "[ALERTA] No pude calcular las deudas. Proba de nuevo."));
+      fireAndForget(sendWhatsApp(from, "\u26A0\uFE0F No pude calcular las deudas. Proba de nuevo."));
     }
     return;
   }
@@ -2576,7 +2576,7 @@ async function handleButtonReply(from: string, buttonId: string) {
       fireAndForget(sendWhatsApp(from, reply));
     } catch (e) {
       console.error("[GADU-WA-METRICAS] fallo:", e);
-      fireAndForget(sendWhatsApp(from, "[ALERTA] No pude calcular las cuotas. Proba de nuevo."));
+      fireAndForget(sendWhatsApp(from, "\u26A0\uFE0F No pude calcular las cuotas. Proba de nuevo."));
     }
     return;
   }
@@ -2643,7 +2643,7 @@ async function handleButtonReply(from: string, buttonId: string) {
         const dPag = (Array.isArray(rowsPag) && rowsPag.length) ? (rowsPag[0].data || {}) : {};
         const activas = (dPag.debts || []).filter((d: any) => !d.finalizada).slice(0, 10);
         if (!activas.length) {
-          fireAndForget(sendWhatsApp(from, "[BOT] No tenes deudas activas en cuotas."));
+          fireAndForget(sendWhatsApp(from, "\uD83E\uDD16 No tenes deudas activas en cuotas."));
           return;
         }
         const deudaRows = activas.map((d: any) => ({
@@ -2651,10 +2651,10 @@ async function handleButtonReply(from: string, buttonId: string) {
           title: String(d.concepto || "Deuda"),
           description: "Cuota " + d.cuotaActual + "/" + d.cuotasTotales + "   " + (d.montoPorCuota ? "$" + Number(d.montoPorCuota).toLocaleString("es-AR") : ""),
         }));
-        deudaRows.push({ id: "menu_root", title: " Volver al menu", description: "Cancelar y volver al inicio" });
+        deudaRows.push({ id: "menu_root", title: "\uD83C\uDFE0 Volver al menu", description: "Cancelar y volver al inicio" });
         await sendWhatsAppList(from, "Que deuda queres pagar?", deudaRows, { button: "Elegir deuda", sectionTitle: "Deudas activas" });
       } catch (e) {
-        fireAndForget(sendWhatsApp(from, "[ALERTA] No pude cargar las deudas. Proba de nuevo."));
+        fireAndForget(sendWhatsApp(from, "\u26A0\uFE0F No pude cargar las deudas. Proba de nuevo."));
       }
       return;
     }
@@ -2666,7 +2666,7 @@ async function handleButtonReply(from: string, buttonId: string) {
         { id: "contact_role:subcontratista", title: "Subcontratista" },
         { id: "contact_role:socio", title: "Socio" },
         { id: "contact_role:empleado", title: "Empleado" },
-        { id: "menu_root", title: " Volver al menu", description: "Cancelar y volver al inicio" },
+        { id: "menu_root", title: "\uD83C\uDFE0 Volver al menu", description: "Cancelar y volver al inicio" },
       ], { button: "Elegir tipo", sectionTitle: "Contacto" });
       return;
     }
@@ -2677,16 +2677,16 @@ async function handleButtonReply(from: string, buttonId: string) {
         const dAsis = (Array.isArray(rowsAsis) && rowsAsis.length) ? (rowsAsis[0].data || {}) : {};
         const emps = (dAsis.employees || []).filter((e: any) => e.active !== false).slice(0, 10);
         if (!emps.length) {
-          fireAndForget(sendWhatsApp(from, "[BOT] No tenes empleados activos. Carga uno con \"nuevo empleado [nombre]\"."));
+          fireAndForget(sendWhatsApp(from, "\uD83E\uDD16 No tenes empleados activos. Carga uno con \"nuevo empleado [nombre]\"."));
           return;
         }
         await upsertSession(from, userId, "WAITING_ATTENDANCE_EMPLOYEE", {});
         const empRows = emps.map((e: any) => ({ id: "att_emp:" + String(e.id), title: String((e.firstName || "") + " " + (e.lastName || "")).trim() }));
-        empRows.push({ id: "att_new_emp", title: "+ Agregar nuevo empleado", description: "Darlo de alta y seguir con la asistencia" });
-        empRows.push({ id: "menu_root", title: " Volver al menu", description: "Cancelar y volver al inicio" });
+        empRows.push({ id: "att_new_emp", title: "\u2795 Agregar nuevo empleado", description: "Darlo de alta y seguir con la asistencia" });
+        empRows.push({ id: "menu_root", title: "\uD83C\uDFE0 Volver al menu", description: "Cancelar y volver al inicio" });
         await sendWhatsAppList(from, "Que empleado trabajo?", empRows, { button: "Elegir empleado", sectionTitle: "Empleados" });
       } catch (e) {
-        fireAndForget(sendWhatsApp(from, "[ALERTA] No pude cargar los empleados. Proba de nuevo."));
+        fireAndForget(sendWhatsApp(from, "\u26A0\uFE0F No pude cargar los empleados. Proba de nuevo."));
       }
       return;
     }
@@ -2702,7 +2702,7 @@ async function handleButtonReply(from: string, buttonId: string) {
       await upsertSession(from, userId, "PAUSED", {});
       await setPaused(from, true);
       fireAndForget(notifyAdminNewTicket(from));   // avisar al admin por WhatsApp
-      fireAndForget(sendWhatsApp(from, "OK Tu pedido fue enviado. Un asesor de GADU te contactara por este medio a la brevedad."));
+      fireAndForget(sendWhatsApp(from, "\u2705 Tu pedido fue enviado. Un asesor de GADU te contactara por este medio a la brevedad."));
       return;
     }
     console.warn("[GADU-WA-MENU] accion desconocida:", act);
@@ -2725,13 +2725,13 @@ async function handleButtonReply(from: string, buttonId: string) {
 
   /* [GADU-WA-AI-UPGRADE] Botones del fallback inteligente (no necesitan gasto pendiente) */
   if (buttonId === "fallback_gasto") {
-    fireAndForget(sendWhatsApp(from, "$ Decime el gasto, por ejemplo: \"Gaste 15000 en cemento\" o \"5000 de nafta\"."));
+    fireAndForget(sendWhatsApp(from, "\uD83D\uDCB0 Decime el gasto, por ejemplo: \"Gaste 15000 en cemento\" o \"5000 de nafta\"."));
     await deleteSession(normalizePhone(from));
     return;
   }
   if (buttonId === "fallback_adelanto") {
     await upsertSession(from, userId, "WAITING_ADVANCE", {});
-    fireAndForget(sendWhatsApp(from, "$ Decime *a que empleado* y *de cuanto* es el adelanto. Ej: \"Adelanto de Hugo de 12000\"."));
+    fireAndForget(sendWhatsApp(from, "\uD83D\uDCB8 Decime *a que empleado* y *de cuanto* es el adelanto. Ej: \"Adelanto de Hugo de 12000\"."));
     return;
   }
   if (buttonId === "fallback_humano") {
@@ -2747,7 +2747,7 @@ async function handleButtonReply(from: string, buttonId: string) {
       console.error("[GADU-WA-SUPPORT] fallo insertar ticket:", e);
     }
     fireAndForget(notifyAdminNewTicket(from));   // avisar al admin por WhatsApp
-    fireAndForget(sendWhatsApp(from, "OK Tu pedido fue enviado. Un asesor de GADU te contactara por este medio a la brevedad."));
+    fireAndForget(sendWhatsApp(from, "\u2705 Tu pedido fue enviado. Un asesor de GADU te contactara por este medio a la brevedad."));
     await deleteSession(normalizePhone(from));
     return;
   }
@@ -2756,8 +2756,8 @@ async function handleButtonReply(from: string, buttonId: string) {
      Cualquier otro ID es desconocido -> avisar y volver al menu principal. */
   if (!buttonId.startsWith("assign_work:") && buttonId !== "assign_general") {
     console.warn("[GADU-WA-BUTTONS] boton no reconocido:", buttonId);
-    fireAndForget(sendWhatsApp(from, "[BOT] Opcion no reconocida, volviendo al menu."));
-    await showMainMenu(from, "Hola! Hola Soy tu asistente GADU. Que queres hacer hoy?");
+    fireAndForget(sendWhatsApp(from, "\uD83E\uDD16 Opcion no reconocida, volviendo al menu."));
+    await showMainMenu(from, "Hola! \uD83D\uDC4B Soy tu asistente GADU. Que queres hacer hoy?");
     return;
   }
 
@@ -2766,7 +2766,7 @@ async function handleButtonReply(from: string, buttonId: string) {
   const rowsData = (await rData.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
   if (!Array.isArray(rowsData) || !rowsData.length) {
     console.warn("[GADU-WA-BUTTONS] usuario sin app_data:", userId);
-    fireAndForget(sendWhatsApp(from, "[BOT] No encontre tus datos."));
+    fireAndForget(sendWhatsApp(from, "\uD83E\uDD16 No encontre tus datos."));
     return;
   }
   const data = rowsData[0].data || {};
@@ -2785,7 +2785,7 @@ async function handleButtonReply(from: string, buttonId: string) {
   }
   if (!target) {
     console.warn("[GADU-WA-BUTTONS] sin movimientos pendientes para", userId);
-    fireAndForget(sendWhatsApp(from, "[BOT] No encontre movimientos pendientes de asignar."));
+    fireAndForget(sendWhatsApp(from, "\uD83E\uDD16 No encontre movimientos pendientes de asignar."));
     return;
   }
   const monto = Number(target.amount) || 0;
@@ -2797,11 +2797,11 @@ async function handleButtonReply(from: string, buttonId: string) {
     const workName = String(work?.nombre || work?.name || "la obra");
     target.workId = workId;
     if (!esIngreso) target.type = "obra";
-    fireAndForget(sendWhatsApp(from, "OK Listo, " + (esIngreso ? "el ingreso" : "el gasto") + " de $" + monto + " fue asignado a la obra " + workName + "."));
+    fireAndForget(sendWhatsApp(from, "\u2705 Listo, " + (esIngreso ? "el ingreso" : "el gasto") + " de $" + monto + " fue asignado a la obra " + workName + "."));
   } else if (buttonId === "assign_general") {
     target.workId = null;
     if (!esIngreso) target.type = "general";
-    fireAndForget(sendWhatsApp(from, "OK Listo, " + (esIngreso ? "el ingreso" : "el gasto") + " de $" + monto + " quedo registrado como " + (esIngreso ? "ingreso sin obra" : "Gasto General") + "."));
+    fireAndForget(sendWhatsApp(from, "\u2705 Listo, " + (esIngreso ? "el ingreso" : "el gasto") + " de $" + monto + " quedo registrado como " + (esIngreso ? "ingreso sin obra" : "Gasto General") + "."));
   } else {
     console.warn("[GADU-WA-BUTTONS] boton desconocido:", buttonId);
     return;
@@ -2851,17 +2851,17 @@ async function processMessage(body: unknown) {
 
     if (resolved.audioFailed) {
       console.warn("[GADU-WA-AUDIO] transcripcion fallo para", resolved.from);
-      fireAndForget(sendWhatsApp(resolved.from, "[BOT] No pude escuchar bien el audio. Podes repetirlo o escribirmelo por texto?"));
+      fireAndForget(sendWhatsApp(resolved.from, "\uD83E\uDD16 No pude escuchar bien el audio. Podes repetirlo o escribirmelo por texto?"));
       return;
     }
     if (resolved.imageFailed) {
       console.warn("[GADU-WA-IMAGE] analisis de imagen fallo para", resolved.from);
-      fireAndForget(sendWhatsApp(resolved.from, "[BOT] No pude leer el ticket. Me escribis el gasto?"));
+      fireAndForget(sendWhatsApp(resolved.from, "\uD83E\uDD16 No pude leer el ticket. Me escribis el gasto?"));
       return;
     }
     if (resolved.imageNoMonto) {
       console.warn("[GADU-WA-IMAGE] no se pudo leer el monto del ticket para", resolved.from);
-      fireAndForget(sendWhatsApp(resolved.from, "[BOT] No pude leer el ticket. Me escribis el monto?"));
+      fireAndForget(sendWhatsApp(resolved.from, "\uD83E\uDD16 No pude leer el ticket. Me escribis el monto?"));
       return;
     }
     const inc = { from: resolved.from, text: resolved.text, mediaUrl: resolved.mediaUrl || "" };
@@ -2883,17 +2883,17 @@ async function processMessage(body: unknown) {
       const rows = await r.json().catch(() => []);
       if (!r.ok || !Array.isArray(rows) || !rows.length) {
         console.warn("[whatsapp-webhook] licencia no encontrada:", licenseCode);
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] El codigo " + licenseCode + " no existe. Verificalo o pedilo de nuevo."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 El codigo " + licenseCode + " no existe. Verificalo o pedilo de nuevo."));
         return json({ ok: false, error: "licencia no encontrada" });
       }
       const lic = rows[0];
       if (lic.is_used) {
         console.warn("[whatsapp-webhook] licencia ya usada:", licenseCode);
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] El codigo " + licenseCode + " ya fue utilizado."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 El codigo " + licenseCode + " ya fue utilizado."));
         return json({ ok: false, error: "licencia ya usada" });
       }
       console.log("[whatsapp-webhook] licencia valida:", licenseCode, "  plan:", lic.plan_id, " ", lic.duration_days, "dias");
-      const reply = "OK El codigo " + licenseCode + " es valido (plan " + String(lic.plan_id).toUpperCase() + " por " + lic.duration_days + " dias).\n" +
+      const reply = "\u2705 El codigo " + licenseCode + " es valido (plan " + String(lic.plan_id).toUpperCase() + " por " + lic.duration_days + " dias).\n" +
         "Para activarlo, abri la app: *Planes y Suscripcion -> Canjear codigo*.";
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
@@ -2911,14 +2911,14 @@ async function processMessage(body: unknown) {
       console.log("[whatsapp-webhook] consulta app_data (codigo):", code, "-> http", r.status, " ", (Array.isArray(rows) ? rows.length : 0), "coincidencia(s)", (Array.isArray(rows) && rows[0]) ? ("user_id=" + rows[0].user_id) : "");
       if (!r.ok || !Array.isArray(rows) || !rows.length) {
         console.warn("[whatsapp-webhook] codigo no encontrado/vencido:", code, "(http", r.status + ")");
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] El codigo no es valido o ya expiro. Volve a generarlo desde la app (Perfil -> Vincular WhatsApp -> Generar codigo) y envialo de nuevo."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 El codigo no es valido o ya expiro. Volve a generarlo desde la app (Perfil -> Vincular WhatsApp -> Generar codigo) y envialo de nuevo."));
         return json({ ok: false, error: "codigo no encontrado o expirado" });
       }
       const row = rows[0];
       const wp = row.data?.settings?.profile?.whatsapp || {};
       if (!phoneMatches(wp.phone, inc.from)) {
         console.warn("[whatsapp-webhook] telefono no coincide: from=" + inc.from + " perfil=" + String(wp.phone));
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] El codigo es valido pero este numero no coincide con el telefono registrado en tu perfil."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 El codigo es valido pero este numero no coincide con el telefono registrado en tu perfil."));
         return json({ ok: false, error: "telefono no coincide" });
       }
       row.data.settings.profile.whatsapp = {
@@ -2974,13 +2974,13 @@ async function processMessage(body: unknown) {
       /* Contexto: gasto pendiente de asignar a obra -> recordar en vez de mostrar el menu */
       if (activeState === "WAITING_GASTO_OBRA") {
         const monto = String(activeCtx.monto || activeCtx.amount || "");
-        fireAndForget(sendWhatsApp(inc.from, "Hola! Hola Antes de seguir, a que obra asignamos el gasto de $" + monto + " pendiente?"));
+        fireAndForget(sendWhatsApp(inc.from, "Hola! \uD83D\uDC4B Antes de seguir, a que obra asignamos el gasto de $" + monto + " pendiente?"));
         return json({ ok: true, from: inc.from });
       }
 
       if (!activeState) {
         try { await deleteSession(normalizePhone(inc.from)); } catch (e) { /* sin sesion: ok */ }
-        await showMainMenu(inc.from, "Hola! Hola Soy tu asistente GADU. Que queres hacer hoy?");
+        await showMainMenu(inc.from, "Hola! \uD83D\uDC4B Soy tu asistente GADU. Que queres hacer hoy?");
         return json({ ok: true, from: inc.from });
       }
       /* Hay wizard activo: NO hacemos return; el flujo continua y el wizard captura el texto. */
@@ -2992,7 +2992,7 @@ async function processMessage(body: unknown) {
     const userId2 = await findUserId(inc.from);
     if (!userId2) {
       console.warn("[whatsapp-webhook] numero no vinculado:", inc.from);
-      const rpl = "[BOT] No reconozco este numero. Primero vincula tu cuenta: desde la app genera tu codigo y envialo por WhatsApp.";
+      const rpl = "\uD83E\uDD16 No reconozco este numero. Primero vincula tu cuenta: desde la app genera tu codigo y envialo por WhatsApp.";
       fireAndForget(sendWhatsApp(inc.from, rpl));
       return json({ ok: false, error: "numero no vinculado", reply: rpl });
     }
@@ -3001,7 +3001,7 @@ async function processMessage(body: unknown) {
     const rowsData = await rData.json().catch(() => []);
     if (!Array.isArray(rowsData) || !rowsData.length) {
       console.warn("[whatsapp-webhook] usuario sin app_data:", userId2);
-      const rpl = "[BOT] Encontre tu cuenta pero aun no tiene datos. Abri la app una vez para sincronizar y volve a intentarlo.";
+      const rpl = "\uD83E\uDD16 Encontre tu cuenta pero aun no tiene datos. Abri la app una vez para sincronizar y volve a intentarlo.";
       fireAndForget(sendWhatsApp(inc.from, rpl));
       return json({ ok: false, error: "sin app_data", reply: rpl });
     }
@@ -3013,7 +3013,7 @@ async function processMessage(body: unknown) {
     try {
       const sessPause = await getSession(normalizePhone(inc.from));
       if (sessPause && sessPause.is_paused) {
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] Un asesor de GADU esta revisando tu caso, aguarda un momento."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Un asesor de GADU esta revisando tu caso, aguarda un momento."));
         return json({ ok: true, from: inc.from, reply: "pausado" });
       }
     } catch (e) { /* sin sesion: seguimos normal */ }
@@ -3022,12 +3022,12 @@ async function processMessage(body: unknown) {
     if (String(inc.text || "").trim().toUpperCase() === "RESTAURAR") {
       const trash = Array.isArray(data.trash) ? data.trash : [];
       if (!trash.length) {
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] No hay registros para restaurar en tu papelera."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 No hay registros para restaurar en tu papelera."));
         return json({ ok: true, from: inc.from });
       }
       const t = trash[0];   // el mas reciente (unshift)
       if (!t || !t.collection || !Array.isArray(data[t.collection])) {
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] No pude restaurar el registro."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 No pude restaurar el registro."));
         return json({ ok: true, from: inc.from });
       }
       data[t.collection].unshift(t.item);
@@ -3055,11 +3055,11 @@ async function processMessage(body: unknown) {
       });
       if (!up.ok) {
         console.error("[GADU-WA-RESTORE] fallo PATCH app_data:", up.status);
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] No pude restaurar el registro."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 No pude restaurar el registro."));
         return json({ ok: false, error: "patch " + up.status });
       }
       console.log("[GADU-WA-RESTORE] restaurado:", t.collection, t.id);
-      fireAndForget(sendWhatsApp(inc.from, "OK El registro " + tipo + (detalle ? "   " + detalle : "") + " ha sido recuperado con exito."));
+      fireAndForget(sendWhatsApp(inc.from, "\u2705 El registro " + tipo + (detalle ? "   " + detalle : "") + " ha sido recuperado con exito."));
       return json({ ok: true, from: inc.from });
     }
 
@@ -3070,7 +3070,7 @@ async function processMessage(body: unknown) {
         const sessCancel = await getSession(normalizePhone(inc.from));
         if (sessCancel && sessCancel.state) {
           await deleteSession(normalizePhone(inc.from));
-          await showMainMenu(inc.from, " Operacion cancelada. En que te ayudo?");
+          await showMainMenu(inc.from, "\u270B Operacion cancelada. En que te ayudo?");
           return json({ ok: true, from: inc.from, reply: "cancelado" });
         }
       } catch (e) { /* sin sesion: seguimos normal */ }
@@ -3104,12 +3104,12 @@ async function processMessage(body: unknown) {
             body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
           });
           await deleteSession(normalizePhone(inc.from));
-          const reply = "OK " + resG.label;
+          const reply = "\u2705 " + resG.label;
           fireAndForget(sendWhatsApp(inc.from, reply));
           return json({ ok: true, from: inc.from, reply });
         }
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] " + (resG.missing ? "Me falta " + resG.missing + "." : "No pude cargar el gasto.") + " Proba de nuevo: \"Gaste 5000 de nafta\"."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 " + (resG.missing ? "Me falta " + resG.missing + "." : "No pude cargar el gasto.") + " Proba de nuevo: \"Gaste 5000 de nafta\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       if (localGasto && localGasto.modulo && localGasto.modulo !== "gasto") {
@@ -3126,7 +3126,7 @@ async function processMessage(body: unknown) {
             return json({ ok: true, from: inc.from, reply: "" });
           }
         }
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] Decime el gasto, por ejemplo: \"Gaste 5000 de nafta\" o \"5000 de cemento\"."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Decime el gasto, por ejemplo: \"Gaste 5000 de nafta\" o \"5000 de cemento\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
     }
@@ -3140,7 +3140,7 @@ async function processMessage(body: unknown) {
     } catch (e) {}
     if (enWizardGastoCat) {
       const t = String(inc.text || "").trim();
-      if (!t) { fireAndForget(sendWhatsApp(inc.from, "[BOT] Que concepto o categoria?")); return json({ ok: true, from: inc.from, reply: "" }); }
+      if (!t) { fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Que concepto o categoria?")); return json({ ok: true, from: inc.from, reply: "" }); }
       await upsertSession(inc.from, row.user_id, "WAITING_GASTO_OBRA", { monto: gastoCatCtx.monto, categoria: t });
       fireAndForget(sendWhatsApp(inc.from, "A que obra corresponde? (escribi *general* si es un gasto general)"));
       return json({ ok: true, from: inc.from, reply: "" });
@@ -3165,10 +3165,10 @@ async function processMessage(body: unknown) {
           body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
         });
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "OK " + resG.label));
-        return json({ ok: true, from: inc.from, reply: "OK " + resG.label });
+        fireAndForget(sendWhatsApp(inc.from, "\u2705 " + resG.label));
+        return json({ ok: true, from: inc.from, reply: "\u2705 " + resG.label });
       }
-      fireAndForget(sendWhatsApp(inc.from, "[BOT] No pude guardar el gasto. Proba de nuevo."));
+      fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 No pude guardar el gasto. Proba de nuevo."));
       return json({ ok: true, from: inc.from, reply: "" });
     }
 
@@ -3189,11 +3189,11 @@ async function processMessage(body: unknown) {
             body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
           });
           await deleteSession(normalizePhone(inc.from));
-          fireAndForget(sendWhatsApp(inc.from, "OK " + res.label));
-          return json({ ok: true, from: inc.from, reply: "OK " + res.label });
+          fireAndForget(sendWhatsApp(inc.from, "\u2705 " + res.label));
+          return json({ ok: true, from: inc.from, reply: "\u2705 " + res.label });
         }
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] " + (res.missing ? "Me falta " + res.missing + "." : "No pude cargarlo.")));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 " + (res.missing ? "Me falta " + res.missing + "." : "No pude cargarlo.")));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       const mSuelto = String(inc.text || "").trim().match(/^\$?\s*([\d][\d.,]*)\s*$/);
@@ -3205,7 +3205,7 @@ async function processMessage(body: unknown) {
           return json({ ok: true, from: inc.from, reply: "" });
         }
       }
-      fireAndForget(sendWhatsApp(inc.from, "[BOT] De cuanto es el cobro? Ej: \"Cobre 50000 por la obra\"."));
+      fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 De cuanto es el cobro? Ej: \"Cobre 50000 por la obra\"."));
       return json({ ok: true, from: inc.from, reply: "" });
     }
 
@@ -3218,7 +3218,7 @@ async function processMessage(body: unknown) {
     } catch (e) {}
     if (enWizardIngConc) {
       const t = String(inc.text || "").trim();
-      if (!t) { fireAndForget(sendWhatsApp(inc.from, "[BOT] Que concepto? (Cobro, Adelanto, Certificacion)")); return json({ ok: true, from: inc.from, reply: "" }); }
+      if (!t) { fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Que concepto? (Cobro, Adelanto, Certificacion)")); return json({ ok: true, from: inc.from, reply: "" }); }
       await upsertSession(inc.from, row.user_id, "WAITING_INGRESO_OBRA", { monto: ingConcCtx.monto, concepto: t });
       fireAndForget(sendWhatsApp(inc.from, "A que obra corresponde?"));
       return json({ ok: true, from: inc.from, reply: "" });
@@ -3242,10 +3242,10 @@ async function processMessage(body: unknown) {
           body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
         });
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "OK " + res.label));
-        return json({ ok: true, from: inc.from, reply: "OK " + res.label });
+        fireAndForget(sendWhatsApp(inc.from, "\u2705 " + res.label));
+        return json({ ok: true, from: inc.from, reply: "\u2705 " + res.label });
       }
-      fireAndForget(sendWhatsApp(inc.from, res.missing ? "[BOT] Me falta " + res.missing + "." : "[BOT] No pude cargarlo."));
+      fireAndForget(sendWhatsApp(inc.from, res.missing ? "\uD83E\uDD16 Me falta " + res.missing + "." : "\uD83E\uDD16 No pude cargarlo."));
       return json({ ok: true, from: inc.from, reply: "" });
     }
 
@@ -3259,7 +3259,7 @@ async function processMessage(body: unknown) {
     if (enWizardInversion) {
       const txtInv = String(inc.text || "").trim();
       if (!txtInv) {
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] De cuanto fue la inversion? (ej. 50000)"));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 De cuanto fue la inversion? (ej. 50000)"));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       const localInv = localIntent(inc.text);
@@ -3272,11 +3272,11 @@ async function processMessage(body: unknown) {
             body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
           });
           await deleteSession(normalizePhone(inc.from));
-          fireAndForget(sendWhatsApp(inc.from, "OK " + resI.label));
-          return json({ ok: true, from: inc.from, reply: "OK " + resI.label });
+          fireAndForget(sendWhatsApp(inc.from, "\u2705 " + resI.label));
+          return json({ ok: true, from: inc.from, reply: "\u2705 " + resI.label });
         }
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] " + (resI.missing ? "Me falta " + resI.missing + "." : "No pude cargar la inversion.")));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 " + (resI.missing ? "Me falta " + resI.missing + "." : "No pude cargar la inversion.")));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       if (localInv && localInv.modulo && localInv.modulo !== "inversion") {
@@ -3293,7 +3293,7 @@ async function processMessage(body: unknown) {
             return json({ ok: true, from: inc.from, reply: "" });
           }
         }
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] De cuanto fue la inversion y en que? Ej: \"Inverti 50000 en herramientas\"."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 De cuanto fue la inversion y en que? Ej: \"Inverti 50000 en herramientas\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
     }
@@ -3307,7 +3307,7 @@ async function processMessage(body: unknown) {
     } catch (e) {}
     if (enWizardInvConcepto) {
       const t = String(inc.text || "").trim();
-      if (!t) { fireAndForget(sendWhatsApp(inc.from, "[BOT] En que invertiste?")); return json({ ok: true, from: inc.from, reply: "" }); }
+      if (!t) { fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 En que invertiste?")); return json({ ok: true, from: inc.from, reply: "" }); }
       const actionI = { modulo: "inversion", campos: { monto: invConcCtx.monto, categoria: t } };
       const resI = executeAction(data, actionI, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
       if (resI.ok) {
@@ -3317,10 +3317,10 @@ async function processMessage(body: unknown) {
           body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
         });
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "OK " + resI.label));
-        return json({ ok: true, from: inc.from, reply: "OK " + resI.label });
+        fireAndForget(sendWhatsApp(inc.from, "\u2705 " + resI.label));
+        return json({ ok: true, from: inc.from, reply: "\u2705 " + resI.label });
       }
-      fireAndForget(sendWhatsApp(inc.from, "[BOT] No pude cargar la inversion."));
+      fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 No pude cargar la inversion."));
       return json({ ok: true, from: inc.from, reply: "" });
     }
 
@@ -3334,7 +3334,7 @@ async function processMessage(body: unknown) {
     if (enWizardHerramienta) {
       const tHer = String(inc.text || "").trim();
       if (!tHer) {
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] Decime la herramienta y su costo, ej: \"Amoladora 50000\"."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Decime la herramienta y su costo, ej: \"Amoladora 50000\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       const mHer = tHer.match(/^(.+?)\s+([\d][\d.,]*)\s*$/);
@@ -3356,7 +3356,7 @@ async function processMessage(body: unknown) {
           body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
         });
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "OK Herramienta registrada: " + nombreRaw + " (" + categoria + ")   $" + costo.toLocaleString("es-AR")));
+        fireAndForget(sendWhatsApp(inc.from, "\u2705 Herramienta registrada: " + nombreRaw + " (" + categoria + ")   $" + costo.toLocaleString("es-AR")));
         return json({ ok: true, from: inc.from, reply: "herramienta guardada" });
       }
       /* Solo nombre -> pedir categoria (multi-paso) */
@@ -3374,7 +3374,7 @@ async function processMessage(body: unknown) {
     } catch (e) {}
     if (enWizardHerCat) {
       const t = String(inc.text || "").trim();
-      if (!t) { fireAndForget(sendWhatsApp(inc.from, "[BOT] Que tipo de herramienta es?")); return json({ ok: true, from: inc.from, reply: "" }); }
+      if (!t) { fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Que tipo de herramienta es?")); return json({ ok: true, from: inc.from, reply: "" }); }
       await upsertSession(inc.from, row.user_id, "WAITING_HERRAMIENTA_COSTO", { nombre: herCatCtx.nombre, categoria: t });
       fireAndForget(sendWhatsApp(inc.from, "Cuanto costo? (ej. 50000)"));
       return json({ ok: true, from: inc.from, reply: "" });
@@ -3390,7 +3390,7 @@ async function processMessage(body: unknown) {
     if (enWizardHerCosto) {
       const t = String(inc.text || "").trim();
       const costo = Number(t.replace(/\./g, "").replace(",", "."));
-      if (!costo || costo <= 0) { fireAndForget(sendWhatsApp(inc.from, "[BOT] Eso no es un monto valido. Cuanto costo?")); return json({ ok: true, from: inc.from, reply: "" }); }
+      if (!costo || costo <= 0) { fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Eso no es un monto valido. Cuanto costo?")); return json({ ok: true, from: inc.from, reply: "" }); }
       const nombreRaw = String(herCostoCtx.nombre || "");
       const categoria = String(herCostoCtx.categoria || "Herramienta manual");
       (data.assets || (data.assets = [])).unshift({
@@ -3404,7 +3404,7 @@ async function processMessage(body: unknown) {
         body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
       });
       await deleteSession(normalizePhone(inc.from));
-      fireAndForget(sendWhatsApp(inc.from, "OK Herramienta registrada: " + nombreRaw + " (" + categoria + ")   $" + costo.toLocaleString("es-AR")));
+      fireAndForget(sendWhatsApp(inc.from, "\u2705 Herramienta registrada: " + nombreRaw + " (" + categoria + ")   $" + costo.toLocaleString("es-AR")));
       return json({ ok: true, from: inc.from, reply: "herramienta guardada" });
     }
 
@@ -3418,7 +3418,7 @@ async function processMessage(body: unknown) {
     } catch (e) {}
     if (enWizardPresupuesto) {
       if (!inc.text || !inc.text.trim()) {
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] Contame que queres incluir en el presupuesto y para que cliente."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Contame que queres incluir en el presupuesto y para que cliente."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       await deleteSession(normalizePhone(inc.from));   // la IA procesa el texto libre a continuacion
@@ -3433,7 +3433,7 @@ async function processMessage(body: unknown) {
     } catch (e) {}
     if (enWizardConsulta) {
       if (!inc.text || !inc.text.trim()) {
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] Que queres consultar? Saldo de una obra, gastos de la semana, etc."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Que queres consultar? Saldo de una obra, gastos de la semana, etc."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       await deleteSession(normalizePhone(inc.from));   // la IA (QUERY_DATA) responde a continuacion
@@ -3449,12 +3449,12 @@ async function processMessage(body: unknown) {
       const t = String(inc.text || "").trim().toLowerCase();
       if (/empleado|trabajador|operario|personal|obrero/.test(t)) {
         await upsertSession(inc.from, row.user_id, "WAITING_ADVANCE", {});
-        fireAndForget(sendWhatsApp(inc.from, "$ Decime *a que empleado* y *de cuanto* es el adelanto. Ej: \"Adelanto de Hugo de 12000\"."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83D\uDCB8 Decime *a que empleado* y *de cuanto* es el adelanto. Ej: \"Adelanto de Hugo de 12000\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       if (/cliente|obra|sena|sena|anticipo|cobro/.test(t)) {
         await upsertSession(inc.from, row.user_id, "WAITING_CLIENT_ADVANCE", {});
-        fireAndForget(sendWhatsApp(inc.from, "$ Decime *de que cliente/obra* es el adelanto y *de cuanto*. Ej: \"Adelanto de 50000 de la obra Casa Perez\"."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83D\uDCB0 Decime *de que cliente/obra* es el adelanto y *de cuanto*. Ej: \"Adelanto de 50000 de la obra Casa Perez\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       await sendWhatsAppButtons(inc.from, "Elegi una opcion:", [
@@ -3481,14 +3481,14 @@ async function processMessage(body: unknown) {
             body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
           });
           await deleteSession(normalizePhone(inc.from));
-          fireAndForget(sendWhatsApp(inc.from, "OK " + res.label));
-          return json({ ok: true, from: inc.from, reply: "OK " + res.label });
+          fireAndForget(sendWhatsApp(inc.from, "\u2705 " + res.label));
+          return json({ ok: true, from: inc.from, reply: "\u2705 " + res.label });
         }
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, res.missing ? "[BOT] Me falta " + res.missing + "." : "[BOT] No pude cargarlo."));
+        fireAndForget(sendWhatsApp(inc.from, res.missing ? "\uD83E\uDD16 Me falta " + res.missing + "." : "\uD83E\uDD16 No pude cargarlo."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
-      fireAndForget(sendWhatsApp(inc.from, "$ Decime *de que cliente/obra* es el adelanto y *de cuanto*. Ej: \"Adelanto de 50000 de Casa Perez\"."));
+      fireAndForget(sendWhatsApp(inc.from, "\uD83D\uDCB0 Decime *de que cliente/obra* es el adelanto y *de cuanto*. Ej: \"Adelanto de 50000 de Casa Perez\"."));
       return json({ ok: true, from: inc.from, reply: "" });
     }
 
@@ -3509,11 +3509,11 @@ async function processMessage(body: unknown) {
             body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
           });
           await deleteSession(normalizePhone(inc.from));
-          fireAndForget(sendWhatsApp(inc.from, "OK " + res.label));
-          return json({ ok: true, from: inc.from, reply: "OK " + res.label });
+          fireAndForget(sendWhatsApp(inc.from, "\u2705 " + res.label));
+          return json({ ok: true, from: inc.from, reply: "\u2705 " + res.label });
         }
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, res.notFound || "[BOT] No pude cargarlo. Proba: \"Adelanto de Hugo de 12000\"."));
+        fireAndForget(sendWhatsApp(inc.from, res.notFound || "\uD83E\uDD16 No pude cargarlo. Proba: \"Adelanto de Hugo de 12000\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       /* Solo el nombre -> pedir monto (multi-paso) */
@@ -3522,7 +3522,7 @@ async function processMessage(body: unknown) {
         fireAndForget(sendWhatsApp(inc.from, "De cuanto es el adelanto? (ej. 12000)"));
         return json({ ok: true, from: inc.from, reply: "" });
       }
-      fireAndForget(sendWhatsApp(inc.from, "$ A que empleado y de cuanto es el adelanto? Ej: \"Hugo de 12000\"."));
+      fireAndForget(sendWhatsApp(inc.from, "\uD83D\uDCB8 A que empleado y de cuanto es el adelanto? Ej: \"Hugo de 12000\"."));
       return json({ ok: true, from: inc.from, reply: "" });
     }
 
@@ -3536,7 +3536,7 @@ async function processMessage(body: unknown) {
     if (enWizardAdvMonto) {
       const t = String(inc.text || "").trim();
       const monto = Number(t.replace(/\./g, "").replace(",", "."));
-      if (!monto || monto <= 0) { fireAndForget(sendWhatsApp(inc.from, "[BOT] Eso no es un monto valido. De cuanto es el adelanto?")); return json({ ok: true, from: inc.from, reply: "" }); }
+      if (!monto || monto <= 0) { fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Eso no es un monto valido. De cuanto es el adelanto?")); return json({ ok: true, from: inc.from, reply: "" }); }
       await upsertSession(inc.from, row.user_id, "WAITING_ADVANCE_OBRA", { empleado: advMontoCtx.empleado, monto });
       fireAndForget(sendWhatsApp(inc.from, "A que obra corresponde? (escribi *general* si no sabes)"));
       return json({ ok: true, from: inc.from, reply: "" });
@@ -3561,10 +3561,10 @@ async function processMessage(body: unknown) {
           body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
         });
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "OK " + res.label));
-        return json({ ok: true, from: inc.from, reply: "OK " + res.label });
+        fireAndForget(sendWhatsApp(inc.from, "\u2705 " + res.label));
+        return json({ ok: true, from: inc.from, reply: "\u2705 " + res.label });
       }
-      fireAndForget(sendWhatsApp(inc.from, res.notFound || "[BOT] No pude cargarlo."));
+      fireAndForget(sendWhatsApp(inc.from, res.notFound || "\uD83E\uDD16 No pude cargarlo."));
       return json({ ok: true, from: inc.from, reply: "" });
     }
 
@@ -3593,7 +3593,7 @@ async function processMessage(body: unknown) {
           fireAndForget(sendWhatsApp(inc.from, "Donde queda la obra? (ej. Alta Gracia   escribi *omitir* si no lo sabes)"));
           return json({ ok: true, from: inc.from, reply: "" });
         }
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] Como se llama la obra? Ej: \"Casa Perez en Alta Gracia\"."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Como se llama la obra? Ej: \"Casa Perez en Alta Gracia\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
     }
@@ -3625,7 +3625,7 @@ async function processMessage(body: unknown) {
       const omitir = /^omitir$/i.test(t);
       const presupuesto = omitir ? 0 : Number(t.replace(/\./g, "").replace(",", "."));
       if (!omitir && (!presupuesto || presupuesto <= 0)) {
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] Eso no es un monto valido. Cual es el presupuesto total? (o *omitir*)"));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Eso no es un monto valido. Cual es el presupuesto total? (o *omitir*)"));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       const res = executeAction(data, { modulo: "obra", campos: { nombre: String(obraPreCtx.nombre || ""), ubicacion: String(obraPreCtx.ubicacion || ""), presupuesto } }, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
@@ -3636,11 +3636,11 @@ async function processMessage(body: unknown) {
           body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
         });
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "OK " + res.label));
-        return json({ ok: true, from: inc.from, reply: "OK " + res.label });
+        fireAndForget(sendWhatsApp(inc.from, "\u2705 " + res.label));
+        return json({ ok: true, from: inc.from, reply: "\u2705 " + res.label });
       }
       await deleteSession(normalizePhone(inc.from));
-      fireAndForget(sendWhatsApp(inc.from, "[BOT] No pude crear la obra. Proba de nuevo."));
+      fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 No pude crear la obra. Proba de nuevo."));
       return json({ ok: true, from: inc.from, reply: "" });
     }
 
@@ -3659,11 +3659,11 @@ async function processMessage(body: unknown) {
       const t = inc.text.trim();
       if (/^cancelar$/i.test(t)) {
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "OK Carga cancelada. En que mas te ayudo?"));
+        fireAndForget(sendWhatsApp(inc.from, "\u2705 Carga cancelada. En que mas te ayudo?"));
         return json({ ok: true, from: inc.from, reply: "cancelado" });
       }
       if (!t) {
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] Cual es el nombre completo del contacto?"));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Cual es el nombre completo del contacto?"));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       await upsertSession(inc.from, row.user_id, "WAITING_CONTACT_PHONE", { contactType: contactNameCtx.contactType, name: t });
@@ -3685,7 +3685,7 @@ async function processMessage(body: unknown) {
       const t = inc.text.trim();
       if (/^cancelar$/i.test(t)) {
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "OK Carga cancelada. En que mas te ayudo?"));
+        fireAndForget(sendWhatsApp(inc.from, "\u2705 Carga cancelada. En que mas te ayudo?"));
         return json({ ok: true, from: inc.from, reply: "cancelado" });
       }
       const name = String(contactPhoneCtx.name || "").trim();
@@ -3711,7 +3711,7 @@ async function processMessage(body: unknown) {
       });
       await deleteSession(normalizePhone(inc.from));
       const label = contactType === "empleado" ? "Empleado" : (contactType === "socio" ? "Socio" : (contactType === "proveedor" ? "Proveedor" : (contactType === "subcontratista" ? "Subcontratista" : "Cliente")));
-      fireAndForget(sendWhatsApp(inc.from, "OK Contacto guardado correctamente: " + label + " '" + name + "'."));
+      fireAndForget(sendWhatsApp(inc.from, "\u2705 Contacto guardado correctamente: " + label + " '" + name + "'."));
       return json({ ok: true, from: inc.from, reply: "contacto guardado" });
     }
 
@@ -3724,7 +3724,7 @@ async function processMessage(body: unknown) {
     } catch (e) {}
     if (enWizardEmpOficio) {
       const t = String(inc.text || "").trim();
-      if (!t) { fireAndForget(sendWhatsApp(inc.from, "[BOT] Cual es su oficio? (ej. Albanil, Pintor, Plomero)")); return json({ ok: true, from: inc.from, reply: "" }); }
+      if (!t) { fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Cual es su oficio? (ej. Albanil, Pintor, Plomero)")); return json({ ok: true, from: inc.from, reply: "" }); }
       await upsertSession(inc.from, row.user_id, "WAITING_EMP_TARIFA", { nombre: empOficioCtx.nombre, oficio: t, resumeAttendance: empOficioCtx.resumeAttendance });
       fireAndForget(sendWhatsApp(inc.from, "Cuanto cobra por hora? (ej. 1500)"));
       return json({ ok: true, from: inc.from, reply: "" });
@@ -3740,7 +3740,7 @@ async function processMessage(body: unknown) {
     if (enWizardEmpTarifa) {
       const t = String(inc.text || "").trim();
       const tarifa = Number(t.replace(/\./g, "").replace(",", "."));
-      if (!tarifa || tarifa <= 0) { fireAndForget(sendWhatsApp(inc.from, "[BOT] Eso no es un monto valido. Cuanto cobra por hora?")); return json({ ok: true, from: inc.from, reply: "" }); }
+      if (!tarifa || tarifa <= 0) { fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Eso no es un monto valido. Cuanto cobra por hora?")); return json({ ok: true, from: inc.from, reply: "" }); }
       await upsertSession(inc.from, row.user_id, "WAITING_EMP_TELEFONO", { nombre: empTarifaCtx.nombre, oficio: empTarifaCtx.oficio, tarifa, resumeAttendance: empTarifaCtx.resumeAttendance });
       fireAndForget(sendWhatsApp(inc.from, "Su telefono / WhatsApp? (o escribi *omitir*)"));
       return json({ ok: true, from: inc.from, reply: "" });
@@ -3770,7 +3770,7 @@ async function processMessage(body: unknown) {
       });
       if (!upEmp.ok) {
         console.error("[GADU-WA-EMP] PATCH fallo:", upEmp.status);
-        fireAndForget(sendWhatsApp(inc.from, "[ALERTA] No pude guardar el empleado en la nube. Reintenta."));
+        fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar el empleado en la nube. Reintenta."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       const nombreEmp = (parsed.firstName + " " + parsed.lastName).trim();
@@ -3780,18 +3780,18 @@ async function processMessage(body: unknown) {
         const obras = (data.works || []).filter((w: any) => w.status === "activa").slice(0, 10);
         if (!obras.length) {
           await deleteSession(normalizePhone(inc.from));
-          fireAndForget(sendWhatsApp(inc.from, "OK " + nombreEmp + " registrado, pero no tenes obras activas para cargarle asistencia."));
+          fireAndForget(sendWhatsApp(inc.from, "\u2705 " + nombreEmp + " registrado, pero no tenes obras activas para cargarle asistencia."));
           return json({ ok: true, from: inc.from, reply: "" });
         }
         await upsertSession(inc.from, row.user_id, "WAITING_ATTENDANCE_WORK", { employeeId: nuevoId, employeeName: nombreEmp });
         const obraRowsResume = obras.map((w: any) => ({ id: "att_work:" + String(w.id), title: String(w.nombre || w.name || "Obra") }));
-        obraRowsResume.push({ id: "menu_root", title: " Volver al menu", description: "Cancelar y volver al inicio" });
-        await sendWhatsAppList(inc.from, "OK " + nombreEmp + " registrado. En que obra trabajo?", obraRowsResume, { button: "Elegir obra", sectionTitle: "Obras activas" });
+        obraRowsResume.push({ id: "menu_root", title: "\uD83C\uDFE0 Volver al menu", description: "Cancelar y volver al inicio" });
+        await sendWhatsAppList(inc.from, "\u2705 " + nombreEmp + " registrado. En que obra trabajo?", obraRowsResume, { button: "Elegir obra", sectionTitle: "Obras activas" });
         return json({ ok: true, from: inc.from, reply: "" });
       }
 
       await deleteSession(normalizePhone(inc.from));
-      fireAndForget(sendWhatsApp(inc.from, "OK Empleado registrado: " + nombreEmp + " (" + String(empTelCtx.oficio || "empleado") + ")" + (Number(empTelCtx.tarifa) ? "   $" + Number(empTelCtx.tarifa) + "/h" : "")));
+      fireAndForget(sendWhatsApp(inc.from, "\u2705 Empleado registrado: " + nombreEmp + " (" + String(empTelCtx.oficio || "empleado") + ")" + (Number(empTelCtx.tarifa) ? "   $" + Number(empTelCtx.tarifa) + "/h" : "")));
       return json({ ok: true, from: inc.from, reply: "empleado guardado" });
     }
 
@@ -3805,7 +3805,7 @@ async function processMessage(body: unknown) {
     if (enWizardAgendaFecha) {
       const t = String(inc.text || "").trim();
       const fecha = resolveFecha(t);
-      if (!fecha) { fireAndForget(sendWhatsApp(inc.from, "[BOT] No entendi esa fecha. Decime \"hoy\", \"manana\" o una fecha (ej. 15/04).")); return json({ ok: true, from: inc.from, reply: "" }); }
+      if (!fecha) { fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 No entendi esa fecha. Decime \"hoy\", \"manana\" o una fecha (ej. 15/04).")); return json({ ok: true, from: inc.from, reply: "" }); }
       await upsertSession(inc.from, row.user_id, "WAITING_AGENDA_OBRA", { titulo: agendaFechaCtx.titulo, fecha });
       fireAndForget(sendWhatsApp(inc.from, "A que obra o contacto se relaciona? (escribi *ninguna* si no aplica)"));
       return json({ ok: true, from: inc.from, reply: "" });
@@ -3833,7 +3833,7 @@ async function processMessage(body: unknown) {
         body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
       });
       await deleteSession(normalizePhone(inc.from));
-      fireAndForget(sendWhatsApp(inc.from, "OK Compromiso agendado: " + String(agendaObraCtx.titulo || "") + " (" + String(agendaObraCtx.fecha || "") + ")"));
+      fireAndForget(sendWhatsApp(inc.from, "\u2705 Compromiso agendado: " + String(agendaObraCtx.titulo || "") + " (" + String(agendaObraCtx.fecha || "") + ")"));
       return json({ ok: true, from: inc.from, reply: "compromiso guardado" });
     }
 
@@ -3845,7 +3845,7 @@ async function processMessage(body: unknown) {
     } catch (e) {}
     if (enWizardJornada) {
       const t = String(inc.text || "").trim();
-      if (!t) { fireAndForget(sendWhatsApp(inc.from, "[BOT] A que empleado le cargamos la jornada?")); return json({ ok: true, from: inc.from, reply: "" }); }
+      if (!t) { fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 A que empleado le cargamos la jornada?")); return json({ ok: true, from: inc.from, reply: "" }); }
       await upsertSession(inc.from, row.user_id, "WAITING_JORNADA_HORAS", { empleado: t });
       fireAndForget(sendWhatsApp(inc.from, "Cuantas horas trabajo? (ej. 8)"));
       return json({ ok: true, from: inc.from, reply: "" });
@@ -3861,7 +3861,7 @@ async function processMessage(body: unknown) {
     if (enWizardJorHoras) {
       const t = String(inc.text || "").trim();
       const horas = Number(t.replace(/[^\d.,]/g, "").replace(",", "."));
-      if (!horas || horas <= 0) { fireAndForget(sendWhatsApp(inc.from, "[BOT] Eso no es un numero de horas valido. Cuantas horas trabajo?")); return json({ ok: true, from: inc.from, reply: "" }); }
+      if (!horas || horas <= 0) { fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Eso no es un numero de horas valido. Cuantas horas trabajo?")); return json({ ok: true, from: inc.from, reply: "" }); }
       await upsertSession(inc.from, row.user_id, "WAITING_JORNADA_OBRA", { empleado: jorHorasCtx.empleado, horas });
       fireAndForget(sendWhatsApp(inc.from, "En que obra trabajo?"));
       return json({ ok: true, from: inc.from, reply: "" });
@@ -3879,7 +3879,7 @@ async function processMessage(body: unknown) {
       const emp = (data.employees || []).find((e: any) => flat(String((e.firstName || "") + " " + (e.lastName || "")).trim()).includes(flat(String(jorObraCtx.empleado || ""))));
       if (!emp) {
         await deleteSession(normalizePhone(inc.from));
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] No encontre a ese empleado. Primero cargalo con \"nuevo empleado [nombre]\"."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 No encontre a ese empleado. Primero cargalo con \"nuevo empleado [nombre]\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       const work = (data.works || []).find((w: any) => flat(String(w.nombre || w.name || "")).includes(flat(t)));
@@ -3894,7 +3894,7 @@ async function processMessage(body: unknown) {
       });
       await deleteSession(normalizePhone(inc.from));
       const empName = String((emp as any).firstName || "") + " " + String((emp as any).lastName || "");
-      fireAndForget(sendWhatsApp(inc.from, "OK Jornada registrada: " + empName.trim() + "   " + Number(jorObraCtx.horas) + "h" + (work ? " en " + String((work as any).nombre || (work as any).name || "") : "")));
+      fireAndForget(sendWhatsApp(inc.from, "\u2705 Jornada registrada: " + empName.trim() + "   " + Number(jorObraCtx.horas) + "h" + (work ? " en " + String((work as any).nombre || (work as any).name || "") : "")));
       return json({ ok: true, from: inc.from, reply: "jornada guardada" });
     }
 
@@ -3915,7 +3915,7 @@ async function processMessage(body: unknown) {
         const horas = num(t);   // parser robusto: enteros y decimales ("8", "8.5", "8,5")
         console.log("[GADU-WA-ATT] horas parseadas:", horas, "  texto:", JSON.stringify(t));
         if (!horas || horas <= 0 || !isFinite(horas)) {
-          fireAndForget(sendWhatsApp(inc.from, "[BOT] Eso no es un numero de horas valido. Cuantas horas trabajo? (ej. 8 o 6.5)"));
+          fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Eso no es un numero de horas valido. Cuantas horas trabajo? (ej. 8 o 6.5)"));
           return json({ ok: true, from: inc.from, reply: "" });
         }
         if (!data || !Array.isArray(data.attendance)) data.attendance = [];
@@ -3954,11 +3954,11 @@ async function processMessage(body: unknown) {
         await deleteSession(normalizePhone(inc.from));
         const empNameAtt = String(attHorasCtx.employeeName || "Empleado");
         const workNameAtt = String(attHorasCtx.workName || "");
-        fireAndForget(sendWhatsApp(inc.from, "OK Asistencia registrada: " + empNameAtt + " trabajo " + horas + " horas" + (workNameAtt ? " en " + workNameAtt : "")));
+        fireAndForget(sendWhatsApp(inc.from, "\u2705 Asistencia registrada: " + empNameAtt + " trabajo " + horas + " horas" + (workNameAtt ? " en " + workNameAtt : "")));
         return json({ ok: true, from: inc.from, reply: "asistencia guardada" });
       } catch (err) {
         console.error("[GADU-WA-ATT] ERROR en WAITING_ATTENDANCE_HOURS:", err);
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] No pude registrar la asistencia. Escribi *cancelar* y volve a intentar con \"registrar asistencia\"."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 No pude registrar la asistencia. Escribi *cancelar* y volve a intentar con \"registrar asistencia\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
     }
@@ -3971,7 +3971,7 @@ async function processMessage(body: unknown) {
     } catch (e) {}
     if (enWizardDebtConcept) {
       const t = String(inc.text || "").trim();
-      if (!t) { fireAndForget(sendWhatsApp(inc.from, "[BOT] Cual es el concepto de la deuda? (Ej: Heladera)")); return json({ ok: true, from: inc.from, reply: "" }); }
+      if (!t) { fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Cual es el concepto de la deuda? (Ej: Heladera)")); return json({ ok: true, from: inc.from, reply: "" }); }
       await upsertSession(inc.from, row.user_id, "WAITING_DEBT_TOTAL", { concepto: t });
       fireAndForget(sendWhatsApp(inc.from, "Cual es el monto total de la deuda? (Ej: 500000)"));
       return json({ ok: true, from: inc.from, reply: "" });
@@ -3986,7 +3986,7 @@ async function processMessage(body: unknown) {
     } catch (e) {}
     if (enWizardDebtTotal) {
       const monto = num(inc.text);
-      if (!(monto > 0)) { fireAndForget(sendWhatsApp(inc.from, "[BOT] Eso no es un monto valido. Cual es el monto total? (ej. 500000)")); return json({ ok: true, from: inc.from, reply: "" }); }
+      if (!(monto > 0)) { fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Eso no es un monto valido. Cual es el monto total? (ej. 500000)")); return json({ ok: true, from: inc.from, reply: "" }); }
       await upsertSession(inc.from, row.user_id, "WAITING_DEBT_INSTALLMENTS", { concepto: debtTotalCtx.concepto, montoTotal: monto });
       fireAndForget(sendWhatsApp(inc.from, "En cuantas cuotas se paga? (Ej: 12)"));
       return json({ ok: true, from: inc.from, reply: "" });
@@ -4001,7 +4001,7 @@ async function processMessage(body: unknown) {
     } catch (e) {}
     if (enWizardDebtInst) {
       const cuotas = parseInt(rawDigits(inc.text), 10);
-      if (!(cuotas > 0)) { fireAndForget(sendWhatsApp(inc.from, "[BOT] Ingresa una cantidad de cuotas valida (ej. 12).")); return json({ ok: true, from: inc.from, reply: "" }); }
+      if (!(cuotas > 0)) { fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Ingresa una cantidad de cuotas valida (ej. 12).")); return json({ ok: true, from: inc.from, reply: "" }); }
       const montoTotal = Number(debtInstCtx.montoTotal) || 0;
       const concepto = String(debtInstCtx.concepto || "Deuda");
       /* fechaVencimiento = hoy + 1 mes (clamp de dia a fin de mes) */
@@ -4024,7 +4024,7 @@ async function processMessage(body: unknown) {
         body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
       });
       await deleteSession(normalizePhone(inc.from));
-      fireAndForget(sendWhatsApp(inc.from, "OK Deuda registrada: " + concepto + " por $" + montoTotal.toLocaleString("es-AR") + " en " + cuotas + " cuotas. Podes verla y pagarla desde la seccion 'Deudas y Cuotas' de la app."));
+      fireAndForget(sendWhatsApp(inc.from, "\u2705 Deuda registrada: " + concepto + " por $" + montoTotal.toLocaleString("es-AR") + " en " + cuotas + " cuotas. Podes verla y pagarla desde la seccion 'Deudas y Cuotas' de la app."));
       return json({ ok: true, from: inc.from, reply: "deuda guardada" });
     }
 
@@ -4041,17 +4041,17 @@ async function processMessage(body: unknown) {
           "Gastos GADU",
         );
         if (!ok) {
-          fireAndForget(sendWhatsApp(inc.from, "[BOT] No pude generar el archivo. Proba de nuevo en unos minutos."));
+          fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 No pude generar el archivo. Proba de nuevo en unos minutos."));
         }
       } catch (e) {
         console.error("[GADU-WA-EXPORT] error generando excel:", e);
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] No pude generar el archivo. Proba de nuevo en unos minutos."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 No pude generar el archivo. Proba de nuevo en unos minutos."));
       }
       return json({ ok: true, from: inc.from, reply: "excel" });
     }
 
     if (advIntent && !advIntent.nombre && advIntent.monto <= 0) {
-      const reply = "$ Vamos a cargar el adelanto! Decime *a que empleado* y *de cuanto* es. Por ejemplo: \"Adelanto de Hugo de 12000\".";
+      const reply = "\uD83D\uDCB8 Vamos a cargar el adelanto! Decime *a que empleado* y *de cuanto* es. Por ejemplo: \"Adelanto de Hugo de 12000\".";
       await upsertSession(inc.from, row.user_id, "WAITING_ADVANCE", {});
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
@@ -4063,7 +4063,7 @@ async function processMessage(body: unknown) {
     if (queryIntent) {
       const qr = computeQuery(data, queryIntent);
       const link = queryLink(data, queryIntent);
-      const reply = link ? qr + "\n\n[metricas] Podes ver el reporte completo y detallado aca: " + link : qr;
+      const reply = link ? qr + "\n\n\uD83D\uDCCA Podes ver el reporte completo y detallado aca: " + link : qr;
       console.log("[GADU-WA-QUERY] consulta:", queryIntent.type, "  target:", queryIntent.target || "(-)");
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
@@ -4128,7 +4128,7 @@ async function processMessage(body: unknown) {
 
     /* Saludo -> respuesta directa (sin accion contable) */
     if (action && action.modulo === "saludo") {
-      const reply = ((action as unknown) as { reply?: string }).reply || "Hola! Hola Soy GADU. En que te ayudo?";
+      const reply = ((action as unknown) as { reply?: string }).reply || "Hola! \uD83D\uDC4B Soy GADU. En que te ayudo?";
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
     }
@@ -4143,7 +4143,7 @@ async function processMessage(body: unknown) {
       else if (qtype === "expenses_week") reply = queryExpensesWeek(data);
       else if (qtype === "attendance_today") reply = queryAttendanceToday(data);
       else if (qtype === "pending_salaries") reply = queryPendingSalaries(data, target);
-      else reply = "[BOT] No entendi la consulta. Proba preguntando 'Cual es el saldo de la obra X?'";
+      else reply = "\uD83E\uDD16 No entendi la consulta. Proba preguntando 'Cual es el saldo de la obra X?'";
       console.log("[GADU-WA-QUERY]", qtype || "(sin tipo)", "  target:", target);
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
@@ -4157,7 +4157,7 @@ async function processMessage(body: unknown) {
         ? c.items.map((it: any) => ({ descripcion: String(it.descripcion || ""), cantidad: Number(it.cantidad) || 0, precio: Number(it.precio) || 0 }))
         : [];
       if (!items.length) {
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] Me faltan los items del presupuesto. Decimelos de nuevo, por ejemplo: \"20 m2 de ceramica, 3 bolsas de pegamento\"."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Me faltan los items del presupuesto. Decimelos de nuevo, por ejemplo: \"20 m2 de ceramica, 3 bolsas de pegamento\"."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
       try {
@@ -4195,13 +4195,13 @@ async function processMessage(body: unknown) {
         const filename = "Presupuesto_" + String(cliente || "gadu").replace(/[^a-z0-9aeioun ]/gi, "").replace(/\s+/g, "_") + ".pdf";
         const ok = await sendWhatsAppDocument(inc.from, pdf, filename);
         const reply = ok
-          ? "OK Presupuesto para " + cliente + " guardado y adjuntado. Podes verlo en la seccion 'Presupuestos' de la app."
-          : "OK Presupuesto para " + cliente + " guardado. (No pude adjuntar el PDF, proba de nuevo.)";
+          ? "\u2705 Presupuesto para " + cliente + " guardado y adjuntado. Podes verlo en la seccion 'Presupuestos' de la app."
+          : "\u2705 Presupuesto para " + cliente + " guardado. (No pude adjuntar el PDF, proba de nuevo.)";
         fireAndForget(sendWhatsApp(inc.from, reply));
         return json({ ok: true, from: inc.from, reply });
       } catch (e) {
         console.error("[GADU-WA-DOC] error generando PDF:", e);
-        fireAndForget(sendWhatsApp(inc.from, "[ERROR] No pude generar el PDF. Proba de nuevo."));
+        fireAndForget(sendWhatsApp(inc.from, "\u274C No pude generar el PDF. Proba de nuevo."));
         return json({ ok: true, from: inc.from, reply: "" });
       }
     }
@@ -4247,7 +4247,7 @@ async function processMessage(body: unknown) {
       });
       if (!up.ok) console.error("[GADU-WA-ATT] fallo PATCH app_data:", up.status);
       const partes = registrados.map(r => r.nombre + " (" + r.horas + "hs" + (r.workLabel ? " en " + r.workLabel : " sin obra asignada") + ")");
-      let reply = "OK Asistencia registrada: " + (partes.join(", ") || "nadie") + ".";
+      let reply = "\u2705 Asistencia registrada: " + (partes.join(", ") || "nadie") + ".";
       if (noEncontrados.length) reply += " (No encontre a " + noEncontrados.join(", ") + " en tu lista de empleados).";
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
@@ -4307,9 +4307,9 @@ async function processMessage(body: unknown) {
           headers: { Prefer: "return=minimal" },
           body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
         });
-        fireAndForget(sendWhatsApp(inc.from, "OK Deuda registrada: " + concepto + " por $" + monto.toLocaleString("es-AR") + " en " + cuotas + " cuotas."));
+        fireAndForget(sendWhatsApp(inc.from, "\u2705 Deuda registrada: " + concepto + " por $" + monto.toLocaleString("es-AR") + " en " + cuotas + " cuotas."));
       } else {
-        fireAndForget(sendWhatsApp(inc.from, "[BOT] Me falta un dato de la deuda (concepto, monto o cuotas). Decimelo completo, ej: \"deuda de 500000 en 12 cuotas para la heladera\"."));
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Me falta un dato de la deuda (concepto, monto o cuotas). Decimelo completo, ej: \"deuda de 500000 en 12 cuotas para la heladera\"."));
       }
       return json({ ok: true, from: inc.from, reply: "" });
     }
@@ -4342,7 +4342,7 @@ async function processMessage(body: unknown) {
           console.error("[whatsapp-webhook] fallo impactar el movimiento:", up.status);
           return json({ ok: false, error: "no se pudo guardar el movimiento" });
         }
-        let reply = "OK " + res.label;
+        let reply = "\u2705 " + res.label;
         /* Deep link + notificacion push: enlazar al gasto recien creado */
         if (action.modulo === "gasto") {
           const gasto = (data.expenses && data.expenses[0]) || null;
@@ -4350,7 +4350,7 @@ async function processMessage(body: unknown) {
             const gastoId = String(gasto.id || "");
             const monto = Number(gasto.amount) || 0;
             const cat = String(gasto.category || "gasto");
-            if (gastoId) reply += "\n\n-> Ver en GADU: https://gestiongadu.vercel.app/#/gastos?id=" + gastoId;
+            if (gastoId) reply += "\n\n\uD83D\uDC49 Ver en GADU: https://gestiongadu.vercel.app/#/gastos?id=" + gastoId;
             firePush(row.user_id, "GADU   Gasto registrado", "Se guardo un gasto de $" + monto + " en " + cat + ". Toca para verlo.", "/#/gastos?id=" + gastoId);
           }
         }
@@ -4361,7 +4361,7 @@ async function processMessage(body: unknown) {
         }
         return json({ ok: true, from: inc.from, reply });
       }
-      const reply = res.notFound ? res.notFound : "[BOT] Me falta " + (res.missing || "un dato") + " para cargarlo. Decimelo por aca.";
+      const reply = res.notFound ? res.notFound : "\uD83E\uDD16 Me falta " + (res.missing || "un dato") + " para cargarlo. Decimelo por aca.";
       fireAndForget(sendWhatsApp(inc.from, reply));
       return json({ ok: true, from: inc.from, reply });
     }
@@ -4373,7 +4373,7 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
   } catch (error) {
     console.error("[GADU-WA-QUEUE-FIX] CRITICAL ERROR en processMessage:", error);
-    throw error;   //  propagar para que drainPhone lo marque como fallido y siga
+    throw error;   // \u2190 propagar para que drainPhone lo marque como fallido y siga
   }
 }
 
@@ -4405,7 +4405,7 @@ async function drainPhone(phone: string) {
       await markFailed(rest, item.id);
       /* Avisar al usuario y SEGUIR con el siguiente mensaje de la cola */
       try {
-        await sendWhatsApp(item.phone, "[BOT] Fallo el procesamiento, reintenta o escribelo por texto.");
+        await sendWhatsApp(item.phone, "\uD83E\uDD16 Fallo el procesamiento, reintenta o escribelo por texto.");
       } catch (e2) {
         console.error("[GADU-WA-CRITICAL-FIX] no se pudo notificar el fallo:", e2);
       }

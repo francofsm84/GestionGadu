@@ -25,27 +25,13 @@ const accents = {
 };
 for (const [k, v] of Object.entries(accents)) s = s.split(k).join(v);
 
-// 2) Emojis → texto plano
-const emojis = {
-  '🤖': '[BOT]', '✅': 'OK', '❌': '[ERROR]', '⚠️': '[ALERTA]', '⚠': '[ALERTA]', '❗': '!',
-  '👉': '->', '👇': '[abajo]', '👋': 'Hola', '💪': '[ok]',
-  '💰': '$', '💸': '$', '💵': '$', '💳': '[pago]',
-  '📄': '[doc]', '📎': '[adjunto]', '🧾': '[ticket]', '📌': '[pin]',
-  '🏗️': '[obra]', '🏗': '[obra]', '👤': '[contacto]', '👷': '[empleado]', '🛠️': '[herramienta]', '🛠': '[herramienta]',
-  '⏳': '[espera]', '⏰': '[hora]', '📅': '[fecha]', '🗓️': '[fecha]', '🗓': '[fecha]',
-  '🔍': '[buscar]', '📲': '[whatsapp]', '🔔': '[alerta]', '📱': '[telefono]',
-  '👑': '[admin]', '➕': '+', '🗑': '[borrar]', '✏️': '[editar]', '✏': '[editar]',
-  '📊': '[metricas]', '👥': '[usuarios]', '🔒': '[lock]', '💡': '[tip]', '⚙️': '[config]', '⚙': '[config]',
-  '🎉': '[ok]', '🔧': '[fix]', '🎯': '[objetivo]', '🔥': '[ok]', '🚀': '[ok]',
-  '👍': '[ok]', '⬇️': '[abajo]', '⬇': '[abajo]', '⬆️': '[arriba]', '⬆': '[arriba]',
-  '📈': '[sube]', '📉': '[baja]', '⛔': '[prohibido]', 'ℹ️': '[info]', 'ℹ': '[info]',
-  '✔': 'OK', '✖': '[ERROR]', '⭐': '[star]', '🔄': '[refresh]', '▶': '>', '◀': '<',
-  '☰': '[menu]', '☑': 'OK', '∞': 'infinito', '➜': '->',
-};
-for (const [k, v] of Object.entries(emojis)) s = s.split(k).join(v);
-
-// 3) Sweep final: cualquier no-ASCII restante → eliminar
-s = s.replace(/[^\x00-\x7F]/g, '');
+// 2) Emojis y cualquier no-ASCII restante → \uXXXX (surrogate pairs).
+//    Así los emojis (💰📊🏗️🏠…) se conservan en WhatsApp y el bundle
+//    sigue siendo ASCII-puro para el editor de Supabase (sin mojibake).
+s = s.replace(/[^\x00-\x7F]/g, ch => {
+  const code = ch.charCodeAt(0);
+  return '\\u' + code.toString(16).toUpperCase().padStart(4, '0');
+});
 
 fs.writeFileSync('whatsapp-webhook.bundle.ts', s, 'utf8');
 const nonAscii = (s.match(/[^\x00-\x7F]/g) || []).length;
