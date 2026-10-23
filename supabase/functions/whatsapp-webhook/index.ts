@@ -1418,12 +1418,11 @@ async function processMessage(body: unknown) {
         return json({ ok: true, from: inc.from });
       }
 
-      if (!activeState) {
-        try { await deleteSession(normalizePhone(inc.from)); } catch (e) { /* sin sesión: ok */ }
-        await showMainMenu(inc.from, "¡Hola! 👋 Soy tu asistente GADU. ¿Qué querés hacer hoy?");
-        return json({ ok: true, from: inc.from });
-      }
-      /* Hay wizard activo: NO hacemos return; el flujo continúa y el wizard captura el texto. */
+      /* Cualquier otro saludo PURO limpia el wizard activo (evita estados fantasma)
+         y muestra el menú principal. */
+      try { await deleteSession(normalizePhone(inc.from)); } catch (e) { /* sin sesión: ok */ }
+      await showMainMenu(inc.from, "¡Hola! 👋 Soy tu asistente GADU. ¿Qué querés hacer hoy?");
+      return json({ ok: true, from: inc.from });
     }
 
     /* 2) Usuario vinculado: busca por linkedPhone/phone (app_data) y por la
