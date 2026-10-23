@@ -3548,7 +3548,7 @@ async function processMessage(body: unknown) {
     } catch (e) {}
     if (enWizardAdvMonto) {
       const t = String(inc.text || "").trim();
-      const monto = Number(t.replace(/\./g, "").replace(",", "."));
+      const monto = num(t);   // parser robusto: enteros y decimales ("15000", "15000.50", "15.000")
       if (!monto || monto <= 0) { fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Eso no es un monto valido. De cuanto es el adelanto?")); return json({ ok: true, from: inc.from, reply: "" }); }
       await upsertSession(inc.from, row.user_id, "WAITING_ADVANCE_OBRA", { empleado: advMontoCtx.empleado, monto });
       fireAndForget(sendWhatsApp(inc.from, "A que obra corresponde? (escribi *general* si no sabes)"));
@@ -3752,7 +3752,7 @@ async function processMessage(body: unknown) {
     } catch (e) {}
     if (enWizardEmpTarifa) {
       const t = String(inc.text || "").trim();
-      const tarifa = Number(t.replace(/\./g, "").replace(",", "."));
+      const tarifa = num(t);   // enteros y decimales ("6000", "6000.50", "6.000")
       if (!tarifa || tarifa <= 0) { fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Eso no es un monto valido. Cuanto cobra por hora?")); return json({ ok: true, from: inc.from, reply: "" }); }
       await upsertSession(inc.from, row.user_id, "WAITING_EMP_TELEFONO", { nombre: empTarifaCtx.nombre, oficio: empTarifaCtx.oficio, tarifa, resumeAttendance: empTarifaCtx.resumeAttendance });
       fireAndForget(sendWhatsApp(inc.from, "Su telefono / WhatsApp? (o escribi *omitir*)"));
@@ -3873,7 +3873,7 @@ async function processMessage(body: unknown) {
     } catch (e) {}
     if (enWizardJorHoras) {
       const t = String(inc.text || "").trim();
-      const horas = Number(t.replace(/[^\d.,]/g, "").replace(",", "."));
+      const horas = num(t);   // enteros y decimales ("8", "8.5", "8,5")
       if (!horas || horas <= 0) { fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Eso no es un numero de horas valido. Cuantas horas trabajo?")); return json({ ok: true, from: inc.from, reply: "" }); }
       await upsertSession(inc.from, row.user_id, "WAITING_JORNADA_OBRA", { empleado: jorHorasCtx.empleado, horas });
       fireAndForget(sendWhatsApp(inc.from, "En que obra trabajo?"));
