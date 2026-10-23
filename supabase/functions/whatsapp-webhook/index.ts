@@ -276,7 +276,7 @@ async function sendWhatsAppList(
           rows: works.slice(0, 10).map(w => ({
             id: w.id,
             title: w.title.slice(0, 24),
-            description: w.description || "Seleccionar opción",
+            ...(w.description ? { description: w.description } : {}),
           })),
         }],
       },

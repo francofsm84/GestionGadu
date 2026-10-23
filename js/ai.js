@@ -104,7 +104,7 @@
       { key: 'lugar', ask: '¿Dónde es? (si no, decime "no sé")' },
     ],
     jornada: [
-      { key: 'empleado', ask: '¿A qué empleado le cargamos la jornada?', empsList: true },
+      { key: 'empleado', ask: '¿A qué empleado(s) le cargamos la jornada? (podés elegir varios)', empsList: true, multiEmps: true },
       { key: 'obra', ask: '¿En qué obra trabajó?', worksList: true },
       { key: 'horas', ask: '¿Cuántas horas trabajó?', buttons: ['4 hs', '8 hs'] },
     ],
@@ -536,6 +536,21 @@
         } catch (e2) {}
         return;
       }
+      /* Multi-selección de empleados: captura los checkboxes y avanza */
+      const mo = e.target && e.target.closest ? e.target.closest('[data-multi-ok]') : null;
+      if (mo) {
+        const wrap = mo.closest('.ai-multi');
+        const checked = wrap ? Array.from(wrap.querySelectorAll('.ai-check-input:checked')).map(cb => cb.value) : [];
+        if (!checked.length) {
+          try { if (G.ui && G.ui.toast) G.ui.toast('Elegí al menos un empleado', 'error'); } catch (e2) {}
+          return;
+        }
+        const valor = checked.join(', ');
+        appendLog(bubble(renderText(valor), 'user'));
+        scrollToEnd();
+        wizardAdvance(valor);
+        return;
+      }
       const b = e.target && e.target.closest ? e.target.closest('[data-wiz]') : null;
       if (!b) return;
       const v = b.dataset.wiz;
@@ -722,12 +737,20 @@
         return { ok: true, label: 'herramienta ' + name, coll: 'assets', id: creado.id };
       }
       if (mod === 'jornada') {
-        const empId = c.empleado ? findId(d.employees, c.empleado, x => ((x.firstName || '') + ' ' + (x.lastName || '')).trim()) : null;
         const workId = c.obra ? findId(d.works, c.obra, x => workLabel(x)) : null;
-        const horas = extractNumber(c.horas);   // acepta "8", "8 hs", "ocho horas y media" no, solo números
-        if (!empId || !workId || !(horas > 0)) return null;   // empleado, obra y horas obligatorios
-        const creado = S.add('attendance', { employeeId: empId, date: today, status: 'presente', hours: [{ workId, hours: horas }], notes: '' });
-        return { ok: true, label: 'jornada de ' + c.empleado + ' (' + horas + 'h en ' + c.obra + ')', coll: 'attendance', id: creado.id };
+        const horas = extractNumber(c.horas);   // acepta "8", "8 hs", "8.5"
+        /* Multi-selección: "Juan Pérez, Carlos Gómez" → una jornada por cada uno */
+        const nombres = String(c.empleado || '').split(',').map(s => s.trim()).filter(Boolean);
+        if (!nombres.length || !workId || !(horas > 0)) return null;   // empleado(s), obra y horas obligatorios
+        const ids = [];
+        for (const nm of nombres) {
+          const empId = findId(d.employees, nm, x => ((x.firstName || '') + ' ' + (x.lastName || '')).trim());
+          if (!empId) continue;   // nombre no resuelto: se saltea sin romper el loop
+          const creado = S.add('attendance', { employeeId: empId, date: today, status: 'presente', hours: [{ workId, hours: horas }], notes: '' });
+          ids.push(creado.id);
+        }
+        if (!ids.length) return null;
+        return { ok: true, label: 'jornada de ' + nombres.join(', ') + ' (' + horas + 'h en ' + c.obra + ')', coll: 'attendance', id: ids[0] };
       }
       if (mod === 'asignar') {
         /* Mover una herramienta a una obra / depósito o cambiar su estado.
@@ -2508,11 +2531,29 @@
     const pend = wizardBubble((hint ? hint + '<br>' : '') + '🤖 ' + s.ask);
     const wrap = document.createElement('div');
     wrap.className = 'ai-actions';
-    buttons.forEach(lb => {
-      const b = document.createElement('button');
-      b.className = 'btn btn-soft btn-sm'; b.textContent = lb;
-      b.dataset.wiz = lb; wrap.appendChild(b);
-    });
+    if (s.multiEmps) {
+      /* Multi-selección de empleados: checkboxes + botón Enviar */
+      wrap.className = 'ai-actions ai-multi';
+      buttons.forEach(lb => {
+        const lab = document.createElement('label');
+        lab.className = 'ai-check';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.value = lb; cb.className = 'ai-check-input';
+        lab.appendChild(cb);
+        lab.appendChild(document.createTextNode(' ' + lb));
+        wrap.appendChild(lab);
+      });
+      const send = document.createElement('button');
+      send.className = 'btn btn-primary btn-sm'; send.textContent = 'Enviar';
+      send.dataset.multiOk = '1';
+      wrap.appendChild(send);
+    } else {
+      buttons.forEach(lb => {
+        const b = document.createElement('button');
+        b.className = 'btn btn-soft btn-sm'; b.textContent = lb;
+        b.dataset.wiz = lb; wrap.appendChild(b);
+      });
+    }
     /* Selector de empleados: alta rápida sin reiniciar el flujo */
     if (s.empsList) {
       const nb = document.createElement('button');

@@ -937,6 +937,10 @@ body.no-session .app { display: none; }
 .ai-actions::-webkit-scrollbar { display: none; }
 /* Chips de opciones del chat: táctiles, sin doble-tap ni resaltado fantasma */
 .ai-actions .btn { flex: 0 0 auto; white-space: nowrap; touch-action: manipulation; -webkit-tap-highlight-color: transparent; min-height: 34px; max-height: 40px; }
+/* Multi-selección de empleados (checkboxes) en el chat */
+.ai-multi { flex-wrap: wrap; max-height: none; overflow-x: hidden; white-space: normal; }
+.ai-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 6px 10px; border: 1px solid var(--border, #e2e8f0); border-radius: 8px; cursor: pointer; background: var(--surface, #fff); }
+.ai-check-input { margin: 0; accent-color: var(--primary, #4f46e5); }
 /* Rejilla responsive de acciones rápidas del saludo (Asistente GADU) */
 .ai-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px; margin-top: 8px; }
 .ai-grid .btn { height: auto; min-height: 44px; white-space: normal; word-break: break-word; line-height: 1.2; text-align: center; padding: 9px 10px; }
