@@ -216,7 +216,7 @@ async function sendTypingOn(to: string): Promise<void> {
     const res = await fetch(`https://graph.facebook.com/${apiVersion}/${phoneId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ messaging_product: "whatsapp", to: toMetaPhone(to), sender_action: "typing_on" }),
+      body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", to: toMetaPhone(to), sender_action: "typing_on" }),
     });
     if (!res.ok) console.warn("[whatsapp-webhook] typing_on falló:", res.status);
   } catch (e) {
@@ -1250,11 +1250,11 @@ async function handleButtonReply(from: string, buttonId: string) {
           fireAndForget(sendWhatsApp(from, "🤖 No tenés empleados activos. Cargá uno con \"nuevo empleado [nombre]\"."));
           return;
         }
-        await upsertSession(from, userId, "WAITING_ATTENDANCE_EMPLOYEE", {});
-        const empRows = emps.map((e: any) => ({ id: "att_emp:" + String(e.id), title: String((e.firstName || "") + " " + (e.lastName || "")).trim() }));
-        empRows.push({ id: "att_new_emp", title: "➕ Agregar nuevo empleado", description: "Darlo de alta y seguir con la asistencia" });
-        empRows.push({ id: "menu_root", title: "🏠 Volver al menú", description: "Cancelar y volver al inicio" });
-        await sendWhatsAppList(from, "¿Qué empleado trabajó?", empRows, { button: "Elegir empleado", sectionTitle: "Empleados" });
+        /* Selección múltiple de cuadrilla por NÚMEROS (las listas de WhatsApp
+           solo permiten elegir uno, así que pedimos "1, 3" o "todos"). */
+        const lista = emps.map((e: any, i: number) => (i + 1) + ". " + String((e.firstName || "") + " " + (e.lastName || "")).trim()).join("\n");
+        await upsertSession(from, userId, "WAITING_ATTENDANCE_EMPLOYEES", { employeeIds: emps.map((e: any) => String(e.id)) });
+        fireAndForget(sendWhatsApp(from, "👷 Elegí la cuadrilla (quién trabajó):\n\n" + lista + "\n\nEscribí los números separados por coma (ej. *1, 3*) o *todos*."));
       } catch (e) {
         fireAndForget(sendWhatsApp(from, "⚠️ No pude cargar los empleados. Probá de nuevo."));
       }
@@ -2552,6 +2552,44 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply: "jornada guardada" });
     }
 
+    /* [GADU-WA-ATTENDANCE] Cuadrilla por números: "1, 3" o "todos" (WAITING_ATTENDANCE_EMPLOYEES) */
+    let enWizardAttEmps = false;
+    let attEmpsCtx: Record<string, unknown> = {};
+    try {
+      const sessAE = await getSession(normalizePhone(inc.from));
+      if (sessAE && sessAE.state === "WAITING_ATTENDANCE_EMPLOYEES") { enWizardAttEmps = true; attEmpsCtx = (sessAE.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardAttEmps) {
+      const t = String(inc.text || "").trim().toLowerCase();
+      const allIds: string[] = Array.isArray(attEmpsCtx.employeeIds) ? (attEmpsCtx.employeeIds as string[]) : [];
+      let selected: string[] = [];
+      if (t === "todos" || t === "todas" || t === "toda la cuadrilla") {
+        selected = allIds.slice();
+      } else {
+        const nums = t.split(/[,\s]+/).map(s => parseInt(s, 10)).filter(n => !isNaN(n) && n >= 1 && n <= allIds.length);
+        selected = nums.map(n => allIds[n - 1]).filter((id): id is string => Boolean(id));
+      }
+      if (!selected.length) {
+        fireAndForget(sendWhatsApp(inc.from, "🤖 No entendí. Escribí los números separados por coma (ej. *1, 3*) o *todos*."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      const rW = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(row.user_id) + "&limit=1");
+      const rowsW = (await rW.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+      const dW = (Array.isArray(rowsW) && rowsW.length) ? (rowsW[0].data || {}) : {};
+      const obras = (dW.works || []).filter((w: any) => w.status === "activa").slice(0, 10);
+      if (!obras.length) {
+        fireAndForget(sendWhatsApp(inc.from, "🤖 No tenés obras activas. Creá una con \"nueva obra [nombre]\"."));
+        try { await deleteSession(normalizePhone(inc.from)); } catch (e) {}
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      console.log("[GADU-WA-ATT] cuadrilla elegida:", selected.length, "empleados:", JSON.stringify(selected));
+      await upsertSession(inc.from, row.user_id, "WAITING_ATTENDANCE_WORK", { employeeIds: selected });
+      const obraRows = obras.map((w: any) => ({ id: "att_work:" + String(w.id), title: String(w.nombre || w.name || "Obra") }));
+      obraRows.push({ id: "menu_root", title: "🏠 Volver al menú", description: "Cancelar y volver al inicio" });
+      await sendWhatsAppList(inc.from, "¿En qué obra trabajó la cuadrilla (" + selected.length + " empleados)?", obraRows, { button: "Elegir obra", sectionTitle: "Obras activas" });
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
     /* [GADU-WA-ATTENDANCE] Asistencia paso intermedio: fecha (WAITING_ATTENDANCE_FECHA)
        Se activa si el usuario escribió la fecha en vez de tocar "Hoy"/"Ayer". */
     let enWizardAttFecha = false;
@@ -2624,6 +2662,7 @@ async function processMessage(body: unknown) {
             id: attId, employeeId: String(empId), date: fechaAtt,
             status: "presente", hours: [{ workId, hours }], notes: "",
           };
+          console.log("[GADU-WA-ATT] objeto a insertar:", JSON.stringify({ employeeId: String(empId), workId, hours, date: fechaAtt }));
           data.attendance.unshift(nuevoReg);
         }
         console.log("[GADU-WA-ATT] registros a insertar:", employeeIds.length);
@@ -2654,8 +2693,12 @@ async function processMessage(body: unknown) {
         fireAndForget(sendWhatsApp(inc.from, "✅ Asistencia registrada para " + employeeIds.length + " empleado(s) · " + horas + " horas" + (workNameAtt ? " en " + workNameAtt : "") + " · " + fechaAtt));
         return json({ ok: true, from: inc.from, reply: "asistencia guardada" });
       } catch (err) {
-        console.error("[GADU-WA-ATT] ERROR en WAITING_ATTENDANCE_HOURS:", err);
-        fireAndForget(sendWhatsApp(inc.from, "🤖 No pude registrar la asistencia. Escribí *cancelar* y volvé a intentar con \"registrar asistencia\"."));
+        const eMsg = (err && (err as any).message) ? String((err as any).message) : String(err);
+        const eDet = (err && (err as any).details) ? String((err as any).details) : "";
+        const eCode = (err && (err as any).code) ? String((err as any).code) : "";
+        console.error("[GADU-WA-ATT] ERROR en WAITING_ATTENDANCE_HOURS:", eMsg, "· code:", eCode, "· details:", eDet);
+        fireAndForget(sendWhatsApp(inc.from, "🤖 No pude registrar la asistencia (" + eMsg + "). Escribí *cancelar* y volvé a intentar con \"registrar asistencia\"."));
+        try { await deleteSession(normalizePhone(inc.from)); } catch (e) {}
         return json({ ok: true, from: inc.from, reply: "" });
       }
     }
