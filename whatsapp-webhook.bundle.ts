@@ -4220,9 +4220,9 @@ async function processMessage(body: unknown) {
           try { attId = crypto.randomUUID(); } catch (_e) { attId = "att-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10); }
           const nuevoReg = {
             id: attId, employeeId: String(empId), date: fechaAtt,
-            status: "presente", hours: [{ workId, hours }], notes: "",
+            status: "presente", hours: [{ workId, hours: horas }], notes: "",
           };
-          console.log("[GADU-WA-ATT] objeto a insertar:", JSON.stringify({ employeeId: String(empId), workId, hours, date: fechaAtt }));
+          console.log("[GADU-WA-ATT] objeto a insertar:", JSON.stringify({ employeeId: String(empId), workId, hours: horas, date: fechaAtt }));
           data.attendance.unshift(nuevoReg);
         }
         console.log("[GADU-WA-ATT] registros a insertar:", employeeIds.length);
@@ -4554,7 +4554,7 @@ async function processMessage(body: unknown) {
         }
         (data.attendance || (data.attendance = [])).push({
           id: crypto.randomUUID(), employeeId: String(emp.id || ""), date: fecha,
-          status: "presente", hours: [{ workId, hours }], notes: "",
+          status: "presente", hours: [{ workId, hours: horas }], notes: "",
         });
         registrados.push({ nombre: String((emp.firstName || "") + " " + (emp.lastName || "")).trim(), horas, workLabel });
       }
