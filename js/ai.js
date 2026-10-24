@@ -2379,6 +2379,22 @@
     scrollToEnd();
     return pend;
   }
+  /* Burbuja de error/validación con botón físico "❌ Cancelar" (sin escribir
+     la palabra "cancelar"): limpia el flujo activo y vuelve al menú. */
+  function errorBubble(html) {
+    const pend = bubble(html, 'bot');
+    const wrap = document.createElement('div');
+    wrap.className = 'ai-actions';
+    const cx = document.createElement('button');
+    cx.className = 'btn btn-soft btn-sm';
+    cx.textContent = '❌ Cancelar';
+    cx.dataset.wiz = '__cancel__';
+    wrap.appendChild(cx);
+    pend.appendChild(wrap);
+    appendLog(pend);
+    scrollToEnd();
+    return pend;
+  }
   /* Capa de rendimiento: el chat conserva como máximo MAX_LOG burbujas.
      Las más viejas se descartan para que el DOM nunca congele el celular. */
   const MAX_LOG = 60;
@@ -2671,23 +2687,23 @@
     /* Validación por tipo de campo (solo si no es "no sé") */
     if (!noSe) {
       if (s.key === 'nombre' && !isValidName(val)) {
-        wizardBubble('🤖 Eso parece un comando, no un nombre. Escribí el nombre y apellido de la persona (ej. "Juan Pérez").');
+        errorBubble('🤖 Eso parece un comando, no un nombre. Escribí el nombre y apellido de la persona (ej. "Juan Pérez").');
         return;
       }
       if ((s.key === 'monto' || s.key === 'tarifa' || s.key === 'costo' || s.key === 'presupuesto' || s.key === 'horas' || s.key === 'porcentaje') && !isValidNumber(val)) {
-        wizardBubble('🤖 Eso no es un número válido. ' + s.ask);
+        errorBubble('🤖 Eso no es un número válido. ' + s.ask);
         return;
       }
       if (s.key === 'telefono' && !isValidPhone(val)) {
-        wizardBubble('🤖 Ese teléfono no parece válido (mínimo 6 dígitos). ' + s.ask);
+        errorBubble('🤖 Ese teléfono no parece válido (mínimo 6 dígitos). ' + s.ask);
         return;
       }
       if (s.key === 'email' && !isValidEmail(val)) {
-        wizardBubble('🤖 Ese e-mail no parece válido (ej. nombre@dominio.com). ' + s.ask);
+        errorBubble('🤖 Ese e-mail no parece válido (ej. nombre@dominio.com). ' + s.ask);
         return;
       }
       if (s.key === 'fecha' && !normFecha(val)) {
-        wizardBubble('🤖 No entendí esa fecha. Decime "hoy", "mañana", "pasado mañana" o una fecha (ej. 15/04 o 2026-04-15).');
+        errorBubble('🤖 No entendí esa fecha. Decime "hoy", "mañana", "pasado mañana" o una fecha (ej. 15/04 o 2026-04-15).');
         return;
       }
     }
@@ -2721,11 +2737,11 @@
         wizardBubble(summaryCardHtml(res));
         if (G.ui && G.ui.toast) G.ui.toast('Guardado: ' + res.label, 'success');
       } else {
-        wizardBubble('⚠️ Guardé ' + res.label + ' en tu dispositivo, pero la nube falló: ' + esc(String(res.error || 'sin conexión')) + '. Se reintentará solo cuando vuelva la conexión.');
+        errorBubble('⚠️ Guardé ' + esc(res.label) + ' en tu dispositivo, pero la nube falló: ' + esc(String(res.error || 'sin conexión')) + '. Se reintentará solo cuando vuelva la conexión.');
       }
       rememberTurn('asistente', 'guardado ' + res.label);
     } else {
-      wizardBubble('No pude guardar el/la ' + op.modulo + ' porque me faltan datos. Decime qué falta y lo completo.');
+      errorBubble('No pude guardar el/la ' + esc(op.modulo) + ' porque me faltan datos. Decime qué falta y lo completo.');
       rememberTurn('asistente', 'faltan datos para ' + op.modulo);
     }
   }
