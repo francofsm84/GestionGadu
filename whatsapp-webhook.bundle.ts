@@ -2827,11 +2827,12 @@ async function handleButtonReply(from: string, buttonId: string) {
           fireAndForget(sendWhatsApp(from, "\uD83E\uDD16 No tenes empleados activos. Carga uno con \"nuevo empleado [nombre]\"."));
           return;
         }
-        /* Seleccion multiple de cuadrilla por NUMEROS (las listas de WhatsApp
-           solo permiten elegir uno, asi que pedimos "1, 3" o "todos"). */
+        /* Seleccion multiple por NUMEROS o por CUADRILLA prefijada */
         const lista = emps.map((e: any, i: number) => (i + 1) + ". " + String((e.firstName || "") + " " + (e.lastName || "")).trim()).join("\n");
+        const crews = (dAsis.crews || []).filter((c: any) => (c.employeeIds || []).length);
+        const crewLines = crews.length ? "\n\nCUADRILLAS:\n" + crews.map((c: any) => "  " + String(c.name || "Cuadrilla") + " (" + (c.employeeIds || []).length + ")").join("\n") : "";
         await upsertSession(from, userId, "WAITING_ATTENDANCE_EMPLOYEES", { employeeIds: emps.map((e: any) => String(e.id)) });
-        fireAndForget(sendWhatsApp(from, "\uD83D\uDC77 Elegi la cuadrilla (quien trabajo):\n\n" + lista + "\n\nEscribi los numeros separados por coma (ej. *1, 3*) o *todos*."));
+        fireAndForget(sendWhatsApp(from, "\uD83D\uDC77 Elegi quien trabajo:\n\n" + lista + crewLines + "\n\nEscribi los numeros (ej. *1, 3*), *todos*, o el nombre de una cuadrilla (ej. *cuadrilla albaniles*)."));
       } catch (e) {
         fireAndForget(sendWhatsApp(from, "\u26A0\uFE0F No pude cargar los empleados. Proba de nuevo."));
       }
@@ -4200,20 +4201,36 @@ async function processMessage(body: unknown) {
     if (enWizardAttEmps) {
       const t = String(inc.text || "").trim().toLowerCase();
       const allIds: string[] = Array.isArray(attEmpsCtx.employeeIds) ? (attEmpsCtx.employeeIds as string[]) : [];
-      let selected: string[] = [];
-      if (t === "todos" || t === "todas" || t === "toda la cuadrilla") {
-        selected = allIds.slice();
-      } else {
-        const nums = t.split(/[,\s]+/).map(s => parseInt(s, 10)).filter(n => !isNaN(n) && n >= 1 && n <= allIds.length);
-        selected = nums.map(n => allIds[n - 1]).filter((id): id is string => Boolean(id));
-      }
-      if (!selected.length) {
-        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 No entendi. Escribi los numeros separados por coma (ej. *1, 3*) o *todos*."));
-        return json({ ok: true, from: inc.from, reply: "" });
-      }
+      /* Cargar datos ANTES de parsear (para resolver cuadrillas por nombre) */
       const rW = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(row.user_id) + "&limit=1");
       const rowsW = (await rW.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
       const dW = (Array.isArray(rowsW) && rowsW.length) ? (rowsW[0].data || {}) : {};
+      let selected: string[] = [];
+      /* Cuadrilla prefijada por nombre: "cuadrilla albaniles" / "albaniles" */
+      const crewKey = t.replace(/^cuadrilla\s+de\s+/i, "").replace(/^cuadrilla\s+/i, "").replace(/^la\s+/i, "").trim();
+      if (crewKey) {
+        const crew = (dW.crews || []).find((c: any) => {
+          const cn = normStr(String(c.name || ""));
+          const ck = normStr(crewKey);
+          return cn.includes(ck) || ck.includes(cn);
+        });
+        if (crew && (crew.employeeIds || []).length) {
+          selected = (crew.employeeIds || []).map((id: any) => String(id)).filter((id: string) => allIds.indexOf(id) >= 0);
+          console.log("[GADU-WA-ATT] cuadrilla prefijada:", crew.name, "->", selected.length, "integrantes");
+        }
+      }
+      if (!selected.length) {
+        if (t === "todos" || t === "todas" || t === "toda la cuadrilla") {
+          selected = allIds.slice();
+        } else {
+          const nums = t.split(/[,\s]+/).map(s => parseInt(s, 10)).filter(n => !isNaN(n) && n >= 1 && n <= allIds.length);
+          selected = nums.map(n => allIds[n - 1]).filter((id): id is string => Boolean(id));
+        }
+      }
+      if (!selected.length) {
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 No entendi. Escribi los numeros (ej. *1, 3*), *todos*, o el nombre de una cuadrilla (ej. *cuadrilla albaniles*)."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
       const obras = (dW.works || []).filter((w: any) => w.status === "activa").slice(0, 10);
       if (!obras.length) {
         fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 No tenes obras activas. Crea una con \"nueva obra [nombre]\"."));
