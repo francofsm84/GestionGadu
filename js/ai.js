@@ -551,6 +551,15 @@
         wizardAdvance(valor);
         return;
       }
+      /* Cuadrilla prefijada: 1 clic carga todos sus integrantes */
+      const cr = e.target && e.target.closest ? e.target.closest('[data-crew]') : null;
+      if (cr) {
+        const valor = cr.dataset.crew || '';
+        appendLog(bubble(renderText(valor), 'user'));
+        scrollToEnd();
+        wizardAdvance(valor);
+        return;
+      }
       const b = e.target && e.target.closest ? e.target.closest('[data-wiz]') : null;
       if (!b) return;
       const v = b.dataset.wiz;
@@ -2482,6 +2491,7 @@
     /* Botones dinámicos con entidades REALES del store (obras / empleados) */
     let buttons = s.buttons || [];
     let hint = '';
+    let crewBtns = [];
     if (s.worksList) {
       /* El 100% de las obras activas con nombre válido, sugerida primero */
       const labels = workChipLabels();
@@ -2516,6 +2526,11 @@
       const frec = frequentEmployees(emps);
       const nombre = e => ((e.firstName || '') + ' ' + (e.lastName || '')).trim();
       buttons = frec.map(e => nombre(e));
+      /* Cuadrillas prefijadas: atajo de 1 clic para cargar toda la cuadrilla */
+      crewBtns = (((G.store && G.store.data) || {}).crews || []).map(c => {
+        const names = (c.employeeIds || []).map(id => { const e = emps.find(x => x.id === id); return e ? nombre(e) : ''; }).filter(Boolean);
+        return names.length ? { name: (c.name || 'Cuadrilla') + ' (' + names.length + ')', names } : null;
+      }).filter(Boolean);
       if (frec.length) hint = '💡 Frecuentes: ' + frec.slice(0, 4).map(e => '<b>' + esc(nombre(e)) + '</b>').join(' · ');
     } else if (s.catsList) {
       /* Categorías REALES del store (obra + generales) + Herramientas/Equipamiento */
@@ -2550,6 +2565,14 @@
     if (s.multiEmps) {
       /* Multi-selección de empleados: checkboxes + botón Enviar */
       wrap.className = 'ai-actions ai-multi';
+      /* Cuadrillas: botón de 1 clic para cargar toda la cuadrilla */
+      crewBtns.forEach(crew => {
+        const cbtn = document.createElement('button');
+        cbtn.className = 'btn btn-soft-info btn-sm';
+        cbtn.textContent = '👥 ' + crew.name;
+        cbtn.dataset.crew = crew.names.join(', ');
+        wrap.appendChild(cbtn);
+      });
       buttons.forEach(lb => {
         const lab = document.createElement('label');
         lab.className = 'ai-check';

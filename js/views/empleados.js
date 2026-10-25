@@ -59,6 +59,7 @@
       '<button class="tab ' + (state.page === 'fichas' ? 'active' : '') + '" data-page="fichas">👤 Fichas / Empleados</button>' +
       '<button class="tab ' + (state.page === 'jornadas' ? 'active' : '') + '" data-page="jornadas">📅 Control de Jornadas</button>' +
       '<button class="tab ' + (state.page === 'finanzas' ? 'active' : '') + '" data-page="finanzas">💰 Resumen Financiero</button>' +
+      '<button class="tab ' + (state.page === 'cuadrillas' ? 'active' : '') + '" data-page="cuadrillas">👥 Cuadrillas</button>' +
       '</div>' +
       '<div id="pageWrap">' + pageHTML() + '</div>';
 
@@ -75,6 +76,7 @@
   function pageHTML() {
     if (state.page === 'jornadas') return jornadasHTML();
     if (state.page === 'finanzas') return finanzasHTML();
+    if (state.page === 'cuadrillas') return cuadrillasHTML();
     return fichasHTML();
   }
 
@@ -82,7 +84,79 @@
     const wrap = view.querySelector('#pageWrap');
     if (state.page === 'jornadas') { bindJornadas(wrap); return; }
     if (state.page === 'finanzas') { bindFinanzas(wrap); return; }
+    if (state.page === 'cuadrillas') { bindCuadrillas(wrap); return; }
     bindFichas(view);
+  }
+
+  /* ---------- Pestaña: Cuadrillas (agrupación lógica de empleados) ---------- */
+  function crewMembers(crew) {
+    return (crew.employeeIds || []).map(id => S.employeeById(id)).filter(Boolean);
+  }
+  function cuadrillasHTML() {
+    const crews = S.data.crews || [];
+    const total = crews.reduce((s, c) => s + (c.employeeIds || []).length, 0);
+    return '<section class="kpi-grid kpi-3">' +
+      kpi('users', 'violet', 'Cuadrillas', String(crews.length), 'Agrupaciones lógicas de personal') +
+      kpi('user', 'info', 'Integrantes asignados', String(total), 'Empleados dentro de cuadrillas') +
+      kpi('zap', 'success', 'Carga rápida', '1 clic', 'Registrar toda la cuadrilla de una') +
+      '</section>' +
+      '<div class="toolbar">' +
+      '<span class="form-hint">Agrupá empleados para cargar jornadas masivas. No altera los legajos.</span>' +
+      '<div class="grow"></div>' +
+      '<button class="btn btn-primary" id="btnNewCrew">' + UI.icon('plus', 16) + 'Nueva cuadrilla</button>' +
+      '</div>' +
+      (crews.length
+        ? '<div class="cards-grid">' + crews.map(c => {
+            const members = crewMembers(c);
+            return '<div class="card">' +
+              '<div class="card-head"><strong>' + UI.escapeHtml(c.name || 'Cuadrilla') + '</strong><span class="badge badge-info">' + members.length + '</span></div>' +
+              '<div class="muted small" style="margin:6px 0">' + (members.length ? members.map(e => UI.escapeHtml(S.employeeName(e))).join(' · ') : 'Sin integrantes') + '</div>' +
+              '<div style="margin-top:auto;display:flex;gap:8px"><button class="btn btn-soft btn-sm" data-crew-edit="' + c.id + '">Editar</button><button class="btn btn-soft-danger btn-sm" data-crew-del="' + c.id + '">Eliminar</button></div>' +
+              '</div>';
+          }).join('') + '</div>'
+        : '<div class="card">' + UI.emptyState('users', 'Sin cuadrillas', 'Creá una para agilizar la carga diaria de jornadas.') + '</div>');
+  }
+  function bindCuadrillas(wrap) {
+    wrap.querySelector('#btnNewCrew').addEventListener('click', () => openCrewModal());
+    UI.on(wrap, '[data-crew-edit]', 'click', e => {
+      const crew = (S.data.crews || []).find(c => c.id === e.currentTarget.dataset.crewEdit);
+      if (crew) openCrewModal(crew);
+    });
+    UI.on(wrap, '[data-crew-del]', 'click', async e => {
+      const crew = (S.data.crews || []).find(c => c.id === e.currentTarget.dataset.crewDel);
+      if (!crew) return;
+      const ok = await UI.confirm({ title: 'Eliminar cuadrilla', message: '¿Eliminar <strong>' + UI.escapeHtml(crew.name || 'la cuadrilla') + '</strong>? No borra empleados ni jornadas.', okLabel: 'Eliminar' });
+      if (ok) { S.remove('crews', crew.id); UI.toast('Cuadrilla eliminada'); G.router.refresh(); }
+    });
+  }
+  function openCrewModal(crew) {
+    const isEdit = !!crew;
+    const emps = S.data.employees.filter(e => e.active !== false).sort((a, b) => S.employeeName(a).localeCompare(S.employeeName(b)));
+    const selected = crew ? (crew.employeeIds || []) : [];
+    const checks = emps.map(e =>
+      '<label class="ai-check"><input type="checkbox" class="ai-check-input" value="' + e.id + '"' + (selected.indexOf(e.id) >= 0 ? ' checked' : '') + '> ' + UI.escapeHtml(S.employeeName(e)) + '</label>'
+    ).join('');
+    const m = UI.openModal({
+      title: isEdit ? 'Editar cuadrilla' : 'Nueva cuadrilla',
+      subtitle: 'Elegí el nombre y los integrantes (no altera los legajos).',
+      body:
+        '<div class="grid-form">' +
+        '<div class="field span-2"><label>Nombre *</label><input class="input" id="fCrewName" value="' + UI.escapeHtml(crew ? crew.name : '') + '" placeholder="Ej.: Cuadrilla 1 / Albañiles principales"></div>' +
+        '<div class="field span-2"><label>Integrantes</label><div id="crewChecks" class="ai-multi" style="max-height:240px;overflow:auto">' + (checks || '<span class="muted">No hay empleados activos</span>') + '</div></div>' +
+        '</div>',
+      footer: '<button class="btn btn-ghost" data-cancel>Cancelar</button><button class="btn btn-primary" data-save>' + (isEdit ? 'Guardar' : 'Crear cuadrilla') + '</button>',
+    });
+    m.panel.querySelector('[data-save]').addEventListener('click', () => {
+      const name = m.panel.querySelector('#fCrewName').value.trim();
+      if (!name) { UI.toast('Poné un nombre a la cuadrilla', 'error'); return; }
+      const ids = Array.from(m.panel.querySelectorAll('.ai-check-input:checked')).map(cb => cb.value);
+      if (!ids.length) { UI.toast('Elegí al menos un integrante', 'error'); return; }
+      if (isEdit) { S.update('crews', crew.id, { name, employeeIds: ids }); UI.toast('Cuadrilla actualizada'); }
+      else { S.add('crews', { name, employeeIds: ids }); UI.toast('Cuadrilla creada'); }
+      m.close();
+      G.router.refresh();
+    });
+    m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
   }
 
   function fichasHTML() {

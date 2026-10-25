@@ -396,7 +396,7 @@
       settings: currentSettings(),
       contacts: [], works: [], budgets: [], incomes: [], expenses: [],
       employees: [], attendance: [], assets: [], distributions: [], compromisos: [], seguros: [],
-      debts: [],
+      debts: [], crews: [],
       trash: [],
     };
   }
@@ -407,7 +407,7 @@
        mantiene SIEMPRE como respaldo ante cortes de conexión. */
     if (!data.settings.cloud) data.settings.cloud = {};
     if (data.settings.cloud.autoPush === undefined) data.settings.cloud.autoPush = true;
-    ['contacts', 'works', 'budgets', 'incomes', 'expenses', 'assets', 'distributions', 'employees', 'attendance', 'seguros', 'compromisos', 'debts', 'trash'].forEach(k => {
+    ['contacts', 'works', 'budgets', 'incomes', 'expenses', 'assets', 'distributions', 'employees', 'attendance', 'seguros', 'compromisos', 'debts', 'crews', 'trash'].forEach(k => {
       if (!Array.isArray(data[k])) data[k] = [];
     });
     /* Migración limpia: compromisos de la agenda (visitas/entregas/eventos) */
@@ -722,7 +722,7 @@
       expenses: 'Gasto', incomes: 'Ingreso', works: 'Obra', employees: 'Empleado',
       contacts: 'Contacto', budgets: 'Presupuesto', attendance: 'Jornada',
       assets: 'Herramienta', seguros: 'Seguro', compromisos: 'Compromiso', distributions: 'Reparto',
-      debts: 'Deuda',
+      debts: 'Deuda', crews: 'Cuadrilla',
     };
     const tipo = tipos[coll] || String(coll);
     let detalle = '';
@@ -737,6 +737,7 @@
     else if (coll === 'seguros') detalle = item.tipo || item.compania || '';
     else if (coll === 'compromisos') detalle = item.titulo || item.tipo || '';
     else if (coll === 'debts') detalle = (item.concepto || '') + ' · Cuota ' + (item.cuotaActual || 0) + '/' + (item.cuotasTotales || 0);
+    else if (coll === 'crews') detalle = (item.name || '') + ' · ' + ((item.employeeIds || []).length) + ' integrantes';
     else detalle = item.description || item.name || item.nombre || '';
     return { tipo, detalle };
   }
