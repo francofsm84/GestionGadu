@@ -6,7 +6,7 @@
 (function (root) {
   'use strict';
   const G = root.GADU, S = G.store, UI = G.ui;
-  const state = { q: '', filter: 'activos', view: 'tarjetas', tab: 'pagos', upTo: '', page: 'fichas', selJornadas: {}, selFinanzas: {} };
+  const state = { q: '', filter: 'activos', view: 'tarjetas', tab: 'pagos', upTo: '', page: 'fichas', selJornadas: {}, selFinanzas: {}, selFichas: {} };
   let currentView2 = null;
 
   G.router.add('empleados', 'empleados', 'Empleados', 'Fichas del personal, control de jornadas y resumen financiero', render);
@@ -197,6 +197,7 @@
       '<div class="grow"></div>' +
       '<button class="btn btn-primary" id="btnNew">' + UI.icon('plus', 16) + 'Nuevo empleado</button>' +
       '</div>' +
+      '<div id="bulkBarE" class="bulk-bar" hidden></div>' +
       '<div id="listWrap">' + (state.view === 'tabla' ? tableHTML(filtered()) : cardsHTML(filtered())) + '</div>';
   }
 
@@ -211,6 +212,43 @@
     view.querySelector('#btnNew').addEventListener('click', () => openEmployeeModal());
     view.querySelector('#btnAtt').addEventListener('click', () => openAttendanceModal());
     bindList(view.querySelector('#listWrap'));
+    bindEmpSelection(view);
+    refreshBulkBarE(view);
+  }
+
+  function bindEmpSelection(view) {
+    const wrap = view.querySelector('#listWrap');
+    if (!wrap) return;
+    UI.on(wrap, '.row-check-e', 'change', e => {
+      e.stopPropagation();
+      const id = e.target.closest('.row-check-e').dataset.id;
+      if (e.target.checked) state.selFichas[id] = true; else delete state.selFichas[id];
+      const master = wrap.querySelector('#selAllFichas');
+      if (master) master.checked = filtered().length > 0 && filtered().every(x => state.selFichas[x.id]);
+      refreshBulkBarE(view);
+    });
+    UI.on(wrap, '#selAllFichas', 'change', e => {
+      const checked = e.target.checked;
+      filtered().forEach(x => { if (checked) state.selFichas[x.id] = true; else delete state.selFichas[x.id]; });
+      updateList(view);
+    });
+  }
+
+  function refreshBulkBarE(view) {
+    const bar = view ? view.querySelector('#bulkBarE') : null;
+    if (!bar) return;
+    const n = Object.keys(state.selFichas).filter(id => state.selFichas[id]).length;
+    bar.hidden = n === 0;
+    bar.innerHTML = n ? '<button class="btn btn-soft-danger" id="btnBulkDelE">🗑️ Eliminar seleccionados (' + n + ')</button>' : '';
+    if (n) bar.querySelector('#btnBulkDelE').addEventListener('click', async () => {
+      const ids = Object.keys(state.selFichas).filter(id => state.selFichas[id]);
+      const ok = await UI.confirm({ title: 'Eliminar empleados', message: '¿Eliminar <strong>' + ids.length + '</strong> empleado(s)? Se eliminará su asistencia y el vínculo con sus pagos (los gastos se conservan).', okLabel: 'Eliminar', tone: 'danger' });
+      if (!ok) return;
+      ids.forEach(id => S.removeEmployee(id));
+      state.selFichas = {};
+      UI.toast('Eliminados ' + ids.length + ' empleado(s)');
+      G.router.refresh();
+    });
   }
 
   /* ---------- Pestaña: Control de Jornadas (todas las jornadas) ---------- */
@@ -411,6 +449,8 @@
     if (!wrap) return;
     wrap.innerHTML = state.view === 'tabla' ? tableHTML(filtered()) : cardsHTML(filtered());
     bindList(wrap);
+    bindEmpSelection(view);
+    refreshBulkBarE(view);
   }
 
   function lastCell(last) {
@@ -423,9 +463,10 @@
     if (!list.length) {
       return '<div class="card">' + UI.emptyState('user', 'No hay empleados que coincidan', 'Probá con otra búsqueda o filtro.') + '</div>';
     }
+    const allSel = list.length > 0 && list.every(e => state.selFichas[e.id]);
     return '<div class="card table-card"><div class="table-wrap">' +
       '<table class="data-table">' +
-      '<thead><tr><th>Empleado</th><th>Teléfono</th><th class="num">Mes P/A</th><th class="num">Horas mes</th><th class="num">Sueldos</th><th class="num">Adelantos</th><th class="num">Saldo a liquidar</th><th>Última jornada</th><th>Alias / CVU</th><th></th></tr></thead>' +
+      '<thead><tr><th class="chk"><input type="checkbox" id="selAllFichas"' + (allSel ? ' checked' : '') + ' title="Seleccionar todos los visibles"></th><th>Empleado</th><th>Teléfono</th><th class="num">Mes P/A</th><th class="num">Horas mes</th><th class="num">Sueldos</th><th class="num">Adelantos</th><th class="num">Saldo a liquidar</th><th>Última jornada</th><th>Alias / CVU</th><th></th></tr></thead>' +
       '<tbody>' +
       list.map(e => {
         const st = S.employeeStats(e.id);
@@ -434,6 +475,7 @@
         const devengado = (mst.hours || 0) * (Number(e.hourlyRate) || 0);
         const saldo = devengado - mst.salary - mst.advances;
         return '<tr class="clickable" data-id="' + e.id + '">' +
+          '<td class="chk" data-norow="1"><input type="checkbox" class="row-check-e" data-id="' + e.id + '"' + (state.selFichas[e.id] ? ' checked' : '') + '></td>' +
           '<td><div style="display:flex;align-items:center;gap:9px">' + UI.avatar(S.employeeName(e), 30, e.photo) +
           '<span><strong>' + UI.escapeHtml(S.employeeName(e)) + '</strong>' +
           (e.active === false ? ' ' + UI.chip('De baja', 'danger') : '') + '</span></div></td>' +
@@ -474,6 +516,7 @@
     const saldo = devengado - mst.salary - mst.advances;
     const acc = S.employeeAccumulated(e.id);
     return '<article class="contact-card" data-id="' + e.id + '">' +
+      '<input type="checkbox" class="row-check-e card-check" data-id="' + e.id + '"' + (state.selFichas[e.id] ? ' checked' : '') + ' title="Seleccionar">' +
       '<div class="contact-head">' +
       UI.avatar(S.employeeName(e), 42, e.photo) +
       '<div class="contact-info"><strong>' + UI.escapeHtml(S.employeeName(e)) + '</strong>' +
@@ -505,7 +548,7 @@
 
   function bindList(wrap) {
     UI.on(wrap, '.contact-card, tr.clickable', 'click', e => {
-      if (e.target.closest('button') || e.target.closest('a')) return;
+      if (e.target.closest('button') || e.target.closest('a') || e.target.closest('input')) return;
       location.hash = '#/empleado/' + e.currentTarget.dataset.id;
     });
     UI.on(wrap, '[data-pay]', 'click', e => {
