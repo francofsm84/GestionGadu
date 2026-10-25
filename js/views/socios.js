@@ -6,6 +6,8 @@
 (function (root) {
   'use strict';
   const G = root.GADU, S = G.store, UI = G.ui;
+  const state = { selSocios: {} };
+  let currentView = null;
 
   G.router.add('socios', 'socios', 'Socios y reparto', 'Participación en utilidades y cronograma de liquidaciones', render);
 
@@ -22,6 +24,7 @@
   }
 
   function render(view) {
+    currentView = view;
     const ds = S.distributionSummary();
     const socios = S.socios();
     const obras = S.data.works.map(w => ({ w, st: S.workStats(w.id) })).sort((a, b) => b.st.margin - a.st.margin);
@@ -47,13 +50,16 @@
           UI.fmtMoney(S.sum(ds.overdue.map(x => x.amount))) + '. Marcá el pago cuando lo realices.</span></div>'
         : '') +
 
+      '<div id="bulkBarS" class="bulk-bar" hidden></div>' +
       '<section class="grid-2">' +
       '<div class="card">' +
-      '<div class="card-head"><div><h3>Participación de socios</h3><p class="muted">Reparto según porcentaje sobre el disponible</p></div></div>' +
+      '<div class="card-head"><div><h3>Participación de socios</h3><p class="muted">Reparto según porcentaje sobre el disponible</p></div>' +
+      '<input type="checkbox" id="selAllSocios" title="Seleccionar todos los socios"' + (socios.length > 0 && socios.every(s => state.selSocios[s.id]) ? ' checked' : '') + '></div>' +
       '<div class="stack">' +
       (socios.map(s => {
         const share = ds.available * (Number(s.percent) || 0) / 100;
         return '<div class="partner-row">' +
+          '<input type="checkbox" class="row-check-s" data-id="' + s.id + '"' + (state.selSocios[s.id] ? ' checked' : '') + ' title="Seleccionar">' +
           UI.avatar(s.name, 40, s.photo) +
           '<div class="partner-info"><strong>' + UI.escapeHtml(s.name) + '</strong>' +
           '<span class="muted small">' + UI.escapeHtml(s.company || '') + '</span></div>' +
@@ -113,6 +119,20 @@
     });
     view.querySelector('#btnNewDist').addEventListener('click', openDistModal);
     UI.on(view, 'tr[data-obra]', 'click', e => { location.hash = '#/obra/' + e.currentTarget.dataset.obra; });
+    /* Selección múltiple de socios + borrado masivo */
+    UI.on(view, '.row-check-s', 'change', e => {
+      const id = e.target.closest('.row-check-s').dataset.id;
+      if (e.target.checked) state.selSocios[id] = true; else delete state.selSocios[id];
+      const master = view.querySelector('#selAllSocios');
+      if (master) master.checked = S.socios().length > 0 && S.socios().every(s => state.selSocios[s.id]);
+      refreshBulkBarS();
+    });
+    UI.on(view, '#selAllSocios', 'change', e => {
+      const checked = e.target.checked;
+      S.socios().forEach(s => { if (checked) state.selSocios[s.id] = true; else delete state.selSocios[s.id]; });
+      G.router.refresh();
+    });
+    refreshBulkBarS();
     UI.on(view, '[data-pay]', 'click', e => {
       const id = e.target.closest('[data-pay]').dataset.pay;
       S.update('distributions', id, { status: 'pagada', paidDate: S.todayISO() });
@@ -123,6 +143,23 @@
       const id = e.target.closest('[data-del]').dataset.del;
       const ok = await UI.confirm({ title: 'Eliminar liquidación', message: '¿Eliminar esta liquidación del cronograma?', okLabel: 'Eliminar' });
       if (ok) { S.remove('distributions', id); UI.toast('Liquidación eliminada'); G.router.refresh(); }
+    });
+  }
+
+  function refreshBulkBarS() {
+    const bar = currentView ? currentView.querySelector('#bulkBarS') : null;
+    if (!bar) return;
+    const n = Object.keys(state.selSocios).filter(id => state.selSocios[id]).length;
+    bar.hidden = n === 0;
+    bar.innerHTML = n ? '<button class="btn btn-soft-danger" id="btnBulkDelS">🗑️ Eliminar seleccionados (' + n + ')</button>' : '';
+    if (n) bar.querySelector('#btnBulkDelS').addEventListener('click', async () => {
+      const ids = Object.keys(state.selSocios).filter(id => state.selSocios[id]);
+      const ok = await UI.confirm({ title: 'Eliminar socios', message: '¿Eliminar <strong>' + ids.length + '</strong> socio(s) del directorio? Sus porcentajes de participación se quitarán.', okLabel: 'Eliminar', tone: 'danger' });
+      if (!ok) return;
+      ids.forEach(id => S.remove('contacts', id));
+      state.selSocios = {};
+      UI.toast('Eliminados ' + ids.length + ' socio(s)');
+      G.router.refresh();
     });
   }
 
