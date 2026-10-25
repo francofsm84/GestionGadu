@@ -2751,7 +2751,7 @@ async function processMessage(body: unknown) {
         }
         await deleteSession(normalizePhone(inc.from));
         const workNameAtt = String(attHorasCtx.workName || "");
-        fireAndForget(sendWhatsApp(inc.from, "✅ Asistencia registrada para " + employeeIds.length + " empleado(s) · " + horas + " horas" + (workNameAtt ? " en " + workNameAtt : "") + " · " + fechaAtt));
+        fireAndForget(sendWhatsApp(inc.from, "✅ Se registró con éxito la jornada para la cuadrilla de " + employeeIds.length + " empleados" + (workNameAtt ? " en la obra " + workNameAtt : "") + " · " + horas + " hs" + (fechaAtt ? " · " + fechaAtt : "")));
         return json({ ok: true, from: inc.from, reply: "asistencia guardada" });
       } catch (err) {
         const eMsg = (err && (err as any).message) ? String((err as any).message) : String(err);
