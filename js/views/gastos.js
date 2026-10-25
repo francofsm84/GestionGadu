@@ -295,7 +295,10 @@
     const isEdit = !!exp;
     const isInv = !!(exp ? exp.expenseKind === 'inversion' : opts.expenseKind === 'inversion');
     const type = exp ? exp.type : (isInv ? 'general' : (opts.type || state.tab));
-    const cats = type === 'obra' ? S.CATS_OBRA : S.CATS_GENERAL;
+    /* Al editar, mostramos TODAS las categorías (obra + generales) para poder re-clasificar */
+    const cats = isEdit
+      ? Array.from(new Set((S.CATS_OBRA || []).concat(S.CATS_GENERAL || [])))
+      : (type === 'obra' ? S.CATS_OBRA : S.CATS_GENERAL);
     const curCat = exp ? exp.category : (isInv ? 'Inversion' : (opts.category || cats[0]));
     let catList = exp && exp.category && !cats.includes(exp.category) ? cats.concat([exp.category]) : cats;
     if (isInv && !catList.includes('Inversion')) catList = catList.concat(['Inversion']);
@@ -308,11 +311,9 @@
       subtitle: isEdit ? '' : (isInv ? 'Capital destinado a generar retorno: máquina, herramientas, capital de trabajo.' : (type === 'obra' ? 'Costo directo vinculado a una obra específica.' : 'Costo fijo u operativo de la empresa.')),
       body:
         '<div class="grid-form">' +
-        (type === 'obra'
-          ? '<div class="field span-2"><label>Obra *</label><select class="select" id="fWork">' +
-            UI.selectOptions(S.data.works.map(w => ({ v: w.id, l: w.code + ' · ' + w.name })), exp ? exp.workId : (opts.workId || ''), true, '— Seleccionar obra —') +
-            '</select></div>'
-          : '') +
+        '<div class="field span-2"><label>Obra / Destino</label><select class="select" id="fWork">' +
+        UI.selectOptions(S.data.works.map(w => ({ v: w.id, l: w.code + ' · ' + w.name })), exp ? exp.workId : (opts.workId || ''), true, '— Sin obra (Gasto General) —') +
+        '</select><span class="form-hint">Elegí una obra para clasificarlo como gasto de obra, o dejá "Sin obra" para gasto general.</span></div>' +
         '<div class="field"><label>Fecha</label><input class="input" type="date" id="fDate" value="' + (exp ? exp.date : S.todayISO()) + '"></div>' +
         '<div class="field"><label>Monto ($) *</label><input class="input" type="number" id="fAmount" min="0" step="100" value="' + (exp ? exp.amount : (opts.amount || '')) + '" placeholder="0"></div>' +
         '<div class="field"><label>Categoría *</label><select class="select" id="fCat">' +
@@ -370,10 +371,15 @@
     m.panel.querySelector('[data-save]').addEventListener('click', async () => {
       const amount = UI.readNum(m.panel.querySelector('#fAmount'));
       const desc = m.panel.querySelector('#fDesc').value.trim();
-      let workId = null;
-      if (type === 'obra') {
-        workId = m.panel.querySelector('#fWork').value;
-        if (!workId) { UI.toast('Seleccioná la obra', 'error'); return; }
+      const workId = m.panel.querySelector('#fWork') ? (m.panel.querySelector('#fWork').value || null) : null;
+      /* Edición: re-clasificar General ↔ Obra según el destino elegido.
+         Carga nueva: preservar el tipo original (y exigir obra si es de obra). */
+      let finalType;
+      if (isEdit) {
+        finalType = isInv ? 'general' : (workId ? 'obra' : 'general');
+      } else {
+        if (type === 'obra' && !workId) { UI.toast('Seleccioná la obra', 'error'); return; }
+        finalType = type;
       }
       if (amount <= 0) { UI.toast('Ingresá un monto mayor a cero', 'error'); return; }
       if (!desc) { UI.toast('Ingresá la descripción del gasto', 'error'); return; }
@@ -385,8 +391,8 @@
         else providerId = provVal;
       }
       const payload = {
-        type,
-        workId: type === 'obra' ? workId : null,
+        type: finalType,
+        workId,
         date: m.panel.querySelector('#fDate').value || S.todayISO(),
         amount,
         category: m.panel.querySelector('#fCat').value,
