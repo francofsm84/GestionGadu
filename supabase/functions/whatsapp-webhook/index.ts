@@ -417,6 +417,53 @@ async function deleteSession(phone: string) {
   await rest("whatsapp_sessions?phone_number=eq." + encodeURIComponent(normalizePhone(phone)), { method: "DELETE" });
 }
 
+/* Guarda la asistencia (cuadrilla) con un motivo de jornada reducida en `notes`.
+   Reutiliza el contexto WAITING_ATTENDANCE_REASON y hace el PATCH con reintento. */
+async function guardarAsistenciaConMotivo(from: string, userId: string, motivo: string): Promise<void> {
+  try {
+    const sess = await getSession(normalizePhone(from));
+    const ctx = ((sess && sess.context) || {}) as Record<string, unknown>;
+    const employeeIds: string[] = Array.isArray(ctx.employeeIds) ? (ctx.employeeIds as string[]) : [];
+    const workId = ctx.workId ? String(ctx.workId) : null;
+    const workName = String(ctx.workName || "");
+    const horas = Number(ctx.horas) || 0;
+    const fecha = String(ctx.fecha || new Date().toISOString().slice(0, 10));
+    const r = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+    const rows = (await r.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+    const data = (Array.isArray(rows) && rows.length) ? (rows[0].data || {}) : {};
+    if (!employeeIds.length) {
+      fireAndForget(sendWhatsApp(from, "🤖 No encontré los empleados. Empezá de nuevo con \"registrar asistencia\"."));
+      await deleteSession(normalizePhone(from));
+      return;
+    }
+    if (!Array.isArray(data.attendance)) data.attendance = [];
+    for (const empId of employeeIds) {
+      let attId = "";
+      try { attId = crypto.randomUUID(); } catch (_e) { attId = "att-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10); }
+      data.attendance.unshift({
+        id: attId, employeeId: String(empId), date: fecha,
+        status: "presente", hours: [{ workId, hours: horas }], notes: motivo || "",
+      });
+    }
+    const patchBody = JSON.stringify({ data, updated_at: new Date().toISOString() });
+    let up = await rest("app_data?user_id=eq." + encodeURIComponent(userId), { method: "PATCH", headers: { Prefer: "return=minimal" }, body: patchBody });
+    if (!up.ok) {
+      await new Promise(res => setTimeout(res, 500));
+      up = await rest("app_data?user_id=eq." + encodeURIComponent(userId), { method: "PATCH", headers: { Prefer: "return=minimal" }, body: patchBody });
+    }
+    if (!up.ok) {
+      fireAndForget(sendWhatsApp(from, "⚠️ No pude guardar en la nube (error " + up.status + "). Probá de nuevo."));
+      return;
+    }
+    await deleteSession(normalizePhone(from));
+    fireAndForget(sendWhatsApp(from, "✅ Se registró con éxito la jornada para la cuadrilla de " + employeeIds.length + " empleados" + (workName ? " en la obra " + workName : "") + " · " + horas + " hs" + (motivo ? " · Motivo: " + motivo : "") + " · " + fecha));
+    await showMainMenu(from, "¡Hola! 👋 Soy tu asistente GADU. ¿Qué querés hacer hoy?");
+  } catch (e) {
+    console.error("[GADU-WA-ATT] error guardando con motivo:", e);
+    fireAndForget(sendWhatsApp(from, "⚠️ No pude guardar la asistencia. Probá de nuevo."));
+  }
+}
+
 /* Pausa/Reanuda el bot para un teléfono (flag is_paused en whatsapp_sessions).
    Mientras está pausado, processMessage corta y no responde automáticamente. */
 async function setPaused(phone: string, paused: boolean) {
@@ -1118,6 +1165,15 @@ async function handleButtonReply(from: string, buttonId: string) {
     } catch (e) {
       fireAndForget(sendWhatsApp(from, "⚠️ No pude continuar. Probá de nuevo."));
     }
+    return;
+  }
+
+  /* [GADU-WA-ATT] Motivo de jornada reducida por botón (att_reason:<motivo>) */
+  if (buttonId.startsWith("att_reason:")) {
+    const motivoKey = buttonId.slice("att_reason:".length);
+    const motivos: Record<string, string> = { lluvia: "Lluvia", clima: "Clima", falla: "Falla técnica" };
+    const motivo = motivos[motivoKey] || "Jornada reducida";
+    await guardarAsistenciaConMotivo(from, userId, motivo);
     return;
   }
 
@@ -2915,6 +2971,18 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply: "" });
     }
 
+    /* [GADU-WA-ATTENDANCE] Motivo de jornada reducida por texto (WAITING_ATTENDANCE_REASON) */
+    let enWizardAttReason = false;
+    try {
+      const sessAR = await getSession(normalizePhone(inc.from));
+      if (sessAR && sessAR.state === "WAITING_ATTENDANCE_REASON") enWizardAttReason = true;
+    } catch (e) {}
+    if (enWizardAttReason) {
+      const motivo = String(inc.text || "").trim() || "Jornada reducida";
+      await guardarAsistenciaConMotivo(inc.from, row.user_id, motivo);
+      return json({ ok: true, from: inc.from, reply: "asistencia guardada" });
+    }
+
     /* [GADU-WA-ATTENDANCE] Asistencia paso 3: horas → guardar (WAITING_ATTENDANCE_HOURS) */
     let enWizardAttHoras = false;
     let attHorasCtx: Record<string, unknown> = {};
@@ -2962,6 +3030,17 @@ async function processMessage(body: unknown) {
           return json({ ok: true, from: inc.from, reply: "" });
         }
         const fechaAtt = String(attHorasCtx.fecha || new Date().toISOString().slice(0, 10));
+        /* Jornada reducida (< 8 hs): pedir motivo antes de guardar */
+        if (horas < 8) {
+          await upsertSession(inc.from, row.user_id, "WAITING_ATTENDANCE_REASON", { ...attHorasCtx, horas, fecha: fechaAtt });
+          await sendWhatsAppButtons(inc.from, "⏱ " + horas + " hs es una jornada reducida. ¿Cuál fue el motivo?", [
+            { id: "att_reason:lluvia", title: "🌧 Lluvia" },
+            { id: "att_reason:clima", title: "🌤 Clima" },
+            { id: "att_reason:falla", title: "🔧 Falla técnica" },
+          ]);
+          fireAndForget(sendWhatsApp(inc.from, "O escribí el motivo (ej. *otro: feriado*, *personal*, *salud*)."));
+          return json({ ok: true, from: inc.from, reply: "" });
+        }
         /* Loop de guardado: un registro por empleado de la cuadrilla */
         for (const empId of employeeIds) {
           let attId = "";
@@ -2999,6 +3078,8 @@ async function processMessage(body: unknown) {
         await deleteSession(normalizePhone(inc.from));
         const workNameAtt = String(attHorasCtx.workName || "");
         fireAndForget(sendWhatsApp(inc.from, "✅ Se registró con éxito la jornada para la cuadrilla de " + employeeIds.length + " empleados" + (workNameAtt ? " en la obra " + workNameAtt : "") + " · " + horas + " hs" + (fechaAtt ? " · " + fechaAtt : "")));
+        /* Cierre inteligente: bienvenida + menú principal para continuar sin interrupciones */
+        await showMainMenu(inc.from, "¡Hola! 👋 Soy tu asistente GADU. ¿Qué querés hacer hoy?");
         return json({ ok: true, from: inc.from, reply: "asistencia guardada" });
       } catch (err) {
         const eMsg = (err && (err as any).message) ? String((err as any).message) : String(err);
