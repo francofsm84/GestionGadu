@@ -361,6 +361,7 @@ export interface ResolvedIncoming {
   imageFailed?: boolean;
   imageNoMonto?: boolean;
   mediaUrl?: string;
+  contact?: { name: string; phone: string };
 }
 
 /* Resuelve el texto del mensaje entrante: texto plano O transcripción de audio.
@@ -476,6 +477,22 @@ export async function resolveIncomingText(payload: unknown): Promise<ResolvedInc
         /* No devolvió JSON: usar el texto crudo como fallback (flujo normal) */
         return { from, text, mediaUrl };
       }
+    }
+
+    // Contacto compartido (vCard): extraer nombre + teléfono
+    if (msg.type === "contacts") {
+      const contacts = Array.isArray(msg.contacts) ? msg.contacts : [];
+      const c = contacts[0] || {};
+      const nombre = String(c.name?.formatted_name || c.name?.first_name || c.name?.last_name || "").trim();
+      const phone = String(
+        c.phones?.[0]?.phone ||
+        c.phones?.[0]?.wa_id ||
+        (Array.isArray(c.phones) && c.phones.length ? String(c.phones[0]).replace(/\D/g, "") : "") ||
+        ""
+      ).trim();
+      if (!nombre && !phone) return null;
+      console.log("[GADU-WA-CONTACT] contacto compartido:", JSON.stringify({ nombre, phone }));
+      return { from, text: "", contact: { name: nombre, phone } };
     }
 
     return null;

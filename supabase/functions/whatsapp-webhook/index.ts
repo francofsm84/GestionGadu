@@ -1284,6 +1284,46 @@ async function handleButtonReply(from: string, buttonId: string) {
   if (buttonId.startsWith("contact_role:")) {
     const role = buttonId.slice("contact_role:".length);
     if (role === "empleado" || role === "socio" || role === "cliente" || role === "proveedor" || role === "subcontratista") {
+      /* Si vino de un contacto compartido (vCard), crear directamente con nombre+teléfono ya conocidos */
+      try {
+        const sessC = await getSession(normalizePhone(from));
+        const ctxC = ((sessC && sessC.context) || {}) as Record<string, unknown>;
+        if (ctxC.fromVcard && (ctxC.contactName || ctxC.contactPhone)) {
+          const name = String(ctxC.contactName || "Contacto");
+          const phone = String(ctxC.contactPhone || "");
+          const rC = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+          const rowsC = (await rC.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+          const dC = (Array.isArray(rowsC) && rowsC.length) ? (rowsC[0].data || {}) : {};
+          if (role === "empleado") {
+            const parsed = formatProperName(name);
+            (dC.employees || (dC.employees = [])).unshift({
+              id: crypto.randomUUID(), firstName: parsed.firstName, lastName: parsed.lastName,
+              phone, role: parsed.role || "empleado", active: true, source: "whatsapp",
+            });
+          } else {
+            (dC.contacts || (dC.contacts = [])).unshift({
+              id: crypto.randomUUID(), name,
+              type: role === "subcontratista" ? "subcontratista" : (role === "proveedor" ? "proveedor" : (role === "socio" ? "socio" : "cliente")),
+              phone, email: "", source: "whatsapp",
+            });
+          }
+          const upC = await rest("app_data?user_id=eq." + encodeURIComponent(userId), {
+            method: "PATCH",
+            headers: { Prefer: "return=minimal" },
+            body: JSON.stringify({ data: dC, updated_at: new Date().toISOString() }),
+          });
+          if (!upC.ok) {
+            fireAndForget(sendWhatsApp(from, "⚠️ No pude guardar el contacto en la nube (error " + upC.status + "). Probá de nuevo."));
+            return;
+          }
+          await deleteSession(normalizePhone(from));
+          const label = role === "empleado" ? "Empleado" : (role === "socio" ? "Socio" : (role === "proveedor" ? "Proveedor" : (role === "subcontratista" ? "Subcontratista" : "Cliente")));
+          fireAndForget(sendWhatsApp(from, "✅ Contacto guardado: " + label + " '" + name + "'."));
+          return;
+        }
+      } catch (e) {
+        console.error("[GADU-WA-CONTACT] error guardando vCard:", e);
+      }
       await upsertSession(from, userId, "WAITING_CONTACT_NAME", { contactType: role });
       const label = role === "empleado" ? "Empleado" : (role === "socio" ? "Socio" : (role === "proveedor" ? "Proveedor" : (role === "subcontratista" ? "Subcontratista" : "Cliente")));
       fireAndForget(sendWhatsApp(from, "Perfecto, vamos a registrar un *" + label + "*. ¿Cuál es el nombre completo? (Escribí *cancelar* para abortar)"));
@@ -1443,6 +1483,27 @@ async function processMessage(body: unknown) {
       fireAndForget(sendWhatsApp(resolved.from, "🤖 No pude leer el ticket. ¿Me escribís el monto?"));
       return;
     }
+
+    /* [GADU-WA-CONTACT] Contacto compartido (vCard): guardar en sesión y preguntar rol */
+    if (resolved.contact && (resolved.contact.name || resolved.contact.phone)) {
+      try {
+        const userIdC = await findUserId(resolved.from);
+        if (!userIdC) {
+          fireAndForget(sendWhatsApp(resolved.from, "🤖 No pude identificar tu cuenta."));
+          return json({ ok: false, error: "usuario no encontrado" });
+        }
+        await upsertSession(resolved.from, userIdC, "WAITING_CONTACT_ROLE", { contactName: resolved.contact.name, contactPhone: resolved.contact.phone, fromVcard: true });
+        await sendWhatsAppButtons(resolved.from, "Recibí el contacto de " + (resolved.contact.name || "desconocido") + ". ¿Dónde querés agendarlo?", [
+          { id: "contact_role:empleado", title: "Empleado" },
+          { id: "contact_role:cliente", title: "Cliente" },
+          { id: "contact_role:socio", title: "Socio" },
+        ]);
+        return json({ ok: true, from: resolved.from, reply: "contacto recibido" });
+      } catch (e) {
+        console.error("[GADU-WA-CONTACT] error procesando contacto:", e);
+      }
+    }
+
     const inc = { from: resolved.from, text: resolved.text, mediaUrl: resolved.mediaUrl || "" };
     console.log("[whatsapp-webhook] from=" + inc.from + " text=" + JSON.stringify(inc.text));
     console.log("[DEBUG] Remitente detectado: " + inc.from);

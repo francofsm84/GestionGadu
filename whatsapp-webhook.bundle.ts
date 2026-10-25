@@ -1368,6 +1368,7 @@ export interface ResolvedIncoming {
   imageFailed?: boolean;
   imageNoMonto?: boolean;
   mediaUrl?: string;
+  contact?: { name: string; phone: string };
 }
 
 /* Resuelve el texto del mensaje entrante: texto plano O transcripcion de audio.
@@ -1483,6 +1484,22 @@ export async function resolveIncomingText(payload: unknown): Promise<ResolvedInc
         /* No devolvio JSON: usar el texto crudo como fallback (flujo normal) */
         return { from, text, mediaUrl };
       }
+    }
+
+    // Contacto compartido (vCard): extraer nombre + telefono
+    if (msg.type === "contacts") {
+      const contacts = Array.isArray(msg.contacts) ? msg.contacts : [];
+      const c = contacts[0] || {};
+      const nombre = String(c.name?.formatted_name || c.name?.first_name || c.name?.last_name || "").trim();
+      const phone = String(
+        c.phones?.[0]?.phone ||
+        c.phones?.[0]?.wa_id ||
+        (Array.isArray(c.phones) && c.phones.length ? String(c.phones[0]).replace(/\D/g, "") : "") ||
+        ""
+      ).trim();
+      if (!nombre && !phone) return null;
+      console.log("[GADU-WA-CONTACT] contacto compartido:", JSON.stringify({ nombre, phone }));
+      return { from, text: "", contact: { name: nombre, phone } };
     }
 
     return null;
@@ -2844,6 +2861,46 @@ async function handleButtonReply(from: string, buttonId: string) {
   if (buttonId.startsWith("contact_role:")) {
     const role = buttonId.slice("contact_role:".length);
     if (role === "empleado" || role === "socio" || role === "cliente" || role === "proveedor" || role === "subcontratista") {
+      /* Si vino de un contacto compartido (vCard), crear directamente con nombre+telefono ya conocidos */
+      try {
+        const sessC = await getSession(normalizePhone(from));
+        const ctxC = ((sessC && sessC.context) || {}) as Record<string, unknown>;
+        if (ctxC.fromVcard && (ctxC.contactName || ctxC.contactPhone)) {
+          const name = String(ctxC.contactName || "Contacto");
+          const phone = String(ctxC.contactPhone || "");
+          const rC = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+          const rowsC = (await rC.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+          const dC = (Array.isArray(rowsC) && rowsC.length) ? (rowsC[0].data || {}) : {};
+          if (role === "empleado") {
+            const parsed = formatProperName(name);
+            (dC.employees || (dC.employees = [])).unshift({
+              id: crypto.randomUUID(), firstName: parsed.firstName, lastName: parsed.lastName,
+              phone, role: parsed.role || "empleado", active: true, source: "whatsapp",
+            });
+          } else {
+            (dC.contacts || (dC.contacts = [])).unshift({
+              id: crypto.randomUUID(), name,
+              type: role === "subcontratista" ? "subcontratista" : (role === "proveedor" ? "proveedor" : (role === "socio" ? "socio" : "cliente")),
+              phone, email: "", source: "whatsapp",
+            });
+          }
+          const upC = await rest("app_data?user_id=eq." + encodeURIComponent(userId), {
+            method: "PATCH",
+            headers: { Prefer: "return=minimal" },
+            body: JSON.stringify({ data: dC, updated_at: new Date().toISOString() }),
+          });
+          if (!upC.ok) {
+            fireAndForget(sendWhatsApp(from, "\u26A0\uFE0F No pude guardar el contacto en la nube (error " + upC.status + "). Proba de nuevo."));
+            return;
+          }
+          await deleteSession(normalizePhone(from));
+          const label = role === "empleado" ? "Empleado" : (role === "socio" ? "Socio" : (role === "proveedor" ? "Proveedor" : (role === "subcontratista" ? "Subcontratista" : "Cliente")));
+          fireAndForget(sendWhatsApp(from, "\u2705 Contacto guardado: " + label + " '" + name + "'."));
+          return;
+        }
+      } catch (e) {
+        console.error("[GADU-WA-CONTACT] error guardando vCard:", e);
+      }
       await upsertSession(from, userId, "WAITING_CONTACT_NAME", { contactType: role });
       const label = role === "empleado" ? "Empleado" : (role === "socio" ? "Socio" : (role === "proveedor" ? "Proveedor" : (role === "subcontratista" ? "Subcontratista" : "Cliente")));
       fireAndForget(sendWhatsApp(from, "Perfecto, vamos a registrar un *" + label + "*. Cual es el nombre completo? (Escribi *cancelar* para abortar)"));
@@ -3003,6 +3060,27 @@ async function processMessage(body: unknown) {
       fireAndForget(sendWhatsApp(resolved.from, "\uD83E\uDD16 No pude leer el ticket. Me escribis el monto?"));
       return;
     }
+
+    /* [GADU-WA-CONTACT] Contacto compartido (vCard): guardar en sesion y preguntar rol */
+    if (resolved.contact && (resolved.contact.name || resolved.contact.phone)) {
+      try {
+        const userIdC = await findUserId(resolved.from);
+        if (!userIdC) {
+          fireAndForget(sendWhatsApp(resolved.from, "\uD83E\uDD16 No pude identificar tu cuenta."));
+          return json({ ok: false, error: "usuario no encontrado" });
+        }
+        await upsertSession(resolved.from, userIdC, "WAITING_CONTACT_ROLE", { contactName: resolved.contact.name, contactPhone: resolved.contact.phone, fromVcard: true });
+        await sendWhatsAppButtons(resolved.from, "Recibi el contacto de " + (resolved.contact.name || "desconocido") + ". Donde queres agendarlo?", [
+          { id: "contact_role:empleado", title: "Empleado" },
+          { id: "contact_role:cliente", title: "Cliente" },
+          { id: "contact_role:socio", title: "Socio" },
+        ]);
+        return json({ ok: true, from: resolved.from, reply: "contacto recibido" });
+      } catch (e) {
+        console.error("[GADU-WA-CONTACT] error procesando contacto:", e);
+      }
+    }
+
     const inc = { from: resolved.from, text: resolved.text, mediaUrl: resolved.mediaUrl || "" };
     console.log("[whatsapp-webhook] from=" + inc.from + " text=" + JSON.stringify(inc.text));
     console.log("[DEBUG] Remitente detectado: " + inc.from);
