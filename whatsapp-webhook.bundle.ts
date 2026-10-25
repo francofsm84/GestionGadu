@@ -1923,6 +1923,7 @@ const SUBMENUS: Record<string, Array<{ id: string; title: string; description?: 
     { id: "action_presupuesto", title: "Presupuesto" },
     { id: "action_contacto", title: "Nuevo Contacto" },
     { id: "action_crear_cuadrilla", title: "\u2795 Crear Cuadrilla" },
+    { id: "action_editar_cuadrilla", title: "\u270F\uFE0F Editar Cuadrilla" },
     { id: "action_asistencia", title: "Registrar Asistencia" },
     { id: "action_humano", title: "Hablar con humano" },
     { id: "menu_root", title: "\uD83C\uDFE0 Volver al menu" },
@@ -2697,6 +2698,82 @@ async function handleButtonReply(from: string, buttonId: string) {
     return;
   }
 
+  /* [GADU-WA-ATT] Cuadrilla prefijada seleccionada por clic (crew:<id>) */
+  if (buttonId.startsWith("crew:")) {
+    const crewId = buttonId.slice("crew:".length);
+    try {
+      const rC = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+      const rowsC = (await rC.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+      const dC = (Array.isArray(rowsC) && rowsC.length) ? (rowsC[0].data || {}) : {};
+      const crew = (dC.crews || []).find((c: any) => String(c.id) === crewId);
+      const memberIds: string[] = crew && Array.isArray(crew.employeeIds) ? crew.employeeIds.map((id: any) => String(id)) : [];
+      if (!memberIds.length) {
+        fireAndForget(sendWhatsApp(from, "\uD83E\uDD16 Esa cuadrilla no tiene integrantes. Editala o elegi por numero."));
+        return;
+      }
+      const obras = (dC.works || []).filter((w: any) => w.status === "activa").slice(0, 10);
+      if (!obras.length) {
+        fireAndForget(sendWhatsApp(from, "\uD83E\uDD16 No tenes obras activas. Crea una con \"nueva obra [nombre]\"."));
+        await deleteSession(normalizePhone(from));
+        return;
+      }
+      await upsertSession(from, userId, "WAITING_ATTENDANCE_WORK", { employeeIds: memberIds });
+      const obraRows = obras.map((w: any) => ({ id: "att_work:" + String(w.id), title: String(w.nombre || w.name || "Obra") }));
+      obraRows.push({ id: "menu_root", title: "\uD83C\uDFE0 Volver al menu", description: "Cancelar y volver al inicio" });
+      await sendWhatsAppList(from, "En que obra trabajo " + (crew ? crew.name : "la cuadrilla") + " (" + memberIds.length + " empleados)?", obraRows, { button: "Elegir obra", sectionTitle: "Obras activas" });
+    } catch (e) {
+      fireAndForget(sendWhatsApp(from, "\u26A0\uFE0F No pude continuar. Proba de nuevo."));
+    }
+    return;
+  }
+
+  /* [GADU-WA-CREW] Editar cuadrilla: mostrar integrantes + pedir nueva lista */
+  if (buttonId.startsWith("edit_crew:")) {
+    const crewId = buttonId.slice("edit_crew:".length);
+    try {
+      const rE = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+      const rowsE = (await rE.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+      const dE = (Array.isArray(rowsE) && rowsE.length) ? (rowsE[0].data || {}) : {};
+      const crew = (dE.crews || []).find((c: any) => String(c.id) === crewId);
+      if (!crew) {
+        fireAndForget(sendWhatsApp(from, "\uD83E\uDD16 No encontre esa cuadrilla."));
+        return;
+      }
+      const emps = (dE.employees || []).filter((e: any) => e.active !== false).slice(0,10);
+      const current = (crew.employeeIds || []).map((id: any) => {
+        const e = emps.find((x: any) => String(x.id) === String(id));
+        return e ? String((e.firstName || "") + " " + (e.lastName || "")).trim() : "";
+      }).filter(Boolean).join(", ");
+      const lista = emps.map((e: any, i: number) => (i + 1) + ". " + String((e.firstName || "") + " " + (e.lastName || "")).trim()).join("\n");
+      await upsertSession(from, userId, "WAITING_CREW_EDIT", { crewId, employeeIds: emps.map((e: any) => String(e.id)) });
+      fireAndForget(sendWhatsApp(from, "\u270F\uFE0F Cuadrilla *" + crew.name + "*   integrantes actuales: " + (current || "ninguno") + "\n\n" + lista + "\n\nEscribi los numeros de los integrantes FINALES (ej. *1, 3*) para reemplazar, o *renombrar* para cambiar el nombre."));
+    } catch (e) {
+      fireAndForget(sendWhatsApp(from, "\u26A0\uFE0F No pude cargar la cuadrilla. Proba de nuevo."));
+    }
+    return;
+  }
+
+  /* [GADU-WA-ATT] Elegir por numero -> listar empleados numerados */
+  if (buttonId === "att_numbers") {
+    try {
+      const rN = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+      const rowsN = (await rN.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+      const dN = (Array.isArray(rowsN) && rowsN.length) ? (rowsN[0].data || {}) : {};
+      const emps = (dN.employees || []).filter((e: any) => e.active !== false).slice(0, 10);
+      if (!emps.length) {
+        fireAndForget(sendWhatsApp(from, "\uD83E\uDD16 No tenes empleados activos. Carga uno con \"nuevo empleado [nombre]\"."));
+        await deleteSession(normalizePhone(from));
+        return;
+      }
+      const lista = emps.map((e: any, i: number) => (i + 1) + ". " + String((e.firstName || "") + " " + (e.lastName || "")).trim()).join("\n");
+      await upsertSession(from, userId, "WAITING_ATTENDANCE_EMPLOYEES", { employeeIds: emps.map((e: any) => String(e.id)) });
+      fireAndForget(sendWhatsApp(from, "\uD83D\uDC77 Elegi quien trabajo:\n\n" + lista + "\n\nEscribi los numeros (ej. *1, 3*) o *todos*."));
+    } catch (e) {
+      fireAndForget(sendWhatsApp(from, "\u26A0\uFE0F No pude cargar los empleados. Proba de nuevo."));
+    }
+    return;
+  }
+
   /* [GADU-WA-METRICAS] Deudas de TODOS los empleados (solo lectura) */
   if (buttonId === "metricas_deudas") {
     try {
@@ -2823,6 +2900,24 @@ async function handleButtonReply(from: string, buttonId: string) {
       fireAndForget(sendWhatsApp(from, "\uD83D\uDC65 Dale! Escribi el nombre para la nueva cuadrilla (ej. *Cuadrilla de Yeseros*)."));
       return;
     }
+    if (act === "editar_cuadrilla") {
+      try {
+        const rEd = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
+        const rowsEd = (await rEd.json().catch(() => [])) as Array<{ data: Record<string, any> }>;
+        const dEd = (Array.isArray(rowsEd) && rowsEd.length) ? (rowsEd[0].data || {}) : {};
+        const crews = (dEd.crews || []).filter((c: any) => (c.employeeIds || []).length);
+        if (!crews.length) {
+          fireAndForget(sendWhatsApp(from, "\uD83E\uDD16 No tenes cuadrillas. Crea una con \"\u2795 Crear Cuadrilla\"."));
+          return;
+        }
+        const rows: Array<{ id: string; title: string; description?: string }> = crews.map((c: any) => ({ id: "edit_crew:" + String(c.id), title: String(c.name || "Cuadrilla"), description: (c.employeeIds || []).length + " integrantes" }));
+        rows.push({ id: "menu_root", title: "\uD83C\uDFE0 Volver al menu", description: "Cancelar y volver al inicio" });
+        await sendWhatsAppList(from, "Que cuadrilla queres editar?", rows, { button: "Elegir cuadrilla", sectionTitle: "Cuadrillas" });
+      } catch (e) {
+        fireAndForget(sendWhatsApp(from, "\u26A0\uFE0F No pude cargar las cuadrillas. Proba de nuevo."));
+      }
+      return;
+    }
     if (act === "asistencia") {
       try {
         const rAsis = await rest("app_data?select=data&user_id=eq." + encodeURIComponent(userId) + "&limit=1");
@@ -2833,12 +2928,14 @@ async function handleButtonReply(from: string, buttonId: string) {
           fireAndForget(sendWhatsApp(from, "\uD83E\uDD16 No tenes empleados activos. Carga uno con \"nuevo empleado [nombre]\"."));
           return;
         }
-        /* Seleccion multiple por NUMEROS o por CUADRILLA prefijada */
-        const lista = emps.map((e: any, i: number) => (i + 1) + ". " + String((e.firstName || "") + " " + (e.lastName || "")).trim()).join("\n");
+        /* Seleccion interactiva: cuadrillas de un toque + fallback por numero */
         const crews = (dAsis.crews || []).filter((c: any) => (c.employeeIds || []).length);
-        const crewLines = crews.length ? "\n\nCUADRILLAS:\n" + crews.map((c: any) => "  " + String(c.name || "Cuadrilla") + " (" + (c.employeeIds || []).length + ")").join("\n") : "";
         await upsertSession(from, userId, "WAITING_ATTENDANCE_EMPLOYEES", { employeeIds: emps.map((e: any) => String(e.id)) });
-        fireAndForget(sendWhatsApp(from, "\uD83D\uDC77 Elegi quien trabajo:\n\n" + lista + crewLines + "\n\nEscribi los numeros (ej. *1, 3*), *todos*, o el nombre de una cuadrilla (ej. *cuadrilla albaniles*)."));
+        const rows: Array<{ id: string; title: string; description?: string }> = [];
+        crews.forEach((c: any) => rows.push({ id: "crew:" + String(c.id), title: "\uD83D\uDC65 " + String(c.name || "Cuadrilla"), description: (c.employeeIds || []).length + " integrantes" }));
+        rows.push({ id: "att_numbers", title: "\uD83D\uDD22 Elegir por numero", description: "Listar empleados y elegir 1, 3 o todos" });
+        rows.push({ id: "menu_root", title: "\uD83C\uDFE0 Volver al menu", description: "Cancelar y volver al inicio" });
+        await sendWhatsAppList(from, "Quien trabajo? Elegi una cuadrilla de un toque o por numero.", rows, { button: "Elegir", sectionTitle: "Cuadrillas" });
       } catch (e) {
         fireAndForget(sendWhatsApp(from, "\u26A0\uFE0F No pude cargar los empleados. Proba de nuevo."));
       }
@@ -4254,6 +4351,74 @@ async function processMessage(body: unknown) {
       await deleteSession(normalizePhone(inc.from));
       fireAndForget(sendWhatsApp(inc.from, "\u2705 Cuadrilla " + crewName + " creada con exito con " + selected.length + " empleados! Ya podes usarla para registrar asistencia."));
       return json({ ok: true, from: inc.from, reply: "cuadrilla creada" });
+    }
+
+    /* [GADU-WA-CREW] Editar cuadrilla: nueva lista de integrantes o renombrar (WAITING_CREW_EDIT) */
+    let enWizardCrewEdit = false;
+    let crewEditCtx: Record<string, unknown> = {};
+    try {
+      const sessCE = await getSession(normalizePhone(inc.from));
+      if (sessCE && sessCE.state === "WAITING_CREW_EDIT") { enWizardCrewEdit = true; crewEditCtx = (sessCE.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardCrewEdit) {
+      const t = String(inc.text || "").trim();
+      const crewId = String(crewEditCtx.crewId || "");
+      const allIds: string[] = Array.isArray(crewEditCtx.employeeIds) ? (crewEditCtx.employeeIds as string[]) : [];
+      /* Renombrar: "renombrar" o "renombrar <nuevo nombre>" */
+      if (/^renombrar\b/i.test(t)) {
+        const nuevo = t.replace(/^renombrar\s*/i, "").trim();
+        if (nuevo) {
+          const crew = (data.crews || []).find((c: any) => String(c.id) === crewId);
+          if (crew) crew.name = nuevo;
+          const upR = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ data, updated_at: new Date().toISOString() }) });
+          if (!upR.ok) { fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar (error " + upR.status + "). Proba de nuevo.")); return json({ ok: true, from: inc.from, reply: "" }); }
+          await deleteSession(normalizePhone(inc.from));
+          fireAndForget(sendWhatsApp(inc.from, "\u2705 Cuadrilla renombrada a *" + nuevo + "*."));
+          return json({ ok: true, from: inc.from, reply: "cuadrilla renombrada" });
+        }
+        const crew = (data.crews || []).find((c: any) => String(c.id) === crewId);
+        await upsertSession(inc.from, row.user_id, "WAITING_CREW_RENAME", { crewId });
+        fireAndForget(sendWhatsApp(inc.from, "Como queres llamarla? Escribi el nuevo nombre."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      /* Reemplazar integrantes por numeros o "todos" */
+      let selected: string[] = [];
+      if (/^todos?\b/i.test(t)) selected = allIds.slice();
+      else {
+        const nums = t.split(/[,\s]+/).map(s => parseInt(s, 10)).filter(n => !isNaN(n) && n >= 1 && n <= allIds.length);
+        selected = nums.map(n => allIds[n - 1]).filter((id): id is string => Boolean(id));
+      }
+      if (!selected.length) {
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 No entendi. Escribi los numeros (ej. *1, 3*) para reemplazar, *todos*, o *renombrar*."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      const crew = (data.crews || []).find((c: any) => String(c.id) === crewId);
+      if (crew) crew.employeeIds = selected;
+      const upE = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ data, updated_at: new Date().toISOString() }) });
+      if (!upE.ok) { fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar (error " + upE.status + "). Proba de nuevo.")); return json({ ok: true, from: inc.from, reply: "" }); }
+      await deleteSession(normalizePhone(inc.from));
+      fireAndForget(sendWhatsApp(inc.from, "\u2705 Cuadrilla " + (crew ? crew.name : "") + " actualizada con " + selected.length + " integrantes."));
+      return json({ ok: true, from: inc.from, reply: "cuadrilla editada" });
+    }
+
+    /* [GADU-WA-CREW] Renombrar cuadrilla (WAITING_CREW_RENAME) */
+    let enWizardCrewRename = false;
+    let crewRenameCtx: Record<string, unknown> = {};
+    try {
+      const sessCR = await getSession(normalizePhone(inc.from));
+      if (sessCR && sessCR.state === "WAITING_CREW_RENAME") { enWizardCrewRename = true; crewRenameCtx = (sessCR.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardCrewRename) {
+      const nuevo = String(inc.text || "").trim();
+      if (!nuevo) { fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Como queres llamarla? Escribi el nuevo nombre.")); return json({ ok: true, from: inc.from, reply: "" }); }
+      const crewId = String(crewRenameCtx.crewId || "");
+      const crew = (data.crews || []).find((c: any) => String(c.id) === crewId);
+      if (crew) crew.name = nuevo;
+      const upR = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ data, updated_at: new Date().toISOString() }) });
+      if (!upR.ok) { fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar (error " + upR.status + "). Proba de nuevo.")); return json({ ok: true, from: inc.from, reply: "" }); }
+      await deleteSession(normalizePhone(inc.from));
+      fireAndForget(sendWhatsApp(inc.from, "\u2705 Cuadrilla renombrada a *" + nuevo + "*."));
+      return json({ ok: true, from: inc.from, reply: "cuadrilla renombrada" });
     }
 
     /* [GADU-WA-ATTENDANCE] Cuadrilla por numeros: "1, 3" o "todos" (WAITING_ATTENDANCE_EMPLOYEES) */
