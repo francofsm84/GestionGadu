@@ -6,7 +6,8 @@
 (function (root) {
   'use strict';
   const G = root.GADU, S = G.store, UI = G.ui;
-  const state = { q: '', filter: 'activos', view: 'tarjetas', tab: 'pagos', upTo: '', page: 'fichas' };
+  const state = { q: '', filter: 'activos', view: 'tarjetas', tab: 'pagos', upTo: '', page: 'fichas', selJornadas: {}, selFinanzas: {} };
+  let currentView2 = null;
 
   G.router.add('empleados', 'empleados', 'Empleados', 'Fichas del personal, control de jornadas y resumen financiero', render);
   G.router.add('empleado', 'empleado/:id', 'Legajo de empleado', 'Historial completo: pagos, adelantos, asistencia y horas', renderDetail);
@@ -51,6 +52,7 @@
   }
 
   function render(view) {
+    currentView2 = view;
     /* Si se llegó desde la ruta #/jornadas, abrir la pestaña correspondiente */
     try { if (G.empleadosOpen && G.empleadosOpen.page && G.empleadosOpen.page !== 'fichas') { state.page = G.empleadosOpen.page; G.empleadosOpen.page = 'fichas'; } } catch (e) {}
 
@@ -219,6 +221,7 @@
     const jornadasMes = S.data.attendance.filter(a => (a.date || '').slice(0, 7) === monthKey && a.status === 'presente').length;
     const horasMes = S.sum(S.data.attendance.filter(a => (a.date || '').slice(0, 7) === monthKey).flatMap(a => (a.hours || []).map(h => h.hours)));
     const att = S.data.attendance.slice().sort((a, b) => b.date.localeCompare(a.date));
+    const allSel = att.length > 0 && att.every(a => state.selJornadas[a.id]);
     return '<section class="kpi-grid kpi-3">' +
       kpi('check-circle', 'violet', 'Presentes hoy', String(presentesHoy), 'Jornadas cargadas para hoy') +
       kpi('calendar', 'info', 'Jornadas este mes', String(jornadasMes), 'Días con asistencia registrada') +
@@ -229,8 +232,9 @@
       '<div class="grow"></div>' +
       '<button class="btn btn-soft-info" id="btnAttJ">' + UI.icon('calendar-plus', 16) + 'Registrar jornada</button>' +
       '</div>' +
+      '<div id="bulkBarJ" class="bulk-bar" hidden></div>' +
       '<div class="card table-card"><div class="table-wrap"><table class="data-table">' +
-      '<thead><tr><th>Fecha</th><th>Empleado</th><th>Estado</th><th>Obra · Horas</th><th>Notas</th><th class="num"></th></tr></thead>' +
+      '<thead><tr><th class="chk"><input type="checkbox" id="selAllJ"' + (allSel ? ' checked' : '') + ' title="Seleccionar todas"></th><th>Fecha</th><th>Empleado</th><th>Estado</th><th>Obra · Horas</th><th>Notas</th><th class="num"></th></tr></thead>' +
       '<tbody>' +
       (att.map(a => {
         const emp = S.employeeById(a.employeeId);
@@ -239,6 +243,7 @@
           return '<div class="split-row" style="gap:8px"><span>' + UI.escapeHtml(w ? w.name : 'General') + '</span><b>' + (Number(h.hours) || 0) + ' hs' + (h.tipo === 'extra' ? ' ⚡' : '') + '</b></div>';
         }).join('');
         return '<tr>' +
+          '<td class="chk"><input type="checkbox" class="row-check-j" data-id="' + a.id + '"' + (state.selJornadas[a.id] ? ' checked' : '') + '></td>' +
           '<td class="muted">' + UI.fmtDate(a.date) + '</td>' +
           '<td><strong>' + UI.escapeHtml(emp ? S.employeeName(emp) : '—') + '</strong></td>' +
           '<td>' + (a.status === 'presente' ? UI.chip('Presente', 'success', 'check-circle') : UI.chip('Ausente', 'neutral', 'x-circle')) + '</td>' +
@@ -248,8 +253,26 @@
           '<button class="icon-btn sm" data-jatt="' + a.id + '" title="Editar">' + UI.icon('edit', 15) + '</button>' +
           '<button class="icon-btn sm danger" data-jdel="' + a.id + '" title="Eliminar">' + UI.icon('trash', 15) + '</button>' +
           '</div></td></tr>';
-      }).join('') || '<tr><td colspan="6">' + UI.emptyState('calendar', 'Sin jornadas todavía', 'Registralas desde acá o por el asistente.') + '</td></tr>') +
+      }).join('') || '<tr><td colspan="7">' + UI.emptyState('calendar', 'Sin jornadas todavía', 'Registralas desde acá o por el asistente.') + '</td></tr>') +
       '</tbody></table></div></div>';
+  }
+
+  function refreshBulkBarJ() {
+    const view = currentView2;
+    const bar = view ? view.querySelector('#bulkBarJ') : null;
+    if (!bar) return;
+    const n = Object.keys(state.selJornadas).filter(id => state.selJornadas[id]).length;
+    bar.hidden = n === 0;
+    bar.innerHTML = n ? '<button class="btn btn-soft-danger" id="btnBulkDelJ">🗑️ Eliminar jornadas seleccionadas (' + n + ')</button>' : '';
+    if (n) bar.querySelector('#btnBulkDelJ').addEventListener('click', async () => {
+      const ids = Object.keys(state.selJornadas).filter(id => state.selJornadas[id]);
+      const ok = await UI.confirm({ title: 'Eliminar jornadas', message: '¿Eliminar <strong>' + ids.length + '</strong> jornada(s)? Esta acción no se puede deshacer.', okLabel: 'Eliminar', tone: 'danger' });
+      if (!ok) return;
+      ids.forEach(id => S.remove('attendance', id));
+      state.selJornadas = {};
+      UI.toast('Eliminadas ' + ids.length + ' jornada(s)');
+      G.router.refresh();
+    });
   }
 
   function bindJornadas(wrap) {
@@ -265,16 +288,33 @@
       const ok = await UI.confirm({ title: 'Eliminar jornada', message: '¿Eliminar esta jornada?', okLabel: 'Eliminar' });
       if (ok) { S.remove('attendance', a.id); UI.toast('Jornada eliminada'); G.router.refresh(); }
     });
+    UI.on(wrap, '.row-check-j', 'change', e => {
+      const id = e.target.closest('.row-check-j').dataset.id;
+      if (e.target.checked) state.selJornadas[id] = true; else delete state.selJornadas[id];
+      const master = wrap.querySelector('#selAllJ');
+      if (master) master.checked = S.data.attendance.length > 0 && S.data.attendance.every(a => state.selJornadas[a.id]);
+      refreshBulkBarJ();
+    });
+    UI.on(wrap, '#selAllJ', 'change', e => {
+      const checked = e.target.checked;
+      S.data.attendance.forEach(a => { if (checked) state.selJornadas[a.id] = true; else delete state.selJornadas[a.id]; });
+      currentView2.innerHTML = '';
+      G.router.refresh();
+    });
+    refreshBulkBarJ();
   }
 
   /* ---------- Pestaña: Resumen Financiero ---------- */
   function finanzasHTML() {
-    const rows = S.data.employees.slice().sort((a, b) => S.employeeName(a).localeCompare(S.employeeName(b))).map(e => {
+    const emps = S.data.employees.slice().sort((a, b) => S.employeeName(a).localeCompare(S.employeeName(b)));
+    const allSel = emps.length > 0 && emps.every(e => state.selFinanzas[e.id]);
+    const rows = emps.map(e => {
       const m = S.employeeMonth(e.id);
       const st = S.employeeStats(e.id);
       const devengado = (m.hours || 0) * (Number(e.hourlyRate) || 0);
       const saldo = devengado - m.salary - m.advances;
       return '<tr>' +
+        '<td class="chk"><input type="checkbox" class="row-check-f" data-id="' + e.id + '"' + (state.selFinanzas[e.id] ? ' checked' : '') + '></td>' +
         '<td><strong>' + UI.escapeHtml(S.employeeName(e)) + '</strong>' + (e.active === false ? ' ' + UI.chip('De baja', 'danger') : '') + '</td>' +
         '<td class="num">' + m.hours + '</td>' +
         '<td class="num pos">' + UI.fmtMoney(st.salary) + '</td>' +
@@ -287,15 +327,59 @@
     }).join('');
     const tSueldos = S.sum(S.data.expenses.filter(x => x.employeeId && x.expenseKind !== 'adelanto').map(x => x.amount));
     const tAdel = S.sum(S.data.expenses.filter(x => x.employeeId && x.expenseKind === 'adelanto').map(x => x.amount));
-    return '<div class="card table-card"><div class="table-wrap"><table class="data-table">' +
-      '<thead><tr><th>Empleado</th><th class="num">Horas mes</th><th class="num">Sueldos</th><th class="num">Adelantos</th><th class="num">Saldo a liquidar</th><th class="num"></th></tr></thead>' +
+    return '<div id="bulkBarF" class="bulk-bar" hidden></div>' +
+      '<div class="card table-card"><div class="table-wrap"><table class="data-table">' +
+      '<thead><tr><th class="chk"><input type="checkbox" id="selAllF"' + (allSel ? ' checked' : '') + ' title="Seleccionar todos"></th><th>Empleado</th><th class="num">Horas mes</th><th class="num">Sueldos</th><th class="num">Adelantos</th><th class="num">Saldo a liquidar</th><th class="num"></th></tr></thead>' +
       '<tbody>' +
-      (rows || '<tr><td colspan="6">' + UI.emptyState('wallet', 'Sin empleados', 'Cargá el primero desde Fichas / Empleados.') + '</td></tr>') +
+      (rows || '<tr><td colspan="7">' + UI.emptyState('wallet', 'Sin empleados', 'Cargá el primero desde Fichas / Empleados.') + '</td></tr>') +
       '</tbody></table></div>' +
       '<div class="table-foot">' +
       '<span>' + S.data.employees.length + ' legajo' + (S.data.employees.length !== 1 ? 's' : '') + '</span>' +
       '<span>Sueldos <b class="pos">' + UI.fmtMoney(tSueldos) + '</b> · Adelantos <b class="warning-text">' + UI.fmtMoney(tAdel) + '</b></span>' +
       '</div></div>';
+  }
+
+  function refreshBulkBarF() {
+    const bar = currentView2 ? currentView2.querySelector('#bulkBarF') : null;
+    if (!bar) return;
+    const n = Object.keys(state.selFinanzas).filter(id => state.selFinanzas[id]).length;
+    bar.hidden = n === 0;
+    bar.innerHTML = n
+      ? '<button class="btn btn-soft-success" id="btnBulkPay">💵 Registrar Pago Masivo (' + n + ')</button> ' +
+        '<button class="btn btn-soft-warning" id="btnBulkAdv">⚡ Registrar Adelanto Masivo (' + n + ')</button>'
+      : '';
+    if (n) {
+      bar.querySelector('#btnBulkPay').addEventListener('click', () => openBulkPay('pago'));
+      bar.querySelector('#btnBulkAdv').addEventListener('click', () => openBulkPay('adelanto'));
+    }
+  }
+
+  function openBulkPay(kind) {
+    const ids = Object.keys(state.selFinanzas).filter(id => state.selFinanzas[id]);
+    if (!ids.length) return;
+    const m = UI.openModal({
+      title: kind === 'adelanto' ? 'Adelanto masivo' : 'Pago masivo',
+      subtitle: 'Se aplicará a <strong>' + ids.length + '</strong> empleado(s) seleccionado(s).',
+      body: '<div class="grid-form"><div class="field span-2"><label>Monto por empleado *</label><input class="input" type="number" id="fBulkAmt" min="0" step="100" placeholder="0"></div></div>',
+      footer: '<button class="btn btn-ghost" data-cancel>Cancelar</button><button class="btn btn-primary" data-save>Aplicar</button>',
+    });
+    m.panel.querySelector('[data-save]').addEventListener('click', () => {
+      const amt = UI.readNum(m.panel.querySelector('#fBulkAmt'));
+      if (!amt || amt <= 0) { UI.toast('Ingresá un monto válido', 'error'); return; }
+      const hoy = S.todayISO();
+      ids.forEach(id => {
+        S.add('expenses', {
+          type: 'general', workId: null, date: hoy, amount: amt, category: 'Sueldos', providerId: null, employeeId: id,
+          description: kind === 'adelanto' ? 'Adelanto' : 'Pago de sueldo', invoiceNumber: '', paymentMethod: 'Efectivo',
+          expenseKind: kind === 'adelanto' ? 'adelanto' : null, source: 'web',
+        });
+      });
+      state.selFinanzas = {};
+      m.close();
+      UI.toast((kind === 'adelanto' ? 'Adelantos' : 'Pagos') + ' registrados (' + ids.length + ')');
+      G.router.refresh();
+    });
+    m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
   }
 
   function bindFinanzas(wrap) {
@@ -307,6 +391,19 @@
       e.stopPropagation();
       G.actions.expense({ type: 'general', employeeId: e.target.closest('[data-fadv]').dataset.fadv, category: 'Sueldos', expenseKind: 'adelanto' });
     });
+    UI.on(wrap, '.row-check-f', 'change', e => {
+      const id = e.target.closest('.row-check-f').dataset.id;
+      if (e.target.checked) state.selFinanzas[id] = true; else delete state.selFinanzas[id];
+      const master = wrap.querySelector('#selAllF');
+      if (master) master.checked = S.data.employees.length > 0 && S.data.employees.every(x => state.selFinanzas[x.id]);
+      refreshBulkBarF();
+    });
+    UI.on(wrap, '#selAllF', 'change', e => {
+      const checked = e.target.checked;
+      S.data.employees.forEach(x => { if (checked) state.selFinanzas[x.id] = true; else delete state.selFinanzas[x.id]; });
+      G.router.refresh();
+    });
+    refreshBulkBarF();
   }
 
   function updateList(view) {
