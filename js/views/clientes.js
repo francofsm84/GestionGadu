@@ -6,7 +6,8 @@
 (function (root) {
   'use strict';
   const G = root.GADU, S = G.store, UI = G.ui;
-  const state = { q: '' };
+  const state = { q: '', view: 'tarjetas', selected: {} };
+  let currentView = null;
 
   G.router.add('clientes', 'clientes', 'Clientes', 'Directorio de clientes: crear, editar y contactar', render);
   G.actions.client = openClientModal;
@@ -28,6 +29,7 @@
   }
 
   function render(view) {
+    currentView = view;
     const all = clients();
     const conActivas = all.filter(c => worksOf(c.id).some(w => w.status === 'activa')).length;
     const cobrado = S.sum(all.map(c => {
@@ -43,14 +45,25 @@
       '</section>' +
       '<div class="toolbar">' +
       '<div class="search">' + UI.icon('search', 16) + '<input id="fq" class="input" placeholder="Buscar por nombre, teléfono, email o dirección…" value="' + UI.escapeHtml(state.q) + '"></div>' +
+      '<div class="seg">' +
+      '<button class="' + (state.view === 'tabla' ? 'active' : '') + '" data-view="tabla">Tabla</button>' +
+      '<button class="' + (state.view === 'tarjetas' ? 'active' : '') + '" data-view="tarjetas">Tarjetas</button>' +
+      '</div>' +
       '<div class="grow"></div>' +
       '<button class="btn btn-primary" id="btnNew">' + UI.icon('plus', 16) + 'Nuevo cliente</button>' +
       '</div>' +
+      '<div id="bulkBar" class="bulk-bar" hidden></div>' +
       '<div id="listWrap">' + listHTML(filtered()) + '</div>';
 
     view.querySelector('#fq').addEventListener('input', e => { state.q = e.target.value; updateList(view); });
     view.querySelector('#btnNew').addEventListener('click', () => openClientModal());
+    view.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => {
+      state.view = b.dataset.view;
+      view.querySelectorAll('[data-view]').forEach(x => x.classList.toggle('active', x.dataset.view === state.view));
+      updateList(view);
+    }));
     bindList(view.querySelector('#listWrap'));
+    refreshBulkBar(view);
   }
 
   function kpi(icon, tone, label, value, sub) {
@@ -67,19 +80,50 @@
     const wrap = view.querySelector('#listWrap');
     wrap.innerHTML = listHTML(filtered());
     bindList(wrap);
+    refreshBulkBar(view);
   }
 
   function listHTML(list) {
     if (!list.length) {
       return '<div class="card">' + UI.emptyState('briefcase', 'No hay clientes que coincidan', 'Probá con otra búsqueda o creá un cliente nuevo.') + '</div>';
     }
+    return state.view === 'tabla' ? tableHTML(list) : cardsHTML(list);
+  }
+
+  function cardsHTML(list) {
     return '<div class="cards-grid">' + list.map(clientCard).join('') + '</div>';
+  }
+
+  function tableHTML(list) {
+    const allSel = list.length > 0 && list.every(c => state.selected[c.id]);
+    return '<div class="card table-card"><div class="table-wrap"><table class="data-table">' +
+      '<thead><tr>' +
+      '<th class="chk"><input type="checkbox" id="selAll"' + (allSel ? ' checked' : '') + ' title="Seleccionar todos"></th>' +
+      '<th>Cliente</th><th>Contacto</th><th>Obras</th><th class="num"></th>' +
+      '</tr></thead>' +
+      '<tbody>' + list.map(clientRow).join('') + '</tbody></table></div></div>';
+  }
+
+  function clientRow(c) {
+    const ws = worksOf(c.id);
+    const activas = ws.filter(w => w.status === 'activa').length;
+    const checked = state.selected[c.id] ? ' checked' : '';
+    return '<tr>' +
+      '<td class="chk"><input type="checkbox" class="row-check" data-id="' + c.id + '"' + checked + '></td>' +
+      '<td><strong>' + UI.escapeHtml(c.name) + '</strong><div class="muted small">' + UI.escapeHtml(c.company || '') + '</div></td>' +
+      '<td>' + (c.phone ? '<div>' + UI.escapeHtml(c.phone) + '</div>' : '') + (c.email ? '<div class="muted small">' + UI.escapeHtml(c.email) + '</div>' : '') + '</td>' +
+      '<td>' + (activas > 0 ? UI.chip(activas + ' activa' + (activas > 1 ? 's' : ''), 'success', 'hard-hat') : UI.chip(ws.length + ' obra' + (ws.length !== 1 ? 's' : ''), 'neutral', 'hard-hat')) + '</td>' +
+      '<td class="num"><button class="icon-btn sm" data-edit="' + c.id + '" title="Editar">' + UI.icon('edit', 15) + '</button>' +
+      '<button class="icon-btn sm danger" data-del="' + c.id + '" title="Eliminar">' + UI.icon('trash', 15) + '</button></td>' +
+      '</tr>';
   }
 
   function clientCard(c) {
     const ws = worksOf(c.id);
     const activas = ws.filter(w => w.status === 'activa').length;
+    const checked = state.selected[c.id] ? ' checked' : '';
     return '<article class="contact-card" data-id="' + c.id + '">' +
+      '<input type="checkbox" class="row-check card-check" data-id="' + c.id + '"' + checked + ' title="Seleccionar">' +
       '<div class="contact-head">' +
       UI.avatar(c.name, 42, c.photo) +
       '<div class="contact-info"><strong>' + UI.escapeHtml(c.name) + '</strong>' +
@@ -98,6 +142,32 @@
       '</div></article>';
   }
 
+  function refreshBulkBar(view) {
+    const bar = view ? view.querySelector('#bulkBar') : null;
+    if (!bar) return;
+    const n = Object.keys(state.selected).filter(id => state.selected[id]).length;
+    bar.hidden = n === 0;
+    bar.innerHTML = n
+      ? '<button class="btn btn-soft-danger" id="btnBulkDel">🗑️ Eliminar seleccionados (' + n + ')</button>'
+      : '';
+    if (n) bar.querySelector('#btnBulkDel').addEventListener('click', bulkDelete);
+  }
+
+  async function bulkDelete() {
+    const ids = Object.keys(state.selected).filter(id => state.selected[id]);
+    if (!ids.length) return;
+    const withWorks = ids.filter(id => worksOf(id).length > 0);
+    const msg = '¿Eliminar <strong>' + ids.length + '</strong> cliente' + (ids.length !== 1 ? 's' : '') + '?' +
+      (withWorks.length ? ' ⚠️ <strong>' + withWorks.length + '</strong> tienen obras vinculadas (quedarán "Sin cliente").' : '') +
+      ' Esta acción no se puede deshacer.';
+    const ok = await UI.confirm({ title: 'Eliminar seleccionados', message: msg, okLabel: 'Eliminar', tone: 'danger' });
+    if (!ok) return;
+    ids.forEach(id => S.remove('contacts', id));
+    state.selected = {};
+    UI.toast('Eliminados ' + ids.length + ' cliente(s)');
+    G.router.refresh();
+  }
+
   function bindList(wrap) {
     UI.on(wrap, '[data-edit]', 'click', e => openClientModal(S.data.contacts.find(c => c.id === e.target.closest('[data-edit]').dataset.edit)));
     UI.on(wrap, '[data-del]', 'click', async e => {
@@ -110,6 +180,20 @@
         okLabel: 'Eliminar',
       });
       if (ok) { S.remove('contacts', c.id); UI.toast('Cliente eliminado'); G.router.refresh(); }
+    });
+    /* Selección múltiple (checkboxes) en tabla y tarjetas */
+    UI.on(wrap, '.row-check', 'change', e => {
+      const cb = e.target.closest('.row-check');
+      const id = cb.dataset.id;
+      if (cb.checked) state.selected[id] = true; else delete state.selected[id];
+      const master = wrap.querySelector('#selAll');
+      if (master) master.checked = filtered().every(c => state.selected[c.id]);
+      refreshBulkBar(currentView);
+    });
+    UI.on(wrap, '#selAll', 'change', e => {
+      const checked = e.target.checked;
+      filtered().forEach(c => { if (checked) state.selected[c.id] = true; else delete state.selected[c.id]; });
+      updateList(currentView);
     });
   }
 
