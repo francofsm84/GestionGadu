@@ -1922,6 +1922,7 @@ const SUBMENUS: Record<string, Array<{ id: string; title: string; description?: 
     { id: "action_nueva_obra", title: "Nueva Obra" },
     { id: "action_presupuesto", title: "Presupuesto" },
     { id: "action_contacto", title: "Nuevo Contacto" },
+    { id: "action_crear_cuadrilla", title: "\u2795 Crear Cuadrilla" },
     { id: "action_asistencia", title: "Registrar Asistencia" },
     { id: "action_humano", title: "Hablar con humano" },
     { id: "menu_root", title: "\uD83C\uDFE0 Volver al menu" },
@@ -2815,6 +2816,11 @@ async function handleButtonReply(from: string, buttonId: string) {
         { id: "contact_role:empleado", title: "Empleado" },
         { id: "menu_root", title: "\uD83C\uDFE0 Volver al menu", description: "Cancelar y volver al inicio" },
       ], { button: "Elegir tipo", sectionTitle: "Contacto" });
+      return;
+    }
+    if (act === "crear_cuadrilla") {
+      await upsertSession(from, userId, "WAITING_CREW_NAME", {});
+      fireAndForget(sendWhatsApp(from, "\uD83D\uDC65 Dale! Escribi el nombre para la nueva cuadrilla (ej. *Cuadrilla de Yeseros*)."));
       return;
     }
     if (act === "asistencia") {
@@ -4189,6 +4195,65 @@ async function processMessage(body: unknown) {
       const empName = String((emp as any).firstName || "") + " " + String((emp as any).lastName || "");
       fireAndForget(sendWhatsApp(inc.from, "\u2705 Jornada registrada: " + empName.trim() + "   " + Number(jorObraCtx.horas) + "h" + (work ? " en " + String((work as any).nombre || (work as any).name || "") : "")));
       return json({ ok: true, from: inc.from, reply: "jornada guardada" });
+    }
+
+    /* [GADU-WA-CREW] Crear cuadrilla paso 1: nombre (WAITING_CREW_NAME) */
+    let enWizardCrewName = false;
+    try {
+      const sessCN = await getSession(normalizePhone(inc.from));
+      if (sessCN && sessCN.state === "WAITING_CREW_NAME") enWizardCrewName = true;
+    } catch (e) {}
+    if (enWizardCrewName) {
+      const nombre = String(inc.text || "").trim();
+      if (!nombre) { fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Como se llama la cuadrilla? (ej. Cuadrilla de Yeseros)")); return json({ ok: true, from: inc.from, reply: "" }); }
+      const emps = (data.employees || []).filter((e: any) => e.active !== false).slice(0, 10);
+      if (!emps.length) {
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 No tenes empleados activos. Carga uno con \"nuevo empleado [nombre]\"."));
+        try { await deleteSession(normalizePhone(inc.from)); } catch (e) {}
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      const lista = emps.map((e: any, i: number) => (i + 1) + ". " + String((e.firstName || "") + " " + (e.lastName || "")).trim()).join("\n");
+      await upsertSession(inc.from, row.user_id, "WAITING_CREW_MEMBERS", { crewName: nombre, employeeIds: emps.map((e: any) => String(e.id)) });
+      fireAndForget(sendWhatsApp(inc.from, "\uD83D\uDC65 Ahora elegi los integrantes de *" + nombre + "*:\n\n" + lista + "\n\nEscribi los numeros separados por coma (ej. *1, 3, 4*) o *todos*."));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* [GADU-WA-CREW] Crear cuadrilla paso 2: integrantes -> guardar (WAITING_CREW_MEMBERS) */
+    let enWizardCrewMembers = false;
+    let crewMembersCtx: Record<string, unknown> = {};
+    try {
+      const sessCM = await getSession(normalizePhone(inc.from));
+      if (sessCM && sessCM.state === "WAITING_CREW_MEMBERS") { enWizardCrewMembers = true; crewMembersCtx = (sessCM.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardCrewMembers) {
+      const t = String(inc.text || "").trim().toLowerCase();
+      const allIds: string[] = Array.isArray(crewMembersCtx.employeeIds) ? (crewMembersCtx.employeeIds as string[]) : [];
+      let selected: string[] = [];
+      if (t === "todos" || t === "todas") selected = allIds.slice();
+      else {
+        const nums = t.split(/[,\s]+/).map(s => parseInt(s, 10)).filter(n => !isNaN(n) && n >= 1 && n <= allIds.length);
+        selected = nums.map(n => allIds[n - 1]).filter((id): id is string => Boolean(id));
+      }
+      if (!selected.length) {
+        fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 No entendi. Escribi los numeros separados por coma (ej. *1, 3, 4*) o *todos*."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      const crewName = String(crewMembersCtx.crewName || "Cuadrilla");
+      (data.crews || (data.crews = [])).unshift({
+        id: crypto.randomUUID(), name: crewName, employeeIds: selected,
+      });
+      const upCrew = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
+      });
+      if (!upCrew.ok) {
+        fireAndForget(sendWhatsApp(inc.from, "\u26A0\uFE0F No pude guardar la cuadrilla en la nube (error " + upCrew.status + "). Proba de nuevo."));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
+      await deleteSession(normalizePhone(inc.from));
+      fireAndForget(sendWhatsApp(inc.from, "\u2705 Cuadrilla " + crewName + " creada con exito con " + selected.length + " empleados! Ya podes usarla para registrar asistencia."));
+      return json({ ok: true, from: inc.from, reply: "cuadrilla creada" });
     }
 
     /* [GADU-WA-ATTENDANCE] Cuadrilla por numeros: "1, 3" o "todos" (WAITING_ATTENDANCE_EMPLOYEES) */
