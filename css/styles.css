@@ -622,9 +622,14 @@ canvas.chart { min-width: 0; max-width: 100%; }
 .impersonate-bar .imp-btn { padding: 7px 12px; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; color: #fff; }
 .impersonate-bar #impActions { background: #4f46e5; }
 .impersonate-bar #impExit { background: #f43f5e; }
-/* Botón flotante de soporte (ayuda) · esquina inferior derecha */
-.support-fab { position: fixed; right: 16px; bottom: 16px; z-index: 9000; width: 54px; height: 54px; border-radius: 50%; background: #0b1020; color: #fff; border: 2px solid #f59e0b; display: grid; place-items: center; font-size: 24px; cursor: pointer; box-shadow: 0 10px 30px rgba(0,0,0,.35); transition: transform .16s ease; }
+/* Botón flotante de soporte (ayuda) · esquina inferior izquierda (no tapa al asistente) */
+.support-fab { position: fixed; left: 16px; bottom: 16px; z-index: 40; width: 54px; height: 54px; border-radius: 50%; background: #0b1020; color: #fff; border: 2px solid #f59e0b; display: grid; place-items: center; font-size: 24px; cursor: pointer; box-shadow: 0 10px 30px rgba(0,0,0,.35); transition: transform .16s ease; }
 .support-fab:hover { transform: scale(1.08); }
+/* Escritorio: desplazar a la derecha del sidebar para no tapar el menú */
+@media (min-width: 1025px) {
+  .support-fab { left: calc(var(--sidebar-w) + 16px); }
+  body.sb-collapsed .support-fab { left: calc(var(--sidebar-w-min) + 16px); }
+}
 /* Ocultar en el panel de administración y en impresión */
 body.on-admin .support-fab { display: none; }
 @media print { .support-fab { display: none !important; } }

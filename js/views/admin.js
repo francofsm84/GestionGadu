@@ -91,7 +91,13 @@
       else if (tab === 'metricas') await tabMetricas(body);
       else await tabAuditoria(body);
     } catch (err) {
-      body.innerHTML = '<div class="card">' + UI.emptyState('alert-triangle', 'No se pudo cargar', ((err && err.message) || err) + '. Verificá que corriste supabase-setup-v3.sql.') + '</div>';
+      /* Quitar el "Cargando…" y mostrar error con botón Reintentar */
+      body.innerHTML = '<div class="card">' +
+        UI.emptyState('alert-triangle', 'Error al cargar usuarios', ((err && err.message) || err) + '. Revisá la consola o verificá que corriste los scripts SQL en Supabase.') +
+        '<p style="text-align:center;margin-top:12px"><button class="btn btn-soft" id="btnRetry">' + UI.icon('activity', 14) + ' Reintentar</button></p>' +
+        '</div>';
+      const rb = body.querySelector('#btnRetry');
+      if (rb) rb.addEventListener('click', () => loadTab(view));
     }
   }
 
@@ -1153,9 +1159,9 @@
   async function tabMetricas(body) {
     const render = async () => {
       body.innerHTML = '<div class="card">' + UI.emptyState('activity', 'Cargando métricas…', '') + '</div>';
-      let m = null, b = null;
-      try { m = await G.api('POST', '/rpc/metricas'); } catch (e) { m = null; }
-      try { b = await G.api('POST', '/rpc/get_business_metrics'); } catch (e) { b = null; }
+      let m = null, b = null, mErr = false, bErr = false;
+      try { m = await G.api('POST', '/rpc/metricas'); } catch (e) { m = null; mErr = true; }
+      try { b = await G.api('POST', '/rpc/get_business_metrics'); } catch (e) { b = null; bErr = true; }
       const porPlan = (m && m.por_plan && typeof m.por_plan === 'object') ? m.por_plan : {};
       const ordenPlanes = ['Free', 'Pro', 'Pyme', 'Empresa'];
       const bm = b || {};
@@ -1176,6 +1182,9 @@
 
       body.innerHTML =
         '<div class="toolbar"><div class="grow"></div><button class="btn btn-soft btn-sm" id="mRefresh">' + UI.icon('activity', 14) + ' Refrescar</button></div>' +
+        (bErr || mErr
+          ? '<div class="card" style="border-left:3px solid var(--warning);margin-bottom:4px"><strong>⚠️ Error al cargar métricas</strong><p class="muted" style="margin:4px 0 0">¿Falta ejecutar el SQL? Corré <code>migrations/business-metrics.sql</code> (y <code>supabase-setup-v3.sql</code> para la RPC <code>metricas</code>) en Supabase y tocá Refrescar.</p></div>'
+          : '') +
         '<section class="kpi-grid kpi-5">' +
         kpi('wallet', 'success', 'MRR (mensual)', UI.fmtMoney(m ? m.mrr : 0), 'Ingresos recurrentes mensuales') +
         kpi('trending-up', 'violet', 'ARR (anual)', UI.fmtMoney(m ? m.arr : 0), 'Ingresos recurrentes anuales') +
