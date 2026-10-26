@@ -275,6 +275,7 @@
         '</div>' +
         '<button class="btn btn-soft-success" id="bWhatsApp" style="margin-top:10px">' + UI.icon('whatsapp', 15) + 'Vincular WhatsApp</button>' +
         '<button class="btn btn-soft" id="bProfile" style="margin-top:10px">' + UI.icon('user', 15) + 'Completar mi perfil (onboarding)</button>' +
+        '<button class="btn btn-soft" id="bFeedback" style="margin-top:10px">🐞 Reportar un problema o sugerencia</button>' +
         '<label class="form-hint" style="display:block;margin-top:10px"><input type="checkbox" id="cAuto"' + (cfg.autoPush ? ' checked' : '') + ' style="accent-color:var(--primary)"> Sincronizar automáticamente cada vez que guardo</label>' +
         '<label class="form-hint" style="display:flex;align-items:center;gap:8px;margin-top:10px">⏰ Horario de recordatorio diario <input type="time" id="fReminder" value="' + UI.escapeHtml((S.data.settings && S.data.settings.reminderTime) || '09:00') + '" style="max-width:130px"></label>' +
         '<p class="form-hint" id="cloudStatus" style="margin-top:8px"></p>' +
@@ -327,6 +328,7 @@
       m.close();
       try { if (G.onboarding && G.onboarding.open) G.onboarding.open(); } catch (e) {}
     });
+    m.panel.querySelector('#bFeedback').addEventListener('click', () => { m.close(); openFeedback(); });
     m.panel.querySelector('#bWhatsApp').addEventListener('click', () => {
       m.close();
       try { if (G.onboarding && G.onboarding.open) G.onboarding.open(); } catch (e) {}
@@ -390,6 +392,32 @@
         try { if (realtimeCleanup) { realtimeCleanup(); realtimeCleanup = null; } } catch (e) {}
         S.attachUser(null);
         location.reload();
+      }
+    });
+  }
+
+  /* ---------- Buzón de Feedback (reportes de usuarios) ---------- */
+  function openFeedback() {
+    const m = UI.openModal({
+      title: '🐞 Reportar un problema o sugerencia',
+      subtitle: 'Tu mensaje llega directo al equipo de GADU.',
+      body:
+        '<textarea class="textarea" id="fbMsg" rows="5" placeholder="Contanos qué pasó, qué te gustaría mejorar o cualquier sugerencia…"></textarea>',
+      footer: '<button class="btn btn-ghost" data-cancel>Cerrar</button><button class="btn btn-primary" id="fbSend">' + UI.icon('mail', 14) + ' Enviar</button>',
+    });
+    m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+    m.panel.querySelector('#fbSend').addEventListener('click', async () => {
+      const message = m.panel.querySelector('#fbMsg').value.trim();
+      if (!message) { UI.toast('Escribí un mensaje', 'error'); return; }
+      const btn = m.panel.querySelector('#fbSend');
+      btn.disabled = true;
+      try {
+        await G.api('POST', '/feedback_reports', { message });
+        UI.toast('✅ ¡Gracias! Recibimos tu reporte.', 'success');
+        m.close();
+      } catch (e) {
+        btn.disabled = false;
+        UI.toast('❌ No se pudo enviar: ' + ((e && e.message) || e), 'error');
       }
     });
   }

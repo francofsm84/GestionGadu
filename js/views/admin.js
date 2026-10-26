@@ -67,7 +67,7 @@
     }
     view.innerHTML =
       '<div class="tabs admin-tabs">' +
-      tabBtn('usuarios', '👥 Usuarios') + tabBtn('planes', '💳 Planes') + tabBtn('licencias', '🎫 Licencias') + tabBtn('soporte', '📞 Soporte') + tabBtn('anuncios', '📢 Anuncios') + tabBtn('salud', '🩺 Salud') + tabBtn('config', '⚙️ Configuración') + tabBtn('metricas', '📊 Métricas') + tabBtn('auditoria', '🧾 Auditoría') +
+      tabBtn('usuarios', '👥 Usuarios') + tabBtn('planes', '💳 Planes') + tabBtn('licencias', '🎫 Licencias') + tabBtn('soporte', '📞 Soporte') + tabBtn('anuncios', '📢 Anuncios') + tabBtn('feedback', '🐞 Feedback') + tabBtn('salud', '🩺 Salud') + tabBtn('config', '⚙️ Configuración') + tabBtn('metricas', '📊 Métricas') + tabBtn('auditoria', '🧾 Auditoría') +
       '</div>' +
       '<div id="adminBody"></div>';
     view.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.t; render(view); }));
@@ -85,6 +85,7 @@
       else if (tab === 'licencias') await tabLicencias(body);
       else if (tab === 'soporte') await tabSoporte(body);
       else if (tab === 'anuncios') await tabAnuncios(body);
+      else if (tab === 'feedback') await tabFeedback(body);
       else if (tab === 'salud') await tabSalud(body);
       else if (tab === 'config') await tabConfig(body);
       else if (tab === 'metricas') await tabMetricas(body);
@@ -963,6 +964,40 @@
       await G.plan.log('credenciales_mp', 'guardadas');
       UI.toast('✅ Credenciales de Mercado Pago guardadas', 'success');
     });
+  }
+
+  /* ---------- Feedback (reportes de usuarios) ---------- */
+  async function tabFeedback(body) {
+    let reports = [];
+    try { reports = await G.api('GET', '/feedback_reports?select=*&order=created_at.desc'); } catch (e) { reports = []; }
+    let profs = [];
+    try { profs = await G.api('GET', '/profiles?select=user_id,email'); } catch (e) { profs = []; }
+    const emailOf = (id) => {
+      const p = profs.find(x => x.user_id === id);
+      return p ? (p.email || id) : id;
+    };
+    const open = reports.filter(r => r.status !== 'closed');
+    body.innerHTML =
+      '<div class="card"><div class="card-head"><div><h3>Reportes de usuarios</h3><p class="muted">' + open.length + ' abierto(s) · ' + reports.length + ' total</p></div></div>' +
+      '<div class="table-wrap"><table class="data-table">' +
+      '<thead><tr><th>Usuario</th><th>Mensaje</th><th>Fecha</th><th>Estado</th><th></th></tr></thead>' +
+      '<tbody>' + (reports.map(r =>
+        '<tr><td class="muted small">' + UI.escapeHtml(emailOf(r.user_id)) + '</td>' +
+        '<td>' + UI.escapeHtml(r.message || '') + '</td>' +
+        '<td class="muted small">' + (r.created_at ? UI.fmtDate(r.created_at) : '—') + '</td>' +
+        '<td>' + UI.chip(r.status === 'open' ? 'Abierto' : 'Resuelto', r.status === 'open' ? 'warning' : 'success') + '</td>' +
+        '<td>' + (r.status !== 'closed' ? '<button class="btn btn-soft btn-sm" data-resolve="' + r.id + '">' + UI.icon('check', 14) + ' Marcar como resuelto</button>' : '') + '</td></tr>'
+      ).join('') || '<tr><td colspan="5">' + UI.emptyState('inbox', 'Sin reportes', '') + '</td></tr>') +
+      '</tbody></table></div></div>';
+    body.querySelectorAll('[data-resolve]').forEach(b => b.addEventListener('click', async () => {
+      try {
+        await G.api('PATCH', '/feedback_reports?id=eq.' + encodeURIComponent(b.dataset.resolve), { status: 'closed' });
+        UI.toast('✅ Reporte marcado como resuelto', 'success');
+        await tabFeedback(body);
+      } catch (err) {
+        UI.toast('❌ No se pudo: ' + ((err && err.message) || err), 'error');
+      }
+    }));
   }
 
   /* ---------- Anuncios (Broadcast) ---------- */
