@@ -302,6 +302,11 @@
       '<div class="field"><label>Plan</label><select class="select" id="lcPlan">' +
       planesPagos.map(p => '<option value="' + p.id + '">' + p.nombre + '</option>').join('') +
       '</select></div>' +
+      '<div class="field"><label>Período</label><select class="select" id="lcPeriodo">' +
+      '<option value="90">Trimestral (90 días)</option>' +
+      '<option value="180">Semestral (180 días)</option>' +
+      '<option value="365">Anual (365 días)</option>' +
+      '</select></div>' +
       '<div class="field"><label>Días de duración</label><input class="input" type="number" id="lcDays" value="90" min="1" readonly></div>' +
       '<div class="field"><label>&nbsp;</label><button class="btn btn-primary" id="lcGen">' + UI.icon('plus', 16) + 'Generar Código</button></div>' +
       '</div></div>' +
@@ -324,11 +329,13 @@
       }).join('') || '<tr><td colspan="7">' + UI.emptyState('inbox', 'Sin códigos', 'Generá el primero desde el formulario de arriba.') + '</td></tr>') +
       '</tbody></table></div></div>';
 
-    /* Autocompletar días (90) según el plan elegido */
+    /* Autocompletar días según el período elegido (90/180/365) */
     const lcPlan = body.querySelector('#lcPlan');
+    const lcPeriodo = body.querySelector('#lcPeriodo');
     const lcDays = body.querySelector('#lcDays');
-    const autoDays = () => { lcDays.value = '90'; };
+    const autoDays = () => { lcDays.value = lcPeriodo.value || '90'; };
     lcPlan.addEventListener('change', autoDays);
+    lcPeriodo.addEventListener('change', autoDays);
     autoDays();
 
     body.querySelector('#lcGen').addEventListener('click', async () => {
@@ -788,7 +795,9 @@
       '<div class="split-row"><strong style="font-size:16px">' + UI.escapeHtml(p.nombre) + '</strong>' +
       '<label class="form-hint"><input type="checkbox" ' + (p.activo ? 'checked' : '') + ' data-activo="' + p.id + '"> activo</label></div>' +
       '<div class="grid-form" style="margin-top:8px">' +
-      '<div class="field"><label>Precio por 90 días ($)</label><input class="input" type="number" data-campo="precio_mensual" data-id="' + p.id + '" value="' + p.precio_mensual + '"></div>' +
+      '<div class="field"><label>Trimestral (90 días) ($)</label><input class="input" type="number" data-campo="precio_mensual" data-id="' + p.id + '" value="' + p.precio_mensual + '"></div>' +
+      '<div class="field"><label>Semestral (180 días) ($)</label><input class="input" type="number" data-campo="precio_semestral" data-id="' + p.id + '" value="' + (p.precio_semestral || 0) + '"></div>' +
+      '<div class="field"><label>Anual (365 días) ($)</label><input class="input" type="number" data-campo="precio_anual" data-id="' + p.id + '" value="' + (p.precio_anual || 0) + '"></div>' +
       '<div class="field"><label>Máx. obras activas</label><input class="input" type="number" data-campo="limite_obras_activas" data-id="' + p.id + '" value="' + p.limite_obras_activas + '"></div>' +
       '<div class="field"><label>Máx. empleados</label><input class="input" type="number" data-campo="limite_empleados" data-id="' + p.id + '" value="' + p.limite_empleados + '"></div>' +
       '</div>' +

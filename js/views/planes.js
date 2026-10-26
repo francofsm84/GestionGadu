@@ -10,6 +10,14 @@
 
   const BOT = G.BOT_PHONE_NUMBER || '5493547665984';
 
+  /* Períodos de facturación: Trimestral / Semestral / Anual */
+  const PERIODOS = [
+    { id: 'trimestral', label: 'Trimestral', dias: 90, campo: 'precio_mensual' },
+    { id: 'semestral', label: 'Semestral', dias: 180, campo: 'precio_semestral' },
+    { id: 'anual', label: 'Anual', dias: 365, campo: 'precio_anual' },
+  ];
+  const state = { periodo: 'trimestral' };
+
   function bannerHTML(days) {
     if (days == null) return '';
     return days > 0
@@ -23,13 +31,15 @@
         '</div>';
   }
 
-  function cardHTML(p, actualId) {
+  function cardHTML(p, actualId, periodo) {
     const esPro = p.id === 'pro';
     const esActual = p.id === actualId;
+    const per = PERIODOS.find(x => x.id === (periodo || 'trimestral')) || PERIODOS[0];
     const trialDias = (G.plan && G.plan.trialDias) ? G.plan.trialDias() : 45;
-    const titulo = ({ free: 'Prueba (' + trialDias + ' días)', pyme: 'PYME (90 días)', pro: 'PRO (90 días)', empresa: 'Empresa (90 días)' })[p.id] || p.nombre;
-    const precio = Number(p.precio_mensual) > 0
-      ? '$' + UI.fmtNum(Number(p.precio_mensual)) + '<span class="muted small">/90 días</span>'
+    const titulo = ({ free: 'Prueba (' + trialDias + ' días)', pyme: 'PYME (' + per.dias + ' días)', pro: 'PRO (' + per.dias + ' días)', empresa: 'Empresa (' + per.dias + ' días)' })[p.id] || p.nombre;
+    const precioValor = Number(p[per.campo] || 0);
+    const precio = precioValor > 0
+      ? '$' + UI.fmtNum(precioValor) + '<span class="muted small">/' + per.dias + ' días</span>'
       : 'Gratis';
     const feats = [
       (p.limite_obras_activas >= 999 ? 'Obras ilimitadas' : p.limite_obras_activas + ' obra' + (Number(p.limite_obras_activas) !== 1 ? 's' : '') + ' activa' + (Number(p.limite_obras_activas) !== 1 ? 's' : '')),
@@ -41,19 +51,27 @@
       '<ul class="plan-feats">' + feats.map(f => '<li>' + UI.escapeHtml(f) + '</li>').join('') + '</ul>' +
       (esActual
         ? '<button class="btn btn-ghost btn-block" disabled>Plan actual</button>'
-        : '<a class="btn ' + (esPro ? 'btn-primary' : 'btn-soft') + ' btn-block" href="https://wa.me/' + BOT + '?text=' + encodeURIComponent('Hola! Quiero suscribirme al plan ' + p.nombre + ' de GADU.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 15) + ' Suscribirme</a>') +
+        : '<a class="btn ' + (esPro ? 'btn-primary' : 'btn-soft') + ' btn-block" href="https://wa.me/' + BOT + '?text=' + encodeURIComponent('Hola, quiero comprar el Plan ' + p.nombre + ' de GADU en formato ' + per.label + '.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 15) + ' Suscribirme</a>') +
       '</div>';
   }
 
-  function fallbackHTML() {
+  function fallbackHTML(periodo) {
     const trialDias = (G.plan && G.plan.trialDias) ? G.plan.trialDias() : 45;
     const cards = [
-      { id: 'free', nombre: 'Prueba (' + trialDias + ' días)', precio_mensual: 0, limite_obras_activas: 999, limite_empleados: 999 },
-      { id: 'pyme', nombre: 'PYME', precio_mensual: 0, limite_obras_activas: 5, limite_empleados: 10 },
-      { id: 'pro', nombre: 'PRO', precio_mensual: 0, limite_obras_activas: 999, limite_empleados: 999 },
-      { id: 'empresa', nombre: 'Empresa', precio_mensual: 0, limite_obras_activas: 999, limite_empleados: 999 },
+      { id: 'free', nombre: 'Prueba (' + trialDias + ' días)', precio_mensual: 0, precio_semestral: 0, precio_anual: 0, limite_obras_activas: 999, limite_empleados: 999 },
+      { id: 'pyme', nombre: 'PYME', precio_mensual: 0, precio_semestral: 0, precio_anual: 0, limite_obras_activas: 5, limite_empleados: 10 },
+      { id: 'pro', nombre: 'PRO', precio_mensual: 0, precio_semestral: 0, precio_anual: 0, limite_obras_activas: 999, limite_empleados: 999 },
+      { id: 'empresa', nombre: 'Empresa', precio_mensual: 0, precio_semestral: 0, precio_anual: 0, limite_obras_activas: 999, limite_empleados: 999 },
     ];
-    return '<div class="plans-grid">' + cards.map(p => cardHTML(p, '')).join('') + '</div>';
+    return '<div class="plans-grid">' + cards.map(p => cardHTML(p, '', periodo)).join('') + '</div>';
+  }
+
+  /* Toggle de período: Trimestral / Semestral / Anual */
+  function periodoToggleHTML() {
+    return '<div class="card" style="margin-bottom:14px;padding:10px 14px">' +
+      '<div class="seg" style="justify-content:center">' +
+      PERIODOS.map(per => '<button class="' + (state.periodo === per.id ? 'active' : '') + '" data-periodo="' + per.id + '">' + per.label + '</button>').join('') +
+      '</div></div>';
   }
 
   function redeemHTML() {
@@ -102,10 +120,15 @@
     if (st === 'trialing' && days != null) banner = bannerHTML(days);
     else if (expired) banner = bannerHTML(0);
 
-    view.innerHTML = redeemHTML() + banner +
+    view.innerHTML = redeemHTML() + banner + periodoToggleHTML() +
       (planes.length
-        ? '<div class="plans-grid">' + planes.map(p => cardHTML(p, actual.id)).join('') + '</div>'
-        : fallbackHTML());
+        ? '<div class="plans-grid">' + planes.map(p => cardHTML(p, actual.id, state.periodo)).join('') + '</div>'
+        : fallbackHTML(state.periodo));
     bindRedeem(view);
+    /* Toggle de período: re-renderiza las tarjetas con el precio del período elegido */
+    view.querySelectorAll('[data-periodo]').forEach(b => b.addEventListener('click', () => {
+      state.periodo = b.dataset.periodo;
+      render(view);
+    }));
   }
 })(typeof window !== 'undefined' ? window : globalThis);
