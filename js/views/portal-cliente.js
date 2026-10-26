@@ -150,16 +150,25 @@
     if (typeof html2pdf === 'undefined') { return; }
     const card = document.getElementById('portalCard');
     if (!card) return;
+    const btn = document.getElementById('btnPdfPortal');
     const filename = 'Avance_' + String(w.name || 'obra').replace(/[^a-z0-9áéíóúñ ]/gi, '').replace(/\s+/g, '_') + '.pdf';
-    /* Captura la tarjeta TAL CUAL la ve el cliente (ancho real + CORS para las fotos) */
+    /* Captura limpia: ocultar el botón + fijar ancho centrado de la tarjeta */
+    if (btn) btn.style.display = 'none';
+    card.classList.add('portal-card-print');
     html2pdf().from(card).set({
-      margin: 6,
+      margin: [10, 10, 10, 10],
       filename,
-      image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: { scale: 2, useCORS: true, windowWidth: card.scrollWidth },
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, windowWidth: card.scrollWidth, logging: false },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['avoid-all', 'css'] },
-    }).save();
+      pagebreak: { mode: ['avoid-all'] },
+    }).save().then(() => {
+      if (btn) btn.style.display = '';
+      card.classList.remove('portal-card-print');
+    }).catch(() => {
+      if (btn) btn.style.display = '';
+      card.classList.remove('portal-card-print');
+    });
   }
 
   G.portal = { render };
