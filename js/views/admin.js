@@ -930,6 +930,7 @@
       '<div class="field span-2"><label>Datos fiscales</label><textarea class="textarea" id="cFis" rows="2">' + UI.escapeHtml(neg.datos_fiscales || '') + '</textarea></div>' +
       '<div class="field"><label>Duración de la Prueba (Días)</label><input class="input" type="number" id="cTrial" min="1" max="365" value="' + (neg.trial_dias || 45) + '"></div>' +
       '<div class="field"><label>Modo mantenimiento</label><label class="form-hint" style="margin-top:7px"><input type="checkbox" id="cMant"' + (neg.modo_mantenimiento ? ' checked' : '') + ' style="accent-color:var(--primary)"> Activo (muestra banner en toda la app)</label></div>' +
+      '<div class="field"><label>Modo Mantenimiento Global</label><label class="form-hint" style="margin-top:7px"><input type="checkbox" id="cMantBot"' + (neg.mantenimiento_activo ? ' checked' : '') + ' style="accent-color:var(--primary)"> 🛠️ Pausa el Bot de WhatsApp</label></div>' +
       '<div class="field span-2"><label>Banner / anuncio global</label><textarea class="textarea" id="cBanner" rows="2" placeholder="Ej.: Nuevas funciones disponibles…">' + UI.escapeHtml(neg.banner_global || '') + '</textarea></div>' +
       '</div>' +
       '<button class="btn btn-primary" id="cSave" style="margin-top:10px">' + UI.icon('check', 15) + 'Guardar configuración</button>' +
@@ -951,6 +952,7 @@
         datos_fiscales: body.querySelector('#cFis').value.trim(),
         trial_dias: Math.max(1, Math.min(365, UI.readNum(body.querySelector('#cTrial')))),
         modo_mantenimiento: body.querySelector('#cMant').checked,
+        mantenimiento_activo: body.querySelector('#cMantBot').checked,
         banner_global: body.querySelector('#cBanner').value.trim(),
       });
       await G.plan.log('configuracion_editada', 'negocio + trial/mantenimiento');

@@ -160,6 +160,21 @@ async function rest(path: string, opts: Record<string, unknown> = {}) {
   return await fetchWithTimeout(supabaseUrl() + "/rest/v1/" + path, { ...opts, headers } as RequestInit);
 }
 
+/* [GADU-MAINTENANCE] Kill switch global: consulta negocio.mantenimiento_activo.
+   Si está en true, el bot responde un mensaje fijo y NO procesa con IA. */
+async function isMaintenanceActive(): Promise<boolean> {
+  try {
+    const res = await rest("negocio?id=eq.1&select=mantenimiento_activo");
+    if (!res.ok) return false;
+    const rows = await res.json().catch(() => []);
+    const neg = Array.isArray(rows) ? rows[0] : null;
+    return !!(neg && neg.mantenimiento_activo);
+  } catch (e) {
+    console.warn("[GADU-MAINTENANCE] error chequeando mantenimiento:", e);
+    return false;
+  }
+}
+
 /* Envío de la respuesta al usuario por WhatsApp (Meta Cloud API).
    Sin token configurado, la respuesta viaja en el body del webhook (útil
    para puentes propios o pruebas). */
@@ -1613,6 +1628,18 @@ async function processMessage(body: unknown) {
     }
     /* Indicador "escribiendo..." mientras el bot procesa */
     fireAndForget(sendTypingOn(resolved.from));
+
+    /* [GADU-MAINTENANCE] Kill switch global: si el mantenimiento está activo,
+       responder el mensaje fijo y cortar sin llamar a la IA. */
+    try {
+      if (await isMaintenanceActive()) {
+        console.log("[GADU-MAINTENANCE] mantenimiento activo → respuesta automática para", resolved.from);
+        await sendWhatsApp(resolved.from, "🛠️ GADU se está actualizando para mejorar. Volvemos en unos minutos.");
+        return json({ ok: true, from: resolved.from, maintenance: true });
+      }
+    } catch (e) {
+      console.warn("[GADU-MAINTENANCE] error en el chequeo:", e);
+    }
 
     /* [GADU-WA-SUPPORT] Soporte humano activo: PRIORITARIO, antes de cualquier
        respuesta automática (menús, estados, audios). Si hay ticket OPEN, anexar
