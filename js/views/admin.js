@@ -125,6 +125,47 @@
   }
 
   /* Auditoría de soporte: ver y corregir los datos de un cliente */
+  /* Historial de versiones de app_data (recuperación ante desastres) */
+  async function openHistory(uid, email) {
+    let snaps = [];
+    try {
+      snaps = await G.api('GET', '/app_data_history?select=id,created_at,data&user_id=eq.' + encodeURIComponent(uid) + '&order=created_at.desc&limit=10');
+    } catch (e) { snaps = []; }
+    const m = UI.openModal({
+      title: 'Historial de ' + UI.escapeHtml(email),
+      subtitle: 'Últimos ' + snaps.length + ' snapshot(s) de app_data',
+      size: 'wide',
+      body: snaps.length
+        ? '<div class="stack" style="gap:8px">' + snaps.map(s =>
+            '<div class="split-row" style="align-items:center">' +
+            '<div class="split-row-main"><strong>📸 ' + (s.created_at ? UI.fmtDate(s.created_at) + ' · ' + new Date(s.created_at).toLocaleTimeString('es-AR') : '—') + '</strong></div>' +
+            '<button class="btn btn-soft btn-sm" data-restore="' + s.id + '">' + UI.icon('check', 14) + ' Restaurar esta versión</button>' +
+            '</div>').join('') + '</div>'
+        : '<p class="form-hint">Sin snapshots todavía. El historial se genera automáticamente con cada actualización de app_data.</p>',
+      footer: '<button class="btn btn-ghost" data-cancel>Cerrar</button>',
+    });
+    m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+    m.panel.querySelectorAll('[data-restore]').forEach(b => b.addEventListener('click', async () => {
+      const snap = snaps.find(s => s.id === b.dataset.restore);
+      if (!snap) return;
+      const ok = await UI.confirm({
+        title: 'Restaurar versión',
+        message: 'Se sobrescribirá el app_data actual de este usuario con el snapshot del <strong>' + UI.escapeHtml(UI.fmtDate(snap.created_at)) + '</strong>. ¿Continuar?',
+        okLabel: 'Restaurar',
+        tone: 'danger',
+      });
+      if (!ok) return;
+      try {
+        await G.api('PATCH', '/app_data?user_id=eq.' + encodeURIComponent(uid), { data: snap.data });
+        await G.plan.log('app_data_restaurado', uid + ' · snapshot ' + (snap.created_at || ''));
+        UI.toast('✅ Versión restaurada', 'success');
+        m.close();
+      } catch (e) {
+        UI.toast('❌ No se pudo restaurar: ' + ((e && e.message) || e), 'error');
+      }
+    }));
+  }
+
   async function openVerDatos(uid, email) {
     const esc = UI.escapeHtml;
     const m = UI.openModal({
@@ -691,6 +732,11 @@
       const u = rows.find(x => x.user_id === uid);
       openVerDatos(uid, u ? u.email : uid);
     }));
+    body.querySelectorAll('[data-history]').forEach(b => b.addEventListener('click', e => {
+      const uid = b.dataset.history;
+      const u = rows.find(x => x.user_id === uid);
+      openHistory(uid, u ? (u.email || uid) : (b.dataset.email || uid));
+    }));
     body.querySelectorAll('[data-delinv]').forEach(b => b.addEventListener('click', async e => {
       await G.api('DELETE', '/invitaciones?email=eq.' + encodeURIComponent(b.dataset.delinv));
       await G.plan.log('invitacion_eliminada', b.dataset.delinv);
@@ -811,6 +857,7 @@
       '<td class="muted small">' + (u.ultima_conexion ? UI.fmtDate(u.ultima_conexion) : '—') + '</td>' +
       '<td><div class="row-actions">' +
       '<button class="icon-btn sm" data-ver="' + u.user_id + '" title="Ver datos / auditar">' + UI.icon('eye', 14) + '</button>' +
+      '<button class="icon-btn sm" data-history="' + u.user_id + '" data-email="' + UI.escapeHtml(u.email || '') + '" title="Ver historial (recuperar versión)">' + UI.icon('clock', 14) + '</button>' +
       (protegido
         ? '<span class="muted small">Acceso total</span>'
         : '<button class="icon-btn sm" data-impersonate="' + u.user_id + '" title="Entrar como usuario (impersonación)">' + UI.icon('lock', 14) + '</button>' +
