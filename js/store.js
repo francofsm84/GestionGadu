@@ -561,6 +561,16 @@
   }
   function inSupportMode() { return _supportBackup !== null; }
 
+  /* Borra el almacén local del usuario actual (IndexedDB + localStorage).
+     Se usa en "Salir de soporte" y "Forzar descarga" para que el próximo
+     arranque haga un pull() limpio desde Supabase. */
+  function clearLocal() {
+    try { storage().del(key); } catch (e) {}
+    try { if (typeof window !== 'undefined') localStorage.removeItem(key); } catch (e) {}
+    data = null;
+    _hasData = false;
+  }
+
   /* ---------- Empezar de cero (datos reales) ---------- */
   function currentSettings() {
     const st = (data && data.settings) || {};
@@ -1061,7 +1071,7 @@
     moveAsset, setAssetStatus, assetUsage, addAttendance,
     CATS_OBRA, CATS_GENERAL, METODOS, WORK_STATUS, ASSET_STATUS, ASSET_CATS, SEGURO_TIPOS, CONTACT_TYPES, BUDGET_STATUS,
     uid, todayISO, parseISO, monthLabel, daysAgo, daysAhead, sum, KEY, attachUser, hasLocalData, hasOnboarded, applyRemote,
-    enterSupportMode, exitSupportMode, inSupportMode,
+    enterSupportMode, exitSupportMode, inSupportMode, clearLocal,
     seguroDaysLeft, seguroEstado,
     /* Getter defensivo: nunca devuelve null (auto-carga/seed) para evitar
        errores del tipo "reading 'incomes'" durante el render inicial. */

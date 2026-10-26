@@ -44,8 +44,10 @@
     return true;
   }
 
-  /* Subir los datos actuales (upsert de la fila del usuario) */
+  /* Subir los datos actuales (upsert de la fila del usuario).
+     En modo soporte (impersonación) NO se sube NADA: read-only estricto. */
   async function push(data) {
+    if (G.impersonate && G.impersonate.isActive && G.impersonate.isActive()) return true;
     const res = await fetchT(baseUrl() + '/app_data?on_conflict=user_id', {
       method: 'POST',
       headers: Object.assign(headers(), { 'Prefer': 'resolution=merge-duplicates' }),

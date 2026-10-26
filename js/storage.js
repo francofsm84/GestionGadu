@@ -34,7 +34,10 @@
     try { return await backend.set(key, value); } catch (e) { return null; }
   }
   async function del(key) {
-    try { await backend.del(key); } catch (e) {}
+    try {
+      if (lf) await lf.removeItem(key);
+      else await lsFallback.del(key);
+    } catch (e) {}
   }
 
   G.storage = { get, set, del, isIDB: !!lf };

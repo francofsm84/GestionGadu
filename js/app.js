@@ -272,7 +272,7 @@
         '<button class="btn btn-soft-success" id="bPush">' + UI.icon('upload') + 'Subir mis datos ahora</button>' +
         '<button class="btn btn-soft-info" id="bPull">' + UI.icon('download') + 'Descargar mis datos</button>' +
         '<button class="btn btn-soft" id="bCloudTest">' + UI.icon('activity') + 'Probar conexión</button>' +
-        '<button class="btn btn-soft-warning" id="bForcePull">🔄 Forzar descarga desde la Nube</button>' +
+        '<button class="btn btn-soft-danger" id="bForcePull">⚠️ Forzar descarga desde la Nube (Reparar)</button>' +
         '</div>' +
         '<button class="btn btn-soft-success" id="bWhatsApp" style="margin-top:10px">' + UI.icon('whatsapp', 15) + 'Vincular WhatsApp</button>' +
         '<button class="btn btn-soft" id="bProfile" style="margin-top:10px">' + UI.icon('user', 15) + 'Completar mi perfil (onboarding)</button>' +
@@ -383,26 +383,19 @@
       }
     });
     m.panel.querySelector('#bForcePull').addEventListener('click', async () => {
-      setStatus('Forzando descarga limpia desde la nube…');
       try {
         const ok = await UI.confirm({
-          title: 'Forzar descarga',
-          message: 'Se reemplazará el caché local de este dispositivo por los datos de la nube. Usalo para recuperar tu información si el caché local quedó corrupto o en $0.',
-          okLabel: 'Forzar descarga',
+          title: 'Forzar descarga (Reparar)',
+          message: 'Se borrará el caché local de este dispositivo y se descargarán tus datos reales desde la nube. Usalo si ves datos vacíos, en $0 o corruptos.',
+          okLabel: 'Borrar y reparar',
           tone: 'danger',
         });
         if (!ok) return;
-        const remote = await G.sync.pull();
-        if (!remote) { setStatus('No hay datos guardados en la nube para recuperar.', false); return; }
-        /* Reemplazo limpio del documento local (descarta caché corrupto) */
-        S.importJSON(JSON.stringify(remote.data));
-        S.data.settings.lastCloudSync = String(remote.updatedAt);
-        S.save();
-        setStatus('✅ Datos recuperados desde la nube.', true);
-        m.close();
-        renderNow();
+        /* 1) Borrar el IndexedDB local · 2) recargar → S.load() + pull() limpio desde Supabase */
+        try { if (S.clearLocal) S.clearLocal(); } catch (e) {}
+        location.reload();
       } catch (err) {
-        setStatus('❌ No se pudo recuperar: ' + ((err && err.message) || err), false);
+        setStatus('❌ No se pudo: ' + ((err && err.message) || err), false);
       }
     });
     m.panel.querySelector('#bLogout').addEventListener('click', async () => {
@@ -1003,9 +996,11 @@
         '<button class="imp-btn" id="impExit" title="Salir del modo soporte">Salir</button>';
       document.body.appendChild(bar);
       bar.querySelector('#impExit').addEventListener('click', () => {
-        /* Restaurar los datos del admin ANTES de recargar, y limpiar la suplantación */
-        try { if (S.exitSupportMode) S.exitSupportMode(); } catch (e) {}
-        try { G.impersonate.clear(); localStorage.removeItem('gadu_impersonate_readonly'); } catch (e) {}
+        /* Salida segura: 1) limpiar el flag, 2) borrar el caché local del admin,
+           3) recargar → pull() limpio desde Supabase. */
+        try { G.impersonate.clear(); } catch (e) {}
+        try { localStorage.removeItem('gadu_impersonate_readonly'); } catch (e) {}
+        try { if (S.clearLocal) S.clearLocal(); } catch (e) {}
         location.hash = '#/dashboard';
         location.reload();
       });
@@ -1082,7 +1077,10 @@
   /* Interceptor global: bloquea acciones de escritura en modo solo lectura */
   function initReadonlyGuard() {
     document.addEventListener('click', e => {
-      if (!isSupportReadonly()) return;
+      /* En modo soporte (impersonación) SIEMPRE es solo lectura: bloquear
+         cualquier acción de escritura y avisar al admin. */
+      const inSupport = !!(G.impersonate && G.impersonate.isActive && G.impersonate.isActive());
+      if (!inSupport) return;
       const el = e.target && e.target.closest ? e.target.closest('button, a, [data-save], [data-del], [data-edit], [data-new], input[type="submit"]') : null;
       if (!el) return;
       const text = (el.textContent || el.getAttribute('aria-label') || el.title || '').toLowerCase();
@@ -1090,7 +1088,7 @@
       if (!write) return;
       e.preventDefault();
       e.stopPropagation();
-      UI.toast('❌ Estás en modo soporte. Desactivá "Solo Lectura" para editar.', 'error');
+      UI.toast('🔒 Modo Soporte: Acción bloqueada', 'error');
     }, true);
   }
 
