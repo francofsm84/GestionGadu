@@ -1151,22 +1151,62 @@
 
   /* ---------- Métricas ---------- */
   async function tabMetricas(body) {
-    const m = await G.api('POST', '/rpc/metricas');
-    const porPlan = (m.por_plan && typeof m.por_plan === 'object') ? m.por_plan : {};
-    const ordenPlanes = ['Free', 'Pro', 'Pyme', 'Empresa'];
-    body.innerHTML =
-      '<section class="kpi-grid kpi-5">' +
-      kpi('wallet', 'success', 'MRR (mensual)', UI.fmtMoney(m.mrr || 0), 'Ingresos recurrentes mensuales') +
-      kpi('trending-up', 'violet', 'ARR (anual)', UI.fmtMoney(m.arr || 0), 'Ingresos recurrentes anuales') +
-      kpi('users', 'info', 'Usuarios', String(m.usuarios || 0), (m.activos || 0) + ' activos') +
-      kpi('hard-hat', 'warning', 'Obras totales', String(m.obras || 0), 'En todo el sistema') +
-      kpi('check-circle', 'success', 'Conversión a pago', (m.conversion != null ? m.conversion : 0) + '%', 'De prueba a plan pago') +
-      '</section>' +
-      '<div class="card">' +
-      '<div class="card-head"><div><h3>Distribución de planes activos</h3><p class="muted">Free · Pro · Pyme · Empresa</p></div></div>' +
-      '<div class="stack">' +
-      ordenPlanes.map(k => '<div class="split-row"><strong>' + k + '</strong><b>' + (porPlan[k] != null ? porPlan[k] : 0) + ' usuarios</b></div>').join('') +
-      '</div></div>';
+    const render = async () => {
+      body.innerHTML = '<div class="card">' + UI.emptyState('activity', 'Cargando métricas…', '') + '</div>';
+      let m = null, b = null;
+      try { m = await G.api('POST', '/rpc/metricas'); } catch (e) { m = null; }
+      try { b = await G.api('POST', '/rpc/get_business_metrics'); } catch (e) { b = null; }
+      const porPlan = (m && m.por_plan && typeof m.por_plan === 'object') ? m.por_plan : {};
+      const ordenPlanes = ['Free', 'Pro', 'Pyme', 'Empresa'];
+      const bm = b || {};
+
+      /* Actividad WhatsApp de los últimos 7 días (agregado en cliente) */
+      let waDays = [];
+      try {
+        const since = new Date(Date.now() - 7 * 86400000).toISOString();
+        const rows = await G.api('GET', '/whatsapp_queue?select=created_at&created_at=gte.' + encodeURIComponent(since) + '&limit=1000');
+        const counts = {};
+        (rows || []).forEach(r => {
+          const d = (r.created_at || '').slice(0, 10);
+          counts[d] = (counts[d] || 0) + 1;
+        });
+        waDays = Object.keys(counts).sort().map(d => ({ day: d, count: counts[d] }));
+      } catch (e) { waDays = []; }
+      const maxWa = waDays.length ? Math.max.apply(null, waDays.map(x => x.count)) : 1;
+
+      body.innerHTML =
+        '<div class="toolbar"><div class="grow"></div><button class="btn btn-soft btn-sm" id="mRefresh">' + UI.icon('activity', 14) + ' Refrescar</button></div>' +
+        '<section class="kpi-grid kpi-5">' +
+        kpi('wallet', 'success', 'MRR (mensual)', UI.fmtMoney(m ? m.mrr : 0), 'Ingresos recurrentes mensuales') +
+        kpi('trending-up', 'violet', 'ARR (anual)', UI.fmtMoney(m ? m.arr : 0), 'Ingresos recurrentes anuales') +
+        kpi('users', 'info', 'Usuarios', String(m ? m.usuarios : 0), (m ? m.activos : 0) + ' activos') +
+        kpi('hard-hat', 'warning', 'Obras totales', String(m ? m.obras : 0), 'En todo el sistema') +
+        kpi('check-circle', 'success', 'Conversión a pago', ((m && m.conversion != null) ? m.conversion : 0) + '%', 'De prueba a plan pago') +
+        '</section>' +
+        '<h4 style="margin:18px 0 8px">Uso de la plataforma</h4>' +
+        '<section class="kpi-grid kpi-5">' +
+        kpi('users', 'info', 'Usuarios Totales', String(bm.total_users || 0), 'registrados') +
+        kpi('activity', 'success', 'Activos Hoy', String(bm.active_users_today || 0), 'modificaron datos hoy') +
+        kpi('hard-hat', 'warning', 'Obras Creadas', String(bm.total_works || 0), 'suma total') +
+        kpi('receipt', 'danger', 'Gastos Cargados', String(bm.total_expenses || 0), 'suma total') +
+        kpi('zap', 'violet', 'Mensajes WA (Hoy)', String(bm.wa_messages_today || 0), 'procesados') +
+        '</section>' +
+        (waDays.length
+          ? '<div class="card" style="margin-top:14px"><div class="card-head"><div><h3>Mensajes WhatsApp · últimos 7 días</h3><p class="muted">' + waDays.reduce((s, x) => s + x.count, 0) + ' mensajes</p></div></div>' +
+            '<div class="stack" style="gap:6px">' + waDays.map(x =>
+              '<div class="split-row"><span class="muted small" style="min-width:90px">' + x.day + '</span>' +
+              '<div style="flex:1;background:var(--border);border-radius:6px;height:14px;margin:0 10px;overflow:hidden"><div style="height:100%;width:' + Math.max(4, Math.round(x.count / maxWa * 100)) + '%;background:var(--primary)"></div></div>' +
+              '<b>' + x.count + '</b></div>').join('') +
+            '</div></div>'
+          : '') +
+        '<div class="card" style="margin-top:14px">' +
+        '<div class="card-head"><div><h3>Distribución de planes activos</h3><p class="muted">Free · Pro · Pyme · Empresa</p></div></div>' +
+        '<div class="stack">' +
+        ordenPlanes.map(k => '<div class="split-row"><strong>' + k + '</strong><b>' + (porPlan[k] != null ? porPlan[k] : 0) + ' usuarios</b></div>').join('') +
+        '</div></div>';
+      body.querySelector('#mRefresh').addEventListener('click', render);
+    };
+    await render();
   }
 
   function kpi(icon, tone, label, value, sub) {
