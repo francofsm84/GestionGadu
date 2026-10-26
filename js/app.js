@@ -277,6 +277,7 @@
         '<button class="btn btn-soft-success" id="bWhatsApp" style="margin-top:10px">' + UI.icon('whatsapp', 15) + 'Vincular WhatsApp</button>' +
         '<button class="btn btn-soft" id="bProfile" style="margin-top:10px">' + UI.icon('user', 15) + 'Completar mi perfil (onboarding)</button>' +
         '<button class="btn btn-soft" id="bFeedback" style="margin-top:10px">🐞 Reportar un problema o sugerencia</button>' +
+        '<button class="btn btn-soft" id="bTrash" style="margin-top:10px">🗑️ Ver Papelera de Reciclaje</button>' +
         '<label class="form-hint" style="display:block;margin-top:10px"><input type="checkbox" id="cAuto"' + (cfg.autoPush ? ' checked' : '') + ' style="accent-color:var(--primary)"> Sincronizar automáticamente cada vez que guardo</label>' +
         '<label class="form-hint" style="display:flex;align-items:center;gap:8px;margin-top:10px">⏰ Horario de recordatorio diario <input type="time" id="fReminder" value="' + UI.escapeHtml((S.data.settings && S.data.settings.reminderTime) || '09:00') + '" style="max-width:130px"></label>' +
         '<p class="form-hint" id="cloudStatus" style="margin-top:8px"></p>' +
@@ -330,6 +331,7 @@
       try { if (G.onboarding && G.onboarding.open) G.onboarding.open(); } catch (e) {}
     });
     m.panel.querySelector('#bFeedback').addEventListener('click', () => { m.close(); openFeedback(); });
+    m.panel.querySelector('#bTrash').addEventListener('click', () => { m.close(); openTrash(); });
     m.panel.querySelector('#bWhatsApp').addEventListener('click', () => {
       m.close();
       try { if (G.onboarding && G.onboarding.open) G.onboarding.open(); } catch (e) {}
@@ -437,6 +439,50 @@
         UI.toast('❌ No se pudo enviar: ' + ((e && e.message) || e), 'error');
       }
     });
+  }
+
+  /* ---------- Papelera de Reciclaje ---------- */
+  function openTrash() {
+    const render = () => {
+      const trash = S.data.trash || [];
+      m.panel.querySelector('#trashBody').innerHTML = trash.length
+        ? '<div class="stack" style="gap:8px">' + trash.map(t => {
+            const d = S.describeItem ? S.describeItem(t.collection, t.item) : { tipo: String(t.collection), detalle: '' };
+            return '<div class="split-row" style="align-items:center">' +
+              '<div class="split-row-main"><strong>' + UI.escapeHtml(d.tipo) + '</strong>' +
+              '<span class="muted small">' + UI.escapeHtml(d.detalle || '—') + ' · ' + UI.escapeHtml(t.deletedAt ? UI.fmtDate(t.deletedAt) : '') + '</span></div>' +
+              '<button class="btn btn-soft btn-sm" data-restore="' + t.id + '">🔄 Restaurar</button>' +
+              '</div>';
+          }).join('') + '</div>'
+        : UI.emptyState('inbox', 'Papelera vacía', 'No hay elementos borrados.');
+      m.panel.querySelectorAll('[data-restore]').forEach(b => b.addEventListener('click', () => {
+        if (S.restore(b.dataset.restore)) {
+          UI.toast('✅ Elemento restaurado correctamente', 'success');
+          render();
+        } else {
+          UI.toast('❌ No se pudo restaurar', 'error');
+        }
+      }));
+      const emptyBtn = m.panel.querySelector('#trashEmpty');
+      emptyBtn.hidden = !trash.length;
+    };
+    const m = UI.openModal({
+      title: '🗑️ Papelera de Reciclaje',
+      subtitle: 'Recuperá registros que borraste por error.',
+      size: 'wide',
+      body: '<div id="trashBody"></div>',
+      footer: '<button class="btn btn-soft-danger" id="trashEmpty" style="margin-right:auto">Vaciar Papelera</button><button class="btn btn-ghost" data-cancel>Cerrar</button>',
+    });
+    m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+    m.panel.querySelector('#trashEmpty').addEventListener('click', async () => {
+      const ok = await UI.confirm({ title: 'Vaciar Papelera', message: 'Se eliminarán definitivamente todos los elementos de la papelera. Esta acción no se puede deshacer.', okLabel: 'Vaciar', tone: 'danger' });
+      if (!ok) return;
+      if (S.emptyTrash()) {
+        UI.toast('✅ Papelera vaciada', 'success');
+        render();
+      }
+    });
+    render();
   }
 
   /* ---------- Sesión, plan y arranque (SaaS) ---------- */

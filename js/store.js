@@ -720,6 +720,13 @@
     syncNow();
     return true;
   }
+  function emptyTrash() {
+    if (!data.trash || !data.trash.length) return false;
+    data.trash = [];
+    save();
+    syncNow();
+    return true;
+  }
 
   /* Sincronización inmediata con la nube (sin esperar el debounce de save):
      garantiza que el borrado/restauración llegue a Supabase ya. */
@@ -1064,7 +1071,7 @@
 
   G.store = {
     load, save, reset, exportJSON, importJSON, reload, startReal, startEmpty,
-    add, update, remove, restore, removeWork, removeEmployee, nextCode,
+    add, update, remove, restore, emptyTrash, describeItem, removeWork, removeEmployee, nextCode,
     workStats, totals, totalsBetween, monthlySeries, expenseDistribution, distributionSummary, socios, splitsFor, contactById,
     employeeById, employeeName, attendanceFor, employeePayments, employeeStats, employeeMonth, employeeAdvances, employeeAdvancesThisMonth, employeeAccumulated, presentToday, employeesPaidThisMonth,
     workClientAdvances, workEmployeeAdvances, workEmployees,
