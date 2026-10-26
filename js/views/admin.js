@@ -795,11 +795,14 @@
       '<div class="split-row"><strong style="font-size:16px">' + UI.escapeHtml(p.nombre) + '</strong>' +
       '<label class="form-hint"><input type="checkbox" ' + (p.activo ? 'checked' : '') + ' data-activo="' + p.id + '"> activo</label></div>' +
       '<div class="grid-form" style="margin-top:8px">' +
-      '<div class="field"><label>Trimestral (90 días) ($)</label><input class="input" type="number" data-campo="precio_mensual" data-id="' + p.id + '" value="' + p.precio_mensual + '"></div>' +
-      '<div class="field"><label>Semestral (180 días) ($)</label><input class="input" type="number" data-campo="precio_semestral" data-id="' + p.id + '" value="' + (p.precio_semestral || 0) + '"></div>' +
-      '<div class="field"><label>Anual (365 días) ($)</label><input class="input" type="number" data-campo="precio_anual" data-id="' + p.id + '" value="' + (p.precio_anual || 0) + '"></div>' +
+      '<div class="field"><label>Nombre</label><input class="input" data-campo="nombre" data-id="' + p.id + '" value="' + UI.escapeHtml(p.nombre) + '"></div>' +
+      '<div class="field"><label>Vigencia (días)</label><input class="input" type="number" data-campo="dias_vigencia" data-id="' + p.id + '" value="' + (p.dias_vigencia || 90) + '"></div>' +
+      '<div class="field"><label>Precio Trimestral (90 días) ($)</label><input class="input" type="number" data-campo="precio_mensual" data-id="' + p.id + '" value="' + p.precio_mensual + '"></div>' +
+      '<div class="field"><label>Precio Semestral (180 días) ($)</label><input class="input" type="number" data-campo="precio_semestral" data-id="' + p.id + '" value="' + (p.precio_semestral || 0) + '"></div>' +
+      '<div class="field"><label>Precio Anual (365 días) ($)</label><input class="input" type="number" data-campo="precio_anual" data-id="' + p.id + '" value="' + (p.precio_anual || 0) + '"></div>' +
       '<div class="field"><label>Máx. obras activas</label><input class="input" type="number" data-campo="limite_obras_activas" data-id="' + p.id + '" value="' + p.limite_obras_activas + '"></div>' +
       '<div class="field"><label>Máx. empleados</label><input class="input" type="number" data-campo="limite_empleados" data-id="' + p.id + '" value="' + p.limite_empleados + '"></div>' +
+      '<div class="field"><label>Destacado ("Más elegido")</label><label class="form-hint" style="margin-top:7px"><input type="checkbox" data-campo="destacado" data-id="' + p.id + '" ' + (p.destacado ? 'checked' : '') + '> Destacar plan</label></div>' +
       '</div>' +
       '<button class="btn btn-soft btn-sm" data-save="' + p.id + '" style="margin-top:8px">' + UI.icon('check', 14) + 'Guardar</button>' +
       '</div>').join('') + '</div>';
@@ -807,13 +810,18 @@
     body.querySelectorAll('[data-save]').forEach(b => b.addEventListener('click', async e => {
       const id = b.dataset.save;
       const patch = {};
-      body.querySelectorAll('[data-campo][data-id="' + id + '"]').forEach(inp => { patch[inp.dataset.campo] = UI.readNum(inp); });
+      body.querySelectorAll('[data-campo][data-id="' + id + '"]').forEach(inp => {
+        const campo = inp.dataset.campo;
+        if (campo === 'nombre') patch[campo] = inp.value.trim();
+        else if (inp.type === 'checkbox') patch[campo] = inp.checked;
+        else patch[campo] = UI.readNum(inp);
+      });
       const btn = b;
       btn.disabled = true;
       try {
         await G.api('PATCH', '/planes?id=eq.' + encodeURIComponent(id), patch);
         await G.plan.log('plan_editado', id);
-        UI.toast('✅ Plan "' + id + '" guardado', 'success');
+        UI.toast('✅ Plan "' + (patch.nombre || id) + '" guardado', 'success');
         await tabPlanes(body);   // recarga la vista con los valores persistidos
       } catch (err) {
         UI.toast('❌ No se pudo guardar: ' + ((err && err.message) || err), 'error');

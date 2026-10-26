@@ -32,7 +32,7 @@
   }
 
   function cardHTML(p, actualId, periodo) {
-    const esPro = p.id === 'pro';
+    const destacado = !!p.destacado;
     const esActual = p.id === actualId;
     const per = PERIODOS.find(x => x.id === (periodo || 'trimestral')) || PERIODOS[0];
     const trialDias = (G.plan && G.plan.trialDias) ? G.plan.trialDias() : 45;
@@ -46,12 +46,12 @@
       (p.limite_empleados >= 999 ? 'Empleados ilimitados' : p.limite_empleados + ' empleados'),
     ];
     return '<div class="card plan-card' + (esActual ? ' plan-card-actual' : '') + '">' +
-      '<div class="split-row"><strong>' + UI.escapeHtml(titulo) + '</strong>' + (esPro ? UI.chip('Más elegido', 'info') : '') + '</div>' +
+      '<div class="split-row"><strong>' + UI.escapeHtml(titulo) + '</strong>' + (destacado ? UI.chip('Más elegido', 'info') : '') + '</div>' +
       '<div class="plan-price">' + precio + '</div>' +
       '<ul class="plan-feats">' + feats.map(f => '<li>' + UI.escapeHtml(f) + '</li>').join('') + '</ul>' +
       (esActual
         ? '<button class="btn btn-ghost btn-block" disabled>Plan actual</button>'
-        : '<a class="btn ' + (esPro ? 'btn-primary' : 'btn-soft') + ' btn-block" href="https://wa.me/' + BOT + '?text=' + encodeURIComponent('Hola, quiero comprar el Plan ' + p.nombre + ' de GADU en formato ' + per.label + '.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 15) + ' Suscribirme</a>') +
+        : '<a class="btn ' + (destacado ? 'btn-primary' : 'btn-soft') + ' btn-block" href="https://wa.me/' + BOT + '?text=' + encodeURIComponent('Hola, quiero comprar el Plan ' + p.nombre + ' de GADU en formato ' + per.label + '.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 15) + ' Suscribirme</a>') +
       '</div>';
   }
 
