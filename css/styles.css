@@ -302,6 +302,8 @@ body.sb-collapsed .main { margin-left: var(--sidebar-w-min); }
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 16px; display: flex; gap: 13px; align-items: flex-start; box-shadow: var(--shadow-sm); min-width: 0;
 }
+/* Alerta visual de atasco (Salud del Sistema) */
+.kpi-warn { border-color: var(--warning, #f59e0b) !important; box-shadow: 0 0 0 1px var(--warning, #f59e0b); }
 /* Tarjetas KPI clickeables (Dashboard): cursor puntero + hover sutil */
 .kpi-link { text-decoration: none; color: inherit; cursor: pointer; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
 .kpi-link:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg, 0 10px 30px rgba(0,0,0,.18)); border-color: var(--primary, #4f46e5); }

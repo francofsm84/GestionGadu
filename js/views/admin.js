@@ -67,7 +67,7 @@
     }
     view.innerHTML =
       '<div class="tabs admin-tabs">' +
-      tabBtn('usuarios', '👥 Usuarios') + tabBtn('planes', '💳 Planes') + tabBtn('licencias', '🎫 Licencias') + tabBtn('soporte', '📞 Soporte') + tabBtn('anuncios', '📢 Anuncios') + tabBtn('config', '⚙️ Configuración') + tabBtn('metricas', '📊 Métricas') + tabBtn('auditoria', '🧾 Auditoría') +
+      tabBtn('usuarios', '👥 Usuarios') + tabBtn('planes', '💳 Planes') + tabBtn('licencias', '🎫 Licencias') + tabBtn('soporte', '📞 Soporte') + tabBtn('anuncios', '📢 Anuncios') + tabBtn('salud', '🩺 Salud') + tabBtn('config', '⚙️ Configuración') + tabBtn('metricas', '📊 Métricas') + tabBtn('auditoria', '🧾 Auditoría') +
       '</div>' +
       '<div id="adminBody"></div>';
     view.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.t; render(view); }));
@@ -85,6 +85,7 @@
       else if (tab === 'licencias') await tabLicencias(body);
       else if (tab === 'soporte') await tabSoporte(body);
       else if (tab === 'anuncios') await tabAnuncios(body);
+      else if (tab === 'salud') await tabSalud(body);
       else if (tab === 'config') await tabConfig(body);
       else if (tab === 'metricas') await tabMetricas(body);
       else await tabAuditoria(body);
@@ -1028,6 +1029,40 @@
         UI.toast('❌ No se pudo enviar: ' + ((err && err.message) || err), 'error');
       }
     });
+  }
+
+  /* ---------- Salud del Sistema ---------- */
+  async function tabSalud(body) {
+    const render = async () => {
+      body.innerHTML = '<div class="card">' + UI.emptyState('activity', 'Cargando salud…', '') + '</div>';
+      let h = null;
+      try { h = await G.api('POST', '/rpc/get_system_health'); } catch (e) { h = null; }
+      if (!h) {
+        body.innerHTML = '<div class="card">' + UI.emptyState('alert-triangle', 'No se pudo cargar', 'Verificá que corriste get_system_health.sql.') + '</div>';
+        return;
+      }
+      const dbSize = Number(h.db_size_mb || 0);
+      const queuePending = Number(h.queue_pending || 0);
+      const queueProcessing = Number(h.queue_processing || 0);
+      const pushTokens = Number(h.push_tokens || 0);
+      const broadcastsToday = Number(h.broadcasts_today || 0);
+      const colaAtascada = queuePending > 10;
+      const colgados = queueProcessing > 0;
+      body.innerHTML =
+        '<div class="toolbar"><div class="grow"></div>' +
+        '<button class="btn btn-soft btn-sm" id="saludRefresh">' + UI.icon('activity', 14) + ' Refrescar</button></div>' +
+        '<section class="kpi-grid kpi-4">' +
+        '<div class="kpi-card"><span class="kpi-ico kpi-violet">' + UI.icon('database', 20) + '</span><div class="kpi-body"><span class="kpi-label">Base de Datos</span><strong class="kpi-value">' + dbSize.toFixed(1) + ' MB</strong><span class="kpi-sub">Tamaño total</span></div></div>' +
+        '<div class="kpi-card' + (colaAtascada ? ' kpi-warn' : '') + '"><span class="kpi-ico kpi-' + (colaAtascada ? 'danger' : 'warning') + '">' + UI.icon('inbox', 20) + '</span><div class="kpi-body"><span class="kpi-label">Cola de WhatsApp</span><strong class="kpi-value">' + queuePending + '</strong><span class="kpi-sub">' + queueProcessing + ' en proceso' + (colaAtascada ? ' · ⚠️ atasco' : '') + '</span></div></div>' +
+        '<div class="kpi-card"><span class="kpi-ico kpi-info">' + UI.icon('zap', 20) + '</span><div class="kpi-body"><span class="kpi-label">Suscripciones Push</span><strong class="kpi-value">' + pushTokens + '</strong><span class="kpi-sub">tokens activos</span></div></div>' +
+        '<div class="kpi-card"><span class="kpi-ico kpi-success">' + UI.icon('mail', 20) + '</span><div class="kpi-body"><span class="kpi-label">Anuncios de hoy</span><strong class="kpi-value">' + broadcastsToday + '</strong><span class="kpi-sub">enviados</span></div></div>' +
+        '</section>' +
+        (colgados
+          ? '<div class="card" style="border-left:3px solid var(--danger);margin-top:14px"><strong>⚠️ Mensajes colgados</strong><p class="muted" style="margin:4px 0 0">Hay ' + queueProcessing + ' mensaje(s) en estado <b>processing</b>. Revisá la cola de WhatsApp.</p></div>'
+          : '');
+      body.querySelector('#saludRefresh').addEventListener('click', render);
+    };
+    await render();
   }
 
   /* ---------- Métricas ---------- */
