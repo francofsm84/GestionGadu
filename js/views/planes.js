@@ -35,8 +35,8 @@
     const destacado = !!p.destacado;
     const esActual = p.id === actualId;
     const per = PERIODOS.find(x => x.id === (periodo || 'trimestral')) || PERIODOS[0];
-    const trialDias = (G.plan && G.plan.trialDias) ? G.plan.trialDias() : 45;
-    const titulo = ({ free: 'Prueba (' + trialDias + ' días)', pyme: 'PYME (' + per.dias + ' días)', pro: 'PRO (' + per.dias + ' días)', empresa: 'Empresa (' + per.dias + ' días)' })[p.id] || p.nombre;
+    /* Título limpio: solo el nombre del plan (los días van en el precio) */
+    const titulo = p.nombre || ({ free: 'Prueba', pyme: 'PYME', pro: 'PRO', empresa: 'Empresa' })[p.id] || 'Plan';
     const precioValor = Number(p[per.campo] || 0);
     const precio = precioValor > 0
       ? '$' + UI.fmtNum(precioValor) + '<span class="muted small">/' + per.dias + ' días</span>'
@@ -51,14 +51,13 @@
       '<ul class="plan-feats">' + feats.map(f => '<li>' + UI.escapeHtml(f) + '</li>').join('') + '</ul>' +
       (esActual
         ? '<button class="btn btn-ghost btn-block" disabled>Plan actual</button>'
-        : '<a class="btn ' + (destacado ? 'btn-primary' : 'btn-soft') + ' btn-block" href="https://wa.me/' + BOT + '?text=' + encodeURIComponent('Hola, quiero comprar el Plan ' + p.nombre + ' de GADU en formato ' + per.label + '.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 15) + ' Suscribirme</a>') +
+        : '<a class="btn ' + (destacado ? 'btn-primary' : 'btn-soft') + ' btn-block" href="https://wa.me/' + BOT + '?text=' + encodeURIComponent('Hola, quiero comprar el Plan ' + titulo + ' de GADU en formato ' + per.label + '.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 15) + ' Suscribirme</a>') +
       '</div>';
   }
 
   function fallbackHTML(periodo) {
-    const trialDias = (G.plan && G.plan.trialDias) ? G.plan.trialDias() : 45;
     const cards = [
-      { id: 'free', nombre: 'Prueba (' + trialDias + ' días)', precio_mensual: 0, precio_semestral: 0, precio_anual: 0, limite_obras_activas: 999, limite_empleados: 999 },
+      { id: 'free', nombre: 'Prueba', precio_mensual: 0, precio_semestral: 0, precio_anual: 0, limite_obras_activas: 999, limite_empleados: 999 },
       { id: 'pyme', nombre: 'PYME', precio_mensual: 0, precio_semestral: 0, precio_anual: 0, limite_obras_activas: 5, limite_empleados: 10 },
       { id: 'pro', nombre: 'PRO', precio_mensual: 0, precio_semestral: 0, precio_anual: 0, limite_obras_activas: 999, limite_empleados: 999 },
       { id: 'empresa', nombre: 'Empresa', precio_mensual: 0, precio_semestral: 0, precio_anual: 0, limite_obras_activas: 999, limite_empleados: 999 },
