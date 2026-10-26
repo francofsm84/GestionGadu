@@ -701,11 +701,31 @@
       const valor = sel.value;
       updateUser(uid, { [campo]: valor });
     }));
-    body.querySelectorAll('[data-trial]').forEach(b => b.addEventListener('click', e => {
+    body.querySelectorAll('[data-trial]').forEach(b => b.addEventListener('click', async e => {
       const uid = b.dataset.trial;
-      const nueva = new Date(Date.now() + 15 * 86400000).toISOString();
-      updateUser(uid, { trial_end: nueva, trial_ends_at: nueva });
-      UI.toast('Prueba extendida +15 días');
+      const u = rows.find(x => x.user_id === uid);
+      /* Sumar +10 días a la fecha de prueba ACTUAL (si no hay, desde hoy) */
+      const baseRaw = u ? (u.trial_ends_at || u.trial_end) : '';
+      const base = baseRaw ? new Date(baseRaw) : new Date();
+      const nueva = new Date((isNaN(base.getTime()) ? Date.now() : base.getTime()) + 10 * 86400000).toISOString();
+      await updateUser(uid, { trial_end: nueva, trial_ends_at: nueva });
+      UI.toast('✅ Se sumaron 10 días de prueba a ' + (u ? (u.email || uid) : uid));
+      tabUsuarios(body);
+    }));
+    /* Impersonación: guardar el id en localStorage y recargar la app como ese usuario */
+    body.querySelectorAll('[data-impersonate]').forEach(b => b.addEventListener('click', async e => {
+      const uid = b.dataset.impersonate;
+      const u = rows.find(x => x.user_id === uid);
+      const ok = await UI.confirm({
+        title: 'Entrar como usuario',
+        message: 'Vas a ver la app como <strong>' + UI.escapeHtml(u ? (u.email || uid) : uid) + '</strong>. Podrás salir con el botón flotante "Salir de Impersonación".',
+        okLabel: 'Entrar',
+      });
+      if (!ok) return;
+      try { localStorage.setItem('gadu_impersonate', uid); } catch (e2) {}
+      await G.plan.log('impersonacion_iniciada', uid);
+      location.hash = '#/dashboard';
+      location.reload();
     }));
     body.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', e => {
       const uid = b.dataset.toggle;
@@ -790,7 +810,8 @@
       '<button class="icon-btn sm" data-ver="' + u.user_id + '" title="Ver datos / auditar">' + UI.icon('eye', 14) + '</button>' +
       (protegido
         ? '<span class="muted small">Acceso total</span>'
-        : '<button class="icon-btn sm" data-trial="' + u.user_id + '" title="Extender trial +15 días">' + UI.icon('calendar-plus', 14) + '</button>' +
+        : '<button class="icon-btn sm" data-impersonate="' + u.user_id + '" title="Entrar como usuario (impersonación)">' + UI.icon('lock', 14) + '</button>' +
+          '<button class="icon-btn sm" data-trial="' + u.user_id + '" title="Sumar +10 días de prueba">' + UI.icon('calendar-plus', 14) + '</button>' +
           '<button class="icon-btn sm" data-toggle="' + u.user_id + '" data-estado="' + u.estado_cuenta + '" title="Activar/Suspender">' + UI.icon(u.estado_cuenta === 'activo' ? 'pause' : 'play', 14) + '</button>' +
           '<button class="icon-btn sm danger" data-del="' + u.user_id + '" title="Eliminar">' + UI.icon('trash', 14) + '</button>') +
       '</div></td></tr>';

@@ -8,6 +8,14 @@
   'use strict';
   const G = root.GADU = root.GADU || {};
 
+  /* Impersonación (solo lectura): el admin ve la app como un usuario.
+     El flag se setea desde el panel Admin y la app carga los datos de ese id. */
+  G.impersonate = {
+    uid: () => { try { return localStorage.getItem('gadu_impersonate') || null; } catch (e) { return null; } },
+    isActive: () => !!G.impersonate.uid(),
+    clear: () => { try { localStorage.removeItem('gadu_impersonate'); } catch (e) {} },
+  };
+
   function baseUrl() {
     return G.auth.SUPABASE_URL + '/rest/v1';
   }
@@ -55,9 +63,11 @@
     return true;
   }
 
-  /* Descargar los datos del usuario desde la nube (null si no hay) */
+  /* Descargar los datos del usuario desde la nube (null si no hay).
+     En modo impersonación, carga los datos del usuario impersonado. */
   async function pull() {
-    const uid = G.auth.getSession() ? G.auth.getSession().userId : null;
+    const impUid = (G.impersonate && G.impersonate.uid()) || null;
+    const uid = impUid || (G.auth.getSession() ? G.auth.getSession().userId : null);
     const url = baseUrl() + '/app_data?select=data,updated_at&user_id=eq.' + encodeURIComponent(uid || '') + '&limit=1';
     const res = await fetchT(url, { headers: headers() });
     if (notAuthed(res)) {

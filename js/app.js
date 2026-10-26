@@ -935,6 +935,25 @@
     } catch (e) {}
   }
 
+  /* Botón flotante "Salir de Impersonación" (visible solo si el admin está viendo como otro usuario) */
+  function initImpersonationExit() {
+    try {
+      if (!G.impersonate || !G.impersonate.isActive()) return;
+      if (document.getElementById('impersonationExit')) return;
+      const btn = document.createElement('button');
+      btn.id = 'impersonationExit';
+      btn.className = 'impersonate-exit';
+      btn.innerHTML = '🔑 Salir de Impersonación';
+      btn.title = 'Volver a tu cuenta de administrador';
+      btn.addEventListener('click', () => {
+        try { G.impersonate.clear(); } catch (e) {}
+        location.hash = '#/dashboard';
+        location.reload();
+      });
+      document.body.appendChild(btn);
+    } catch (e) {}
+  }
+
   async function startApp() {
     const sess = G.auth.getSession();
     if (!sess) { renderLogin('login'); return; }
@@ -945,6 +964,7 @@
     document.body.classList.remove('no-session');
     const lr = document.getElementById('loginRoot');
     if (lr) lr.remove();
+    initImpersonationExit();
 
     /* ===== Render INMEDIATO del Dashboard con los datos LOCALES =====
        Evita el flash de $0: los montos reales aparecen al instante.
