@@ -42,9 +42,17 @@
     return txt ? JSON.parse(txt) : null;
   }
 
+  /* Días de prueba configurados (dinámicos desde public.negocio.trial_dias) */
+  function trialDias() { return Number((G.config.negocio && G.config.negocio.trial_dias) || 45); }
+
   async function load() {
     const sess = G.auth.getSession();
     const uid = sess ? sess.userId : null;
+    /* Cargar la config de negocio ANTES del fallback de perfil (días de prueba dinámicos) */
+    try {
+      const neg = await api('GET', '/negocio?id=eq.1');
+      G.config.negocio = (neg && neg[0]) || {};
+    } catch (e) { G.config.negocio = {}; }
     try {
       const rows = await api('GET', '/profiles?select=*&user_id=eq.' + encodeURIComponent(uid));
       profile = (rows && rows[0]) || null;
@@ -53,6 +61,7 @@
     if (!profile && uid) {
       try {
         const email = (sess && sess.email) || '';
+        const dias = trialDias();
         await api('POST', '/profiles?on_conflict=user_id', {
           user_id: uid,
           email: email,
@@ -63,8 +72,8 @@
           empresa: '',
           subscription_status: 'trialing',
           estado_cuenta: 'activo',
-          trial_end: new Date(Date.now() + 45 * 86400000).toISOString(),
-          trial_ends_at: new Date(Date.now() + 45 * 86400000).toISOString(),
+          trial_end: new Date(Date.now() + dias * 86400000).toISOString(),
+          trial_ends_at: new Date(Date.now() + dias * 86400000).toISOString(),
         });
         const rows2 = await api('GET', '/profiles?select=*&user_id=eq.' + encodeURIComponent(uid));
         profile = (rows2 && rows2[0]) || null;
@@ -73,10 +82,6 @@
     try {
       planes = (await api('GET', '/planes?select=*&activo=eq.true&order=orden.asc')) || [];
     } catch (e) { planes = []; }
-    try {
-      const neg = await api('GET', '/negocio?id=eq.1');
-      G.config.negocio = (neg && neg[0]) || {};
-    } catch (e) { G.config.negocio = {}; }
     return { profile, planes };
   }
 
@@ -198,7 +203,7 @@
 
   G.api = api;
   G.plan = {
-    ROLES, load, isAdmin, currentPlan, worksActive, employeesCount, limitFor, wouldExceed, canCreate, checkLimit, LIMITS, log, trialDaysLeft, needsOnboarding, isLocked,
+    ROLES, load, isAdmin, currentPlan, worksActive, employeesCount, limitFor, wouldExceed, canCreate, checkLimit, LIMITS, log, trialDaysLeft, trialDias, needsOnboarding, isLocked,
     validarCodigo, canjearCodigo, diasRestantes, fechaVencimiento,
     get profile() { return profile; },
     get planes() { return planes; },

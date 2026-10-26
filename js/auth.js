@@ -183,6 +183,7 @@
     if (!s || !s.userId) return false;
     try {
       const email = s.email || '';
+      const diasPrueba = Number((G.config && G.config.negocio && G.config.negocio.trial_dias) || 45);
       const body = {
         user_id: s.userId,
         email: email,
@@ -193,8 +194,8 @@
         empresa: '',
         subscription_status: 'trialing',
         estado_cuenta: 'activo',
-        trial_end: new Date(Date.now() + 45 * 86400000).toISOString(),
-        trial_ends_at: new Date(Date.now() + 45 * 86400000).toISOString(),
+        trial_end: new Date(Date.now() + diasPrueba * 86400000).toISOString(),
+        trial_ends_at: new Date(Date.now() + diasPrueba * 86400000).toISOString(),
       };
       const res = await fetchT(SUPABASE_URL + '/rest/v1/profiles?on_conflict=user_id', {
         method: 'POST',

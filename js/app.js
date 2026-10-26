@@ -823,7 +823,8 @@
     const st = prof.subscription_status || 'trialing';
     const days = G.plan.trialDaysLeft();
     const planes = (G.plan.planes || []).filter(p => p.id !== 'free_basico');
-    const TITLES = { free: 'Trial (45 días)', pyme: 'PYME (90 días)', pro: 'PRO (90 días)', empresa: 'Empresa (90 días)' };
+    const trialDias = (G.plan.trialDias && G.plan.trialDias()) || 45;
+    const TITLES = { free: 'Prueba (' + trialDias + ' días)', pyme: 'PYME (90 días)', pro: 'PRO (90 días)', empresa: 'Empresa (90 días)' };
     const stLabel = st === 'active' ? 'Activo' : (st === 'trialing' ? 'En prueba' : (st === 'expired' ? 'Vencida' : st));
     const stTone = st === 'active' ? 'success' : (st === 'trialing' ? 'info' : 'danger');
     const m = UI.openModal({

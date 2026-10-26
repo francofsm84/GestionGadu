@@ -26,7 +26,8 @@
   function cardHTML(p, actualId) {
     const esPro = p.id === 'pro';
     const esActual = p.id === actualId;
-    const titulo = ({ free: 'Trial (45 días)', pyme: 'PYME (90 días)', pro: 'PRO (90 días)', empresa: 'Empresa (90 días)' })[p.id] || p.nombre;
+    const trialDias = (G.plan && G.plan.trialDias) ? G.plan.trialDias() : 45;
+    const titulo = ({ free: 'Prueba (' + trialDias + ' días)', pyme: 'PYME (90 días)', pro: 'PRO (90 días)', empresa: 'Empresa (90 días)' })[p.id] || p.nombre;
     const precio = Number(p.precio_mensual) > 0
       ? '$' + UI.fmtNum(Number(p.precio_mensual)) + '<span class="muted small">/90 días</span>'
       : 'Gratis';
@@ -45,8 +46,9 @@
   }
 
   function fallbackHTML() {
+    const trialDias = (G.plan && G.plan.trialDias) ? G.plan.trialDias() : 45;
     const cards = [
-      { id: 'free', nombre: 'Prueba (45 días)', precio_mensual: 0, limite_obras_activas: 999, limite_empleados: 999 },
+      { id: 'free', nombre: 'Prueba (' + trialDias + ' días)', precio_mensual: 0, limite_obras_activas: 999, limite_empleados: 999 },
       { id: 'pyme', nombre: 'PYME', precio_mensual: 0, limite_obras_activas: 5, limite_empleados: 10 },
       { id: 'pro', nombre: 'PRO', precio_mensual: 0, limite_obras_activas: 999, limite_empleados: 999 },
       { id: 'empresa', nombre: 'Empresa', precio_mensual: 0, limite_obras_activas: 999, limite_empleados: 999 },
