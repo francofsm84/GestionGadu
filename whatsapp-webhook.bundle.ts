@@ -1738,17 +1738,27 @@ async function rest(path: string, opts: Record<string, unknown> = {}) {
 }
 
 /* [GADU-MAINTENANCE] Kill switch global: consulta negocio.mantenimiento_activo.
-   Si esta en true, el bot responde un mensaje fijo y NO procesa con IA. */
+   Si esta en true, el bot responde un mensaje fijo y NO procesa con IA.
+   Cache de 1 minuto para no golpear la BD en cada mensaje. */
+let maintenanceCache: { value: boolean; at: number } | null = null;
+const MAINTENANCE_TTL_MS = 60_000;
+
 async function isMaintenanceActive(): Promise<boolean> {
+  const now = Date.now();
+  if (maintenanceCache && (now - maintenanceCache.at) < MAINTENANCE_TTL_MS) {
+    return maintenanceCache.value;
+  }
   try {
     const res = await rest("negocio?id=eq.1&select=mantenimiento_activo");
-    if (!res.ok) return false;
+    if (!res.ok) return maintenanceCache ? maintenanceCache.value : false;
     const rows = await res.json().catch(() => []);
     const neg = Array.isArray(rows) ? rows[0] : null;
-    return !!(neg && neg.mantenimiento_activo);
+    const value = !!(neg && neg.mantenimiento_activo);
+    maintenanceCache = { value, at: now };
+    return value;
   } catch (e) {
     console.warn("[GADU-MAINTENANCE] error chequeando mantenimiento:", e);
-    return false;
+    return maintenanceCache ? maintenanceCache.value : false;
   }
 }
 
