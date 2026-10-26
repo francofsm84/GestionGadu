@@ -25,7 +25,7 @@
     const billing = Math.max(0, Math.min(100, Math.round(Number(w.billingProgress) || 0)));
     const status = STATUS_LABEL[w.status] || 'Activa';
     const photos = Array.isArray(w.photos) ? w.photos.filter(Boolean) : [];
-    /* Pagos/certificados + bitácora: campos flexibles según lo que devuelva el RPC.
+    /* Pagos/certificados + bitácora + hitos: campos flexibles según el RPC.
        NUNCA se muestran costos, márgenes ni sueldos (solo lo que abonó el cliente). */
     const payments = Array.isArray(w.payments) ? w.payments
       : Array.isArray(w.cobros) ? w.cobros
@@ -33,9 +33,18 @@
     const bitacora = Array.isArray(w.bitacora) ? w.bitacora
       : Array.isArray(w.updates) ? w.updates
       : Array.isArray(w.novedades) ? w.novedades : [];
+    const hitos = Array.isArray(w.hitos) ? w.hitos
+      : Array.isArray(w.milestones) ? w.milestones
+      : Array.isArray(w.etapas) ? w.etapas : [];
+    /* Desglose financiero transparente (Contrato / Abonado / Saldo) */
+    const contrato = Number(w.contractAmount || w.contract || w.budgetTotal || w.montoContrato || 0);
+    const abonado = Number(w.paidAmount || w.abonado || w.totalAbonado || 0) ||
+      payments.reduce((s, p) => s + Number(p.amount || p.monto || 0), 0);
+    const saldo = Math.max(0, contrato - abonado);
+    const updatedAt = w.updatedAt || w.updated_at || w.lastUpdate || w.last_update || '';
 
     return '<div class="portal-wrap">' +
-      '<div class="portal-card">' +
+      '<div class="portal-card" id="portalCard">' +
         '<div class="portal-head">' +
           '<div class="portal-logo">GADU <span>Construye</span></div>' +
           '<div class="portal-chip">' + status + '</div>' +
@@ -50,6 +59,24 @@
           '<div class="portal-bar-label"><span>Avance de Cobro</span><b>' + billing + '%</b></div>' +
           '<div class="portal-bar"><div class="portal-bar-fill portal-bar-fill--info" style="width:' + billing + '%"></div></div>' +
         '</div>' +
+        (contrato > 0
+          ? '<div class="portal-section"><h3 class="portal-section-title">Desglose financiero</h3>' +
+            '<div class="portal-fin-row"><span>Monto del Contrato</span><b>' + UI.fmtMoney(contrato) + '</b></div>' +
+            '<div class="portal-fin-row"><span>Total Abonado / Certificado</span><b class="pos">' + UI.fmtMoney(abonado) + '</b></div>' +
+            '<div class="portal-fin-row"><span>Saldo Pendiente</span><b class="warning-text">' + UI.fmtMoney(saldo) + '</b></div>' +
+            '</div>'
+          : '') +
+        (hitos.length
+          ? '<div class="portal-section"><h3 class="portal-section-title">Hitos de avance</h3>' +
+            hitos.map(h => {
+              const est = String(h.status || h.estado || h.state || '').toLowerCase();
+              const isDone = /complet|done|finaliz|terminad|ok|✓/.test(est);
+              const isProgress = /progreso|curso|activo|doing|pendiente/.test(est);
+              const label = h.name || h.nombre || h.titulo || h.title || 'Hito';
+              return '<div class="portal-hito"><span class="portal-hito-dot ' + (isDone ? 'done' : isProgress ? 'progress' : '') + '"></span><span>' + UI.escapeHtml(label) + '</span></div>';
+            }).join('') +
+            '</div>'
+          : '') +
         (payments.length
           ? '<div class="portal-section"><h3 class="portal-section-title">Pagos / Certificados</h3>' +
             payments.map(p => {
@@ -72,7 +99,11 @@
         (photos.length
           ? '<div class="portal-section"><h3 class="portal-section-title">Fotos de avance</h3><div class="portal-photos">' + photos.map(p => '<img src="' + UI.escapeHtml(p) + '" alt="Foto de la obra">').join('') + '</div></div>'
           : '<p class="portal-no-photos">El contratista aún no ha subido fotos de avance.</p>') +
-        '<p class="portal-foot">Datos actualizados automáticamente · Generado por GADU</p>' +
+        '<div class="portal-foot">' +
+          '<button class="btn btn-soft btn-sm" id="btnPdfPortal" style="margin-bottom:10px">' + UI.icon('download', 14) + ' Descargar PDF</button>' +
+          (updatedAt ? '<div>Última actualización: ' + UI.fmtDate(updatedAt) + '</div>' : '') +
+          '<div>Datos actualizados automáticamente · Generado por GADU</div>' +
+        '</div>' +
       '</div></div>';
   }
 
@@ -106,10 +137,27 @@
         return;
       }
       host.innerHTML = portalHTML(work);
+      /* Descargar PDF: captura la tarjeta y genera el PDF con la misma estética */
+      const btnPdf = host.querySelector('#btnPdfPortal');
+      if (btnPdf) btnPdf.addEventListener('click', () => downloadPortalPDF(work));
     } catch (e) {
       console.error('[GADU-PORTAL] error cargando:', e);
       host.innerHTML = empty('No se pudo cargar el avance. Probá de nuevo en unos minutos.');
     }
+  }
+
+  function downloadPortalPDF(w) {
+    if (typeof html2pdf === 'undefined') { return; }
+    const card = document.getElementById('portalCard');
+    if (!card) return;
+    const filename = 'Avance_' + String(w.name || 'obra').replace(/[^a-z0-9áéíóúñ ]/gi, '').replace(/\s+/g, '_') + '.pdf';
+    html2pdf().from(card).set({
+      margin: 6,
+      filename,
+      image: { type: 'jpeg', quality: 0.95 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    }).save();
   }
 
   G.portal = { render };

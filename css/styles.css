@@ -1039,6 +1039,14 @@ body.no-session .app { display: none; }
 .portal-pay-row .pos { color: #16a34a; font-weight: 700; }
 .portal-note { display: flex; flex-direction: column; gap: 2px; padding: 7px 0; border-bottom: 1px dashed #eef2f7; font-size: 13px; color: #334155; }
 .portal-note .muted { color: #94a3b8; font-size: 12px; }
+.portal-fin-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px dashed #eef2f7; font-size: 13px; color: #334155; }
+.portal-fin-row b { color: #0f172a; font-weight: 700; }
+.portal-fin-row .pos { color: #16a34a; }
+.portal-fin-row .warning-text { color: #d97706; }
+.portal-hito { display: flex; align-items: center; gap: 9px; padding: 7px 0; font-size: 13px; color: #334155; }
+.portal-hito-dot { width: 11px; height: 11px; border-radius: 50%; background: #e2e8f0; flex: none; }
+.portal-hito-dot.done { background: #16a34a; }
+.portal-hito-dot.progress { background: #f59e0b; }
 /* Filas de reporte (solo lectura): montos alineados a la derecha */
 .report-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #eef2f7; }
 .report-row:last-child { border-bottom: none; }
