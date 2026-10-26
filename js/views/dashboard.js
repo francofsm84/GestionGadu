@@ -25,14 +25,16 @@
     return { from: '', to: '', label: 'todo el historial' };
   }
 
-  function kpi(icon, tone, label, value, sub) {
-    return '<div class="kpi-card">' +
-      '<span class="kpi-ico kpi-' + tone + '">' + UI.icon(icon, 20) + '</span>' +
+  function kpi(icon, tone, label, value, sub, nav) {
+    const inner = '<span class="kpi-ico kpi-' + tone + '">' + UI.icon(icon, 20) + '</span>' +
       '<div class="kpi-body">' +
       '<span class="kpi-label">' + label + '</span>' +
       '<strong class="kpi-value">' + value + '</strong>' +
       '<span class="kpi-sub">' + sub + '</span>' +
-      '</div></div>';
+      '</div>';
+    return nav
+      ? '<a class="kpi-card kpi-link" href="' + nav + '">' + inner + '</a>'
+      : '<div class="kpi-card">' + inner + '</div>';
   }
 
   /* Empty state de bienvenida (usuario nuevo sin obras ni gastos) */
@@ -132,11 +134,11 @@
       '</div>' +
 
       '<section class="kpi-grid">' +
-      kpi('trending-up', 'success', 'Ingresos del período', UI.fmtMoney(t.incomes), t.incomesCount + ' cobros · ' + range.label) +
-      kpi('arrow-up-right', 'danger', 'Gastos del período', UI.fmtMoney(t.expenses), 'Directos ' + UI.fmtMoney(t.direct) + ' · Generales ' + UI.fmtMoney(t.general)) +
-      kpi('activity', balanceTone, 'Balance neto', UI.fmtMoney(t.net), 'Ingresos menos todos los gastos') +
-      kpi('wrench', 'violet', 'Inversión en herramientas', UI.fmtMoney(t.assets), t.assetsCount + ' compras · mant. ' + UI.fmtMoney(t.maint)) +
-      kpi('hard-hat', 'info', 'Estado de obras', active.length + ' activas', paused.length + ' pausadas · ' + done.length + ' finalizadas · avance prom. ' + Math.round(avg) + '%') +
+      kpi('trending-up', 'success', 'Ingresos del período', UI.fmtMoney(t.incomes), t.incomesCount + ' cobros · ' + range.label, '#/ingresos') +
+      kpi('arrow-up-right', 'danger', 'Gastos del período', UI.fmtMoney(t.expenses), 'Directos ' + UI.fmtMoney(t.direct) + ' · Generales ' + UI.fmtMoney(t.general), '#/gastos') +
+      kpi('activity', balanceTone, 'Balance neto', UI.fmtMoney(t.net), 'Ingresos menos todos los gastos', '#/libro') +
+      kpi('wrench', 'violet', 'Inversión en herramientas', UI.fmtMoney(t.assets), t.assetsCount + ' compras · mant. ' + UI.fmtMoney(t.maint), '#/herramientas') +
+      kpi('hard-hat', 'info', 'Estado de obras', active.length + ' activas', paused.length + ' pausadas · ' + done.length + ' finalizadas · avance prom. ' + Math.round(avg) + '%', '#/obras') +
       '</section>' +
 
       '<section class="charts-grid">' +
