@@ -67,7 +67,7 @@
     }
     view.innerHTML =
       '<div class="tabs admin-tabs">' +
-      tabBtn('usuarios', '👥 Usuarios') + tabBtn('planes', '💳 Planes') + tabBtn('licencias', '🎫 Licencias') + tabBtn('soporte', '📞 Soporte') + tabBtn('config', '⚙️ Configuración') + tabBtn('metricas', '📊 Métricas') + tabBtn('auditoria', '🧾 Auditoría') +
+      tabBtn('usuarios', '👥 Usuarios') + tabBtn('planes', '💳 Planes') + tabBtn('licencias', '🎫 Licencias') + tabBtn('soporte', '📞 Soporte') + tabBtn('anuncios', '📢 Anuncios') + tabBtn('config', '⚙️ Configuración') + tabBtn('metricas', '📊 Métricas') + tabBtn('auditoria', '🧾 Auditoría') +
       '</div>' +
       '<div id="adminBody"></div>';
     view.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.t; render(view); }));
@@ -84,6 +84,7 @@
       else if (tab === 'planes') await tabPlanes(body);
       else if (tab === 'licencias') await tabLicencias(body);
       else if (tab === 'soporte') await tabSoporte(body);
+      else if (tab === 'anuncios') await tabAnuncios(body);
       else if (tab === 'config') await tabConfig(body);
       else if (tab === 'metricas') await tabMetricas(body);
       else await tabAuditoria(body);
@@ -960,6 +961,59 @@
       });
       await G.plan.log('credenciales_mp', 'guardadas');
       UI.toast('✅ Credenciales de Mercado Pago guardadas', 'success');
+    });
+  }
+
+  /* ---------- Anuncios (Broadcast) ---------- */
+  async function tabAnuncios(body) {
+    let list = [];
+    try { list = await G.api('GET', '/broadcasts?select=*&order=created_at.desc&limit=50'); } catch (e) { list = []; }
+
+    body.innerHTML =
+      '<div class="card" style="max-width:680px;margin:0 auto">' +
+      '<div class="card-head"><div><h3>Nuevo anuncio</h3><p class="muted">Se envía a los usuarios según el filtro de destinatarios.</p></div></div>' +
+      '<div class="grid-form">' +
+      '<div class="field span-2"><label>Título</label><input class="input" id="bcTitle" placeholder="Ej.: ¡Nueva función!"></div>' +
+      '<div class="field span-2"><label>Mensaje</label><textarea class="textarea" id="bcMessage" rows="3" placeholder="Ej.: Ya podés cargar deudas en cuotas"></textarea></div>' +
+      '<div class="field span-2"><label>Destinatarios</label><select class="select" id="bcTarget">' +
+      '<option value="todos">Todos los usuarios</option>' +
+      '<option value="prueba">Solo Plan Prueba</option>' +
+      '<option value="pagos">Solo Planes Pagos</option>' +
+      '</select></div>' +
+      '</div>' +
+      '<button class="btn btn-primary" id="bcSend" style="margin-top:10px">' + UI.icon('mail', 15) + 'Enviar Anuncio</button>' +
+      '</div>' +
+      '<div class="card" style="margin-top:14px"><div class="card-head"><div><h3>Historial</h3><p class="muted">' + list.length + ' anuncio(s)</p></div></div>' +
+      '<div class="table-wrap"><table class="data-table">' +
+      '<thead><tr><th>Título</th><th>Destinatarios</th><th>Fecha</th><th>Estado</th></tr></thead>' +
+      '<tbody>' + (list.map(b => {
+        const targetLabel = b.target === 'prueba' ? 'Plan Prueba' : (b.target === 'pagos' ? 'Planes Pagos' : 'Todos');
+        return '<tr><td><strong>' + UI.escapeHtml(b.title || '') + '</strong><div class="muted small">' + UI.escapeHtml(b.message || '') + '</div></td>' +
+          '<td>' + UI.chip(targetLabel, 'neutral') + '</td>' +
+          '<td class="muted small">' + (b.created_at ? UI.fmtDate(b.created_at) : '—') + '</td>' +
+          '<td>' + UI.chip(b.status === 'sent' ? 'Enviado' : 'Pendiente', b.status === 'sent' ? 'success' : 'warning') + '</td></tr>';
+      }).join('') || '<tr><td colspan="4">' + UI.emptyState('inbox', 'Sin anuncios', 'Enviá el primero desde el formulario de arriba.') + '</td></tr>') +
+      '</tbody></table></div></div>';
+
+    body.querySelector('#bcSend').addEventListener('click', async () => {
+      const title = body.querySelector('#bcTitle').value.trim();
+      const message = body.querySelector('#bcMessage').value.trim();
+      const target = body.querySelector('#bcTarget').value;
+      if (!title || !message) { UI.toast('Completá título y mensaje', 'error'); return; }
+      const btn = body.querySelector('#bcSend');
+      const original = btn.innerHTML;
+      btn.disabled = true;
+      btn.textContent = 'Enviando...';
+      try {
+        await G.api('POST', '/rpc/enviar_broadcast', { p_title: title, p_message: message, p_target: target });
+        await G.plan.log('anuncio_enviado', title + ' · ' + target);
+        UI.toast('✅ Anuncio enviado', 'success');
+        await tabAnuncios(body);
+      } catch (err) {
+        btn.disabled = false;
+        btn.innerHTML = original;
+        UI.toast('❌ No se pudo enviar: ' + ((err && err.message) || err), 'error');
+      }
     });
   }
 
