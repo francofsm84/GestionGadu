@@ -935,23 +935,105 @@
     } catch (e) {}
   }
 
-  /* Botón flotante "Salir de Impersonación" (visible solo si el admin está viendo como otro usuario) */
+  /* Barra de "Modo soporte" (impersonación) con identidad, acciones y solo-lectura */
+  function isSupportReadonly() { try { return localStorage.getItem('gadu_impersonate_readonly') === '1'; } catch (e) { return false; } }
   function initImpersonationExit() {
     try {
       if (!G.impersonate || !G.impersonate.isActive()) return;
-      if (document.getElementById('impersonationExit')) return;
-      const btn = document.createElement('button');
-      btn.id = 'impersonationExit';
-      btn.className = 'impersonate-exit';
-      btn.innerHTML = '🔑 Salir de Impersonación';
-      btn.title = 'Volver a tu cuenta de administrador';
-      btn.addEventListener('click', () => {
-        try { G.impersonate.clear(); } catch (e) {}
-        location.hash = '#/dashboard';
-        location.reload();
+      if (document.getElementById('impersonationBar')) return;
+      const bar = document.createElement('div');
+      bar.id = 'impersonationBar';
+      bar.className = 'impersonate-bar';
+      bar.innerHTML =
+        '<span class="imp-label">🔑 Modo soporte: cargando…</span>' +
+        '<label class="imp-readonly"><input type="checkbox" id="impReadonly"' + (isSupportReadonly() ? ' checked' : '') + '> Solo Lectura</label>' +
+        '<button class="imp-btn" id="impActions" title="Acciones de Admin">⚙️</button>' +
+        '<button class="imp-btn" id="impExit" title="Salir del modo soporte">Salir</button>';
+      document.body.appendChild(bar);
+      bar.querySelector('#impExit').addEventListener('click', () => { try { G.impersonate.clear(); localStorage.removeItem('gadu_impersonate_readonly'); } catch (e) {} location.hash = '#/dashboard'; location.reload(); });
+      bar.querySelector('#impActions').addEventListener('click', openSupportActions);
+      bar.querySelector('#impReadonly').addEventListener('change', e => {
+        try { localStorage.setItem('gadu_impersonate_readonly', e.target.checked ? '1' : ''); } catch (e2) {}
+        UI.toast(e.target.checked ? 'Modo solo lectura activado' : 'Modo solo lectura desactivado', 'info');
       });
-      document.body.appendChild(btn);
+      loadImpersonatedIdentity(bar);
+      initReadonlyGuard();
     } catch (e) {}
+  }
+
+  /* Carga el email/nombre del usuario impersonado y lo muestra en la barra */
+  async function loadImpersonatedIdentity(bar) {
+    try {
+      const uid = G.impersonate.uid();
+      if (!uid) return;
+      const rows = await G.api('GET', '/profiles?select=email,nombre,apellido&user_id=eq.' + encodeURIComponent(uid));
+      const u = rows && rows[0];
+      const label = u ? (u.email || ((u.nombre || '') + ' ' + (u.apellido || '')).trim() || uid) : uid;
+      const span = bar.querySelector('.imp-label');
+      if (span) span.innerHTML = '🔑 Modo soporte activo: Viendo a <b>' + UI.escapeHtml(label) + '</b>';
+    } catch (e) {}
+  }
+
+  /* Modal con acciones rápidas de soporte (aplican al usuario impersonado) */
+  function openSupportActions() {
+    const uid = G.impersonate.uid();
+    const m = UI.openModal({
+      title: 'Acciones de Admin (soporte)',
+      subtitle: 'Se aplican al usuario que estás viendo.',
+      body:
+        '<div class="stack" style="gap:10px">' +
+        '<button class="btn btn-soft" id="actTrial">➕ Sumar 15 días de prueba</button>' +
+        '<button class="btn btn-soft" id="actBot">🔄 Reactivar Bot de WhatsApp</button>' +
+        '<button class="btn btn-soft-danger" id="actWipe">⚠️ Limpiar datos de usuario</button>' +
+        '</div>',
+      footer: '<button class="btn btn-ghost" data-cancel>Cerrar</button>',
+    });
+    m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+    m.panel.querySelector('#actTrial').addEventListener('click', async () => {
+      try {
+        const rows = await G.api('GET', '/profiles?select=trial_ends_at,trial_end&user_id=eq.' + encodeURIComponent(uid));
+        const u = rows && rows[0];
+        const base = (u && (u.trial_ends_at || u.trial_end)) ? new Date(u.trial_ends_at || u.trial_end) : new Date();
+        const nueva = new Date((isNaN(base.getTime()) ? Date.now() : base.getTime()) + 15 * 86400000).toISOString();
+        await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent(uid), { trial_end: nueva, trial_ends_at: nueva });
+        UI.toast('✅ Se sumaron 15 días de prueba');
+      } catch (e) { UI.toast('❌ No se pudo: ' + ((e && e.message) || e), 'error'); }
+      m.close();
+    });
+    m.panel.querySelector('#actBot').addEventListener('click', async () => {
+      try {
+        await G.api('PATCH', '/whatsapp_sessions?user_id=eq.' + encodeURIComponent(uid), { is_paused: false, paused_until: null });
+      } catch (e) { /* si no hay sesión, no importa */ }
+      UI.toast('✅ Bot de WhatsApp reactivado');
+      m.close();
+    });
+    m.panel.querySelector('#actWipe').addEventListener('click', async () => {
+      const ok1 = await UI.confirm({ title: 'Limpiar datos de usuario', message: 'Se vaciará TODO el contenido (obras, gastos, empleados…) de este usuario. ¿Continuar?', okLabel: 'Sí, continuar', tone: 'danger' });
+      if (!ok1) return;
+      const ok2 = await UI.confirm({ title: '¿Estás seguro?', message: 'Esta acción es irreversible. Se perderán todos los datos del usuario.', okLabel: 'Borrar todo', tone: 'danger' });
+      if (!ok2) return;
+      try {
+        await G.api('PATCH', '/app_data?user_id=eq.' + encodeURIComponent(uid), { data: {} });
+        UI.toast('✅ Datos del usuario limpiados');
+      } catch (e) { UI.toast('❌ No se pudo: ' + ((e && e.message) || e), 'error'); }
+      m.close();
+      location.reload();
+    });
+  }
+
+  /* Interceptor global: bloquea acciones de escritura en modo solo lectura */
+  function initReadonlyGuard() {
+    document.addEventListener('click', e => {
+      if (!isSupportReadonly()) return;
+      const el = e.target && e.target.closest ? e.target.closest('button, a, [data-save], [data-del], [data-edit], [data-new], input[type="submit"]') : null;
+      if (!el) return;
+      const text = (el.textContent || el.getAttribute('aria-label') || el.title || '').toLowerCase();
+      const write = /guardar|eliminar|borrar|nuevo|crear|agregar|cargar|editar|save|delete|new|add|confirmar|aplicar|suscribir|canjear|enviar/.test(text);
+      if (!write) return;
+      e.preventDefault();
+      e.stopPropagation();
+      UI.toast('❌ Estás en modo soporte. Desactivá "Solo Lectura" para editar.', 'error');
+    }, true);
   }
 
   async function startApp() {

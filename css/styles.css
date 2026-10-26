@@ -608,8 +608,14 @@ canvas.chart { min-width: 0; max-width: 100%; }
 .data-table .chk input, .contact-card .card-check, .row-check, .row-check-j, .row-check-f, .row-check-e, .row-check-s, .row-check-b, .row-check-o, .row-check-u { accent-color: var(--primary, #4f46e5); cursor: pointer; }
 .bulk-bar { position: sticky; bottom: 12px; z-index: 30; display: flex; justify-content: center; margin: 10px 0; }
 .bulk-bar .btn { box-shadow: var(--shadow-lg, 0 10px 30px rgba(0,0,0,.25)); }
-/* Botón flotante de impersonación (solo visible para el admin que está viendo como otro usuario) */
-.impersonate-exit { position: fixed; left: 16px; bottom: 16px; z-index: 9999; display: flex; align-items: center; gap: 6px; padding: 10px 14px; background: #7c3aed; color: #fff; border: none; border-radius: 999px; font-weight: 700; font-size: 13px; cursor: pointer; box-shadow: 0 10px 30px rgba(124, 58, 237, .4); }
+/* Barra de "Modo soporte" (impersonación): identidad + solo lectura + acciones */
+.impersonate-bar { position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 9999; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; background: #1e1b4b; color: #fff; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.35); font-size: 13px; }
+.impersonate-bar .imp-label { flex: 1; min-width: 180px; }
+.impersonate-bar .imp-label b { color: #c4b5fd; }
+.impersonate-bar .imp-readonly { display: flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; }
+.impersonate-bar .imp-btn { padding: 7px 12px; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; color: #fff; }
+.impersonate-bar #impActions { background: #4f46e5; }
+.impersonate-bar #impExit { background: #f43f5e; }
 
 .asset-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
