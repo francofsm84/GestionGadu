@@ -151,12 +151,14 @@
     const card = document.getElementById('portalCard');
     if (!card) return;
     const filename = 'Avance_' + String(w.name || 'obra').replace(/[^a-z0-9áéíóúñ ]/gi, '').replace(/\s+/g, '_') + '.pdf';
+    /* Captura la tarjeta TAL CUAL la ve el cliente (ancho real + CORS para las fotos) */
     html2pdf().from(card).set({
       margin: 6,
       filename,
       image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: { scale: 2, useCORS: true },
+      html2canvas: { scale: 2, useCORS: true, windowWidth: card.scrollWidth },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['avoid-all', 'css'] },
     }).save();
   }
 
