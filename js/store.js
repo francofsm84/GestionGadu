@@ -483,6 +483,7 @@
   let _supportBackup = null;   // backup del admin en modo soporte (inspección de usuario)
   function flushSave() {
     if (_supportBackup !== null) return;   // en modo soporte NO persistir nada
+    if (typeof window !== 'undefined' && G.impersonate && G.impersonate.isActive && G.impersonate.isActive()) return;   // impersonación: read-only
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
     if (data) {
       storage().set(key, JSON.stringify(data)).catch(e => {
@@ -495,6 +496,9 @@
   function save() {
     if (!data) return;
     if (_supportBackup !== null) return;   // en modo soporte NO guardar ni sincronizar
+    /* Impersonación (modo soporte read-only): jamás persistir ni sincronizar.
+       Evita pisar los datos del admin con los del usuario suplantado. */
+    if (typeof window !== 'undefined' && G.impersonate && G.impersonate.isActive && G.impersonate.isActive()) return;
     /* IndexedDB (localForage): debounce 500ms para evitar write-amplification.
        localStorage fallback (Node/tests): escritura sincrónica (no necesita debounce). */
     if (G.storage && G.storage.isIDB) {
@@ -541,7 +545,7 @@
      Reemplaza `data` EN MEMORIA (sin persistir ni sincronizar) y guarda
      el backup del admin para restaurarlo al salir. */
   function enterSupportMode(d) {
-    if (!d || typeof d !== 'object' || !Array.isArray(d.works)) return false;
+    if (!d || typeof d !== 'object') return false;
     _supportBackup = data;
     data = d;
     normalize();

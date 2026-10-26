@@ -272,6 +272,7 @@
         '<button class="btn btn-soft-success" id="bPush">' + UI.icon('upload') + 'Subir mis datos ahora</button>' +
         '<button class="btn btn-soft-info" id="bPull">' + UI.icon('download') + 'Descargar mis datos</button>' +
         '<button class="btn btn-soft" id="bCloudTest">' + UI.icon('activity') + 'Probar conexión</button>' +
+        '<button class="btn btn-soft-warning" id="bForcePull">🔄 Forzar descarga desde la Nube</button>' +
         '</div>' +
         '<button class="btn btn-soft-success" id="bWhatsApp" style="margin-top:10px">' + UI.icon('whatsapp', 15) + 'Vincular WhatsApp</button>' +
         '<button class="btn btn-soft" id="bProfile" style="margin-top:10px">' + UI.icon('user', 15) + 'Completar mi perfil (onboarding)</button>' +
@@ -379,6 +380,29 @@
         renderNow();
       } catch (err) {
         setStatus('❌ No se pudo descargar: ' + ((err && err.message) || err), false);
+      }
+    });
+    m.panel.querySelector('#bForcePull').addEventListener('click', async () => {
+      setStatus('Forzando descarga limpia desde la nube…');
+      try {
+        const ok = await UI.confirm({
+          title: 'Forzar descarga',
+          message: 'Se reemplazará el caché local de este dispositivo por los datos de la nube. Usalo para recuperar tu información si el caché local quedó corrupto o en $0.',
+          okLabel: 'Forzar descarga',
+          tone: 'danger',
+        });
+        if (!ok) return;
+        const remote = await G.sync.pull();
+        if (!remote) { setStatus('No hay datos guardados en la nube para recuperar.', false); return; }
+        /* Reemplazo limpio del documento local (descarta caché corrupto) */
+        S.importJSON(JSON.stringify(remote.data));
+        S.data.settings.lastCloudSync = String(remote.updatedAt);
+        S.save();
+        setStatus('✅ Datos recuperados desde la nube.', true);
+        m.close();
+        renderNow();
+      } catch (err) {
+        setStatus('❌ No se pudo recuperar: ' + ((err && err.message) || err), false);
       }
     });
     m.panel.querySelector('#bLogout').addEventListener('click', async () => {
@@ -978,7 +1002,13 @@
         '<button class="imp-btn" id="impActions" title="Acciones de Admin">⚙️</button>' +
         '<button class="imp-btn" id="impExit" title="Salir del modo soporte">Salir</button>';
       document.body.appendChild(bar);
-      bar.querySelector('#impExit').addEventListener('click', () => { try { G.impersonate.clear(); localStorage.removeItem('gadu_impersonate_readonly'); } catch (e) {} location.hash = '#/dashboard'; location.reload(); });
+      bar.querySelector('#impExit').addEventListener('click', () => {
+        /* Restaurar los datos del admin ANTES de recargar, y limpiar la suplantación */
+        try { if (S.exitSupportMode) S.exitSupportMode(); } catch (e) {}
+        try { G.impersonate.clear(); localStorage.removeItem('gadu_impersonate_readonly'); } catch (e) {}
+        location.hash = '#/dashboard';
+        location.reload();
+      });
       bar.querySelector('#impActions').addEventListener('click', openSupportActions);
       bar.querySelector('#impReadonly').addEventListener('change', e => {
         try { localStorage.setItem('gadu_impersonate_readonly', e.target.checked ? '1' : ''); } catch (e2) {}
@@ -1149,9 +1179,17 @@
        El indicador del encabezado refleja el estado en tiempo real. */
     setSyncState('syncing');
     try {
+      const impersonando = !!(G.impersonate && G.impersonate.isActive && G.impersonate.isActive());
       const remote = await G.sync.pull();
       const lastSync = S.data.settings.lastCloudSync || '';
-      if (remote && (!lastSync || String(remote.updatedAt) > String(lastSync))) {
+      if (impersonando) {
+        /* MODO SOPORTE (read-only): mostrar los datos del usuario suplantado SIN
+           pisar los del admin. enterSupportMode hace backup de los datos del admin
+           y bloquea todo save/push/realtime hasta salir. */
+        if (remote && remote.data) {
+          S.enterSupportMode(remote.data);
+        }
+      } else if (remote && (!lastSync || String(remote.updatedAt) > String(lastSync))) {
         /* La nube está más actualizada: se reemplaza en segundo plano, sin modal
            y sin avisos: la carga inicial queda limpia (sin banner de notificación). */
         S.importJSON(JSON.stringify(remote.data));
