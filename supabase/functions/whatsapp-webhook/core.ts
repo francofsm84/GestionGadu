@@ -611,7 +611,7 @@ export function executeAction(
    ===================================================================== */
 
 export interface QueryIntent {
-  type: "sueldos" | "balance" | "balance_general" | "gastos" | "ingresos" | "agenda" | "herramientas";
+  type: "sueldos" | "balance" | "balance_general" | "gastos" | "ingresos" | "agenda" | "herramientas" | "empleado_historial";
   target: string;
   periodo: "semana" | "mes" | "hoy";
 }
@@ -630,9 +630,20 @@ export function detectQueryIntent(text: string): QueryIntent | null {
   const f = flat(String(text || "")).trim();
   if (!f) return null;
 
+  /* Historial / legajo completo de un empleado */
+  if (/(historial|legajo|ficha|toda la informaci[oó]n|info completa)/.test(f) &&
+      /(empleado|de|del|sobre|para|mostr[aá]|ver|dame)/.test(f)) {
+    const target = f
+      .replace(/^.*?(?:historial|legajo|ficha|informaci[oó]n|info completa)/, "")
+      .replace(/\b(?:de|del|la|el|los|las|empleado|sobre|para|ver|mostr[aá]|dame|info|completa)\b/g, " ")
+      .replace(/\s+/g, " ").trim();
+    if (target && target.length >= 2) return { type: "empleado_historial", target, periodo: "mes" };
+  }
+
   /* Sueldos / pagos / adelantos de la semana o el mes */
   if (/(cu[aá]nto|cuanto).*(pagar|sueldos?|jornales|adelantos?|liquidar|deveng)/.test(f) ||
       /(sueldos?|jornales|salarios?|pagar).*(semana|mes|esta)/.test(f) ||
+      /(resumen|desglose|detalle).*(empleados?|sueldos?|personal|equipo)/.test(f) ||
       /(cu[aá]nto|cuanto).*(gan[aó]|debo).*(empleados?|personal|cuadrilla)/.test(f)) {
     return { type: "sueldos", target: "", periodo: /mes/.test(f) ? "mes" : "semana" };
   }
@@ -710,11 +721,51 @@ export function computeQuery(data: Record<string, any>, q: QueryIntent): string 
       const dias = att.length;
       const devengado = horas * (Number(emp.hourlyRate) || 0);
       const adelantos = sum(expenses.filter(x => x.employeeId === emp.id && x.expenseKind === "adelanto" && (x.date || "") >= desde).map(x => Number(x.amount) || 0));
-      total += devengado - adelantos;
-      lineas.push("• " + nombre + ": " + dias + "d · " + horas + "h · " + fmt(devengado) + (adelantos ? " · adelantos -" + fmt(adelantos) : ""));
+      const saldo = devengado - adelantos;
+      total += saldo;
+      /* Obras en las que trabajó esta semana (workId de cada bloque de horas) */
+      const workIds = [...new Set(att.flatMap((a: any) => (a.hours || []).map((h: any) => h.workId).filter(Boolean)))];
+      const obras = workIds.map((wid: any) => {
+        const w = works.find(x => String(x.id) === String(wid));
+        return w ? (w.name || w.nombre) : String(wid);
+      }).join(", ");
+      lineas.push("• " + nombre + ": " + dias + "d · " + horas + "h" +
+        (obras ? " · " + obras : "") +
+        " · devengado " + fmt(devengado) + (adelantos ? " · adelantos -" + fmt(adelantos) : "") +
+        " · saldo " + fmt(saldo));
     });
     return (q.periodo === "mes" ? "*Sueldos del mes*" : "*Sueldos de la semana*") +
       "\n*A pagar: " + fmt(total) + "*\n\n" + (lineas.join("\n") || "Sin jornadas registradas.");
+  }
+
+  if (q.type === "empleado_historial") {
+    const tn = flat(q.target);
+    const emp = employees.find(e => {
+      const nombre = flat(((e.firstName || "") + " " + (e.lastName || "")).trim());
+      return !!nombre && (nombre.includes(tn) || tn.includes(nombre) || flat(e.firstName || "").includes(tn) || flat(e.lastName || "").includes(tn));
+    });
+    if (!emp) {
+      const lista = employees.map(e => "• " + ((e.firstName || "") + " " + (e.lastName || "")).trim()).join("\n");
+      return "No encontré a \"" + q.target + "\".\n\n*Empleados:*\n" + (lista || "Sin empleados cargados.");
+    }
+    const nombre = ((emp.firstName || "") + " " + (emp.lastName || "")).trim() || "Empleado";
+    const tarifa = Number(emp.hourlyRate) || 0;
+    const attEmp = attendance.filter(a => a.employeeId === emp.id).sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    const totalHoras = sum(attEmp.filter(a => a.status === "presente").flatMap((a: any) => (a.hours || []).map((h: any) => Number(h.hours) || 0)));
+    const devengado = totalHoras * tarifa;
+    const adelantos = sum(expenses.filter(x => x.employeeId === emp.id && x.expenseKind === "adelanto").map(x => Number(x.amount) || 0));
+    const pagos = sum(expenses.filter(x => x.employeeId === emp.id && x.expenseKind !== "adelanto").map(x => Number(x.amount) || 0));
+    const saldo = devengado - adelantos;
+    const ultimas = attEmp.slice(0, 6).map((a: any) =>
+      "• " + (a.date || "—") + " · " + sum((a.hours || []).map((h: any) => Number(h.hours) || 0)) + "h" + (a.status === "presente" ? "" : " (" + a.status + ")")).join("\n");
+    return "*Legajo: " + nombre + "*\n" +
+      "• Tarifa: " + fmt(tarifa) + "/h\n" +
+      "• Horas totales: " + totalHoras + "h\n" +
+      "• Devengado: " + fmt(devengado) + "\n" +
+      "• Pagos: " + fmt(pagos) + "\n" +
+      "• Adelantos: -" + fmt(adelantos) + "\n" +
+      "• Saldo pendiente: " + fmt(saldo) + "\n\n" +
+      "*Últimas jornadas:*\n" + (ultimas || "Sin jornadas registradas.");
   }
 
   if (q.type === "balance") {
@@ -732,12 +783,13 @@ export function computeQuery(data: Record<string, any>, q: QueryIntent): string 
     const ing = sum(incomes.filter(i => i.workId === wid).map(i => Number(i.amount) || 0));
     const cos = sum(expenses.filter(x => x.workId === wid).map(x => Number(x.amount) || 0));
     const margen = ing - cos;
+    const margenPct = ing > 0 ? Math.round((margen / ing) * 100) : 0;
     const presupuesto = Number(w.budgetTotal) || 0;
     const pendiente = Math.max(0, presupuesto - ing);
     return "*Balance: " + (w.name || w.nombre) + "*\n" +
       "• Ingresos: " + fmt(ing) + "\n" +
       "• Costos directos: -" + fmt(cos) + "\n" +
-      "• Margen: " + fmt(margen) + "\n" +
+      "• Margen: " + fmt(margen) + " (" + margenPct + "%)\n" +
       "• Presupuesto: " + fmt(presupuesto) + "\n" +
       "• Pendiente de cobrar: " + fmt(pendiente);
   }
@@ -813,6 +865,14 @@ export function queryLink(data: Record<string, any>, q: QueryIntent): string {
       return !!n && (n.includes(tn) || tn.includes(n));
     });
     if (w) return base + "/#/reporte/obra/" + String(w.id);
+  }
+  if (q.type === "empleado_historial" && q.target) {
+    const tn = flat(q.target);
+    const emp = ((data.employees || []) as any[]).find((e: any) => {
+      const nombre = flat(((e.firstName || "") + " " + (e.lastName || "")).trim());
+      return !!nombre && (nombre.includes(tn) || tn.includes(nombre));
+    });
+    if (emp) return base + "/#/empleado/" + String(emp.id);
   }
   return "";
 }
