@@ -35,10 +35,23 @@ CREATE TRIGGER trg_app_data_history
   FOR EACH ROW
   EXECUTE FUNCTION public.log_app_data_history();
 
--- 3) RLS: solo admin/super_admin puede leer el historial
+-- 3) RLS: SOLO super_admin puede leer el historial
+CREATE OR REPLACE FUNCTION public.es_super_admin()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles p
+    WHERE p.user_id = auth.uid() AND p.rol = 'super_admin'
+  );
+$$;
+
 ALTER TABLE public.app_data_history ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "app_data_history_admin" ON public.app_data_history;
-CREATE POLICY "app_data_history_admin" ON public.app_data_history
+DROP POLICY IF EXISTS "app_data_history_super_admin" ON public.app_data_history;
+CREATE POLICY "app_data_history_super_admin" ON public.app_data_history
   FOR SELECT
-  USING (es_admin());
+  USING (es_super_admin());
