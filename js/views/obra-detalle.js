@@ -98,7 +98,7 @@
   }
 
   /* Genera un reporte ejecutivo en PDF (exclusivo Plan PRO/Empresa) */
-  function exportPDF(ctx) {
+  async function exportPDF(ctx) {
     const plan = (G.plan && G.plan.currentPlan) ? G.plan.currentPlan() : { id: 'free' };
     if (plan.id !== 'pro' && plan.id !== 'empresa') {
       if (G.ui && G.ui.toast) G.ui.toast('Los reportes en PDF son exclusivos del Plan PRO', 'warning');
@@ -139,20 +139,32 @@
       '<div style="text-align:center;color:#94a3b8;font-size:12px;margin-top:24px">Generado por GADU - Tu gestión, perfecta</div>' +
       '</div>';
 
+    /* Contenedor de captura: renderizable pero invisible (NO off-screen, que
+       produce páginas en blanco). Fondo blanco puro + texto oscuro forzados. */
     const container = document.createElement('div');
     container.style.position = 'fixed';
-    container.style.left = '-9999px';
+    container.style.left = '0';
     container.style.top = '0';
+    container.style.width = '800px';
+    container.style.maxWidth = '100%';
+    container.style.zIndex = '-9999';
+    container.style.opacity = '0';
+    container.style.pointerEvents = 'none';
+    container.style.background = '#ffffff';
+    container.style.color = '#111827';
     container.innerHTML = html;
     document.body.appendChild(container);
 
     const filename = 'Reporte_Obra_' + String(w.name || 'obra').replace(/[^a-z0-9áéíóúñ ]/gi, '').replace(/\s+/g, '_') + '.pdf';
 
+    /* Esperar un tick para que el navegador pinte el contenedor (evita captura en blanco) */
+    await new Promise(r => setTimeout(r, 250));
+
     html2pdf().from(container).set({
       margin: 8,
       filename: filename,
       image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: { scale: 2, useCORS: true },
+      html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
     }).save().then(() => { try { document.body.removeChild(container); } catch (e) {} });
   }
