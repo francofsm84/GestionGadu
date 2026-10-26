@@ -415,6 +415,40 @@
     });
   }
 
+  /* ---------- Botón flotante de soporte ---------- */
+  function initSupportFab() {
+    try {
+      if (document.getElementById('supportFab')) return;
+      /* No mostrar en modo soporte (impersonación) */
+      const inSupport = !!(G.impersonate && G.impersonate.isActive && G.impersonate.isActive());
+      if (inSupport) return;
+      const btn = document.createElement('button');
+      btn.id = 'supportFab';
+      btn.className = 'support-fab';
+      btn.title = 'Ayuda y soporte';
+      btn.innerHTML = '❓';
+      btn.addEventListener('click', openSupportMenu);
+      document.body.appendChild(btn);
+    } catch (e) {}
+  }
+
+  function openSupportMenu() {
+    const wa = G.BOT_PHONE_NUMBER || '5493547665984';
+    const m = UI.openModal({
+      title: 'Ayuda y soporte',
+      subtitle: 'Estamos acá para ayudarte.',
+      body:
+        '<div class="stack" style="gap:10px">' +
+        '<button class="btn btn-soft" id="smFeedback">🐞 Reportar un problema</button>' +
+        '<a class="btn btn-soft-success" id="smWa" href="https://wa.me/' + wa + '?text=' + encodeURIComponent('Hola Franco, estoy probando GADU y tengo una consulta...') + '" target="_blank" rel="noopener">💬 Hablar con Soporte (WhatsApp)</a>' +
+        '</div>',
+      footer: '<button class="btn btn-ghost" data-cancel>Cerrar</button>',
+    });
+    m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+    m.panel.querySelector('#smFeedback').addEventListener('click', () => { m.close(); openFeedback(); });
+    m.panel.querySelector('#smWa').addEventListener('click', m.close);
+  }
+
   /* ---------- Buzón de Feedback (reportes de usuarios) ---------- */
   function openFeedback() {
     const m = UI.openModal({
@@ -1149,6 +1183,7 @@
     const lr = document.getElementById('loginRoot');
     if (lr) lr.remove();
     initImpersonationExit();
+    initSupportFab();
 
     /* ===== Render INMEDIATO del Dashboard con los datos LOCALES =====
        Evita el flash de $0: los montos reales aparecen al instante.
