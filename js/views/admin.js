@@ -1005,7 +1005,20 @@
       btn.disabled = true;
       btn.textContent = 'Enviando...';
       try {
-        await G.api('POST', '/rpc/enviar_broadcast', { p_title: title, p_message: message, p_target: target });
+        /* Llamar a la Edge Function send-broadcast (envío real por WhatsApp + Push) */
+        const res = await fetch(G.auth.SUPABASE_URL + '/functions/v1/send-broadcast', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': G.auth.SUPABASE_ANON_KEY,
+            'Authorization': 'Bearer ' + ((G.auth.getSession() && G.auth.getSession().accessToken) || ''),
+          },
+          body: JSON.stringify({ title, message, target }),
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          throw new Error(j.error || j.message || 'HTTP ' + res.status);
+        }
         await G.plan.log('anuncio_enviado', title + ' · ' + target);
         UI.toast('✅ Anuncio enviado', 'success');
         await tabAnuncios(body);
