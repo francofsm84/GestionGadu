@@ -939,6 +939,11 @@
           ? '<span class="form-hint">Todavía no hay empleados cargados. Tocá <b>+</b> para crear el primero: al guardarlo va a aparecer seleccionado acá.</span>'
           : '') +
         '</div>' +
+        '<div class="field span-2"><label>⚡ Carga rápida por cuadrilla (opcional)</label>' +
+        '<select class="select" id="fCrew"><option value="">— Individual (un empleado) —</option>' +
+        (S.data.crews || []).map(c => '<option value="' + c.id + '">' + UI.escapeHtml(c.name || 'Cuadrilla') + ' · ' + (c.employeeIds || []).length + ' integrante' + ((c.employeeIds || []).length !== 1 ? 's' : '') + '</option>').join('') +
+        '</select>' +
+        '<span class="form-hint">Si elegís una cuadrilla, se carga la asistencia de TODOS sus integrantes a la vez.</span></div>' +
         '<div class="field"><label>Fecha</label><input class="input" type="date" id="fDate" value="' + (att ? att.date : (opts.date || S.todayISO())) + '"></div>' +
         '<div class="field"><label>Estado</label><select class="select" id="fStatus">' +
         '<option value="presente"' + (!att || att.status === 'presente' ? ' selected' : '') + '>Presente</option>' +
@@ -1011,6 +1016,14 @@
       });
     });
 
+    /* Carga rápida por cuadrilla: oculta el selector individual y guarda para todos */
+    const crewSel = m.panel.querySelector('#fCrew');
+    crewSel.addEventListener('change', () => {
+      const usingCrew = !!crewSel.value;
+      const empField = empSel.closest('.field');
+      if (empField) empField.style.display = usingCrew ? 'none' : '';
+    });
+
     const syncStatus = () => {
       m.panel.querySelector('#hoursBlock').hidden = m.panel.querySelector('#fStatus').value !== 'presente';
       m.panel.querySelector('#hoursExtraBlock').hidden = m.panel.querySelector('#fStatus').value !== 'presente';
@@ -1020,9 +1033,9 @@
 
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
     m.panel.querySelector('[data-save]').addEventListener('click', () => {
+      const crewId = crewSel.value;
       const employeeId = empSel.value;
       const date = m.panel.querySelector('#fDate').value;
-      if (!employeeId) { UI.toast('Primero creá y seleccioná un empleado', 'error'); return; }
       if (!date) { UI.toast('Ingresá la fecha', 'error'); return; }
       const status = m.panel.querySelector('#fStatus').value;
       const hours = [];
@@ -1036,7 +1049,29 @@
         const h = UI.readNum(row.querySelector('[data-k="hours"]'));
         if (h > 0) hours.push({ workId: workId || null, hours: h, tipo: 'extra' });
       });
-      const payload = { employeeId, date, status, hours: status === 'presente' ? hours : [], notes: m.panel.querySelector('#fNotes').value.trim() };
+      const notes = m.panel.querySelector('#fNotes').value.trim();
+      const horasFinal = status === 'presente' ? hours : [];
+
+      /* Carga rápida por cuadrilla: registrar para TODOS los integrantes */
+      if (crewId) {
+        const crew = (S.data.crews || []).find(c => c.id === crewId);
+        const members = crew ? (crew.employeeIds || []).map(id => S.employeeById(id)).filter(Boolean) : [];
+        if (!members.length) { UI.toast('Esa cuadrilla no tiene integrantes', 'error'); return; }
+        members.forEach(member => {
+          const payload = { employeeId: member.id, date, status, hours: horasFinal, notes };
+          const existing = S.attendanceFor(member.id, date);
+          if (existing) S.update('attendance', existing.id, payload);
+          else S.addAttendance(payload);
+        });
+        UI.toast('✅ Asistencia cargada para ' + members.length + ' integrante' + (members.length !== 1 ? 's' : '') + ' de ' + (crew ? crew.name : 'la cuadrilla'), 'success');
+        m.close();
+        G.router.refresh();
+        return;
+      }
+
+      /* Individual: un empleado */
+      if (!employeeId) { UI.toast('Primero creá y seleccioná un empleado', 'error'); return; }
+      const payload = { employeeId, date, status, hours: horasFinal, notes };
       const existing = isEdit ? att : S.attendanceFor(employeeId, date);
       if (existing) {
         S.update('attendance', existing.id, payload);
