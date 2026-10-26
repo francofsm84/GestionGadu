@@ -5,7 +5,8 @@
 (function (root) {
   'use strict';
   const G = root.GADU, S = G.store, UI = G.ui;
-  const state = { q: '', status: 'todas', view: 'board' };
+  const state = { q: '', status: 'todas', view: 'board', sel: {} };
+  let currentView = null;
 
   G.router.add('obras', 'obras', 'Obras y proyectos', 'Avance físico y financiero de cada obra', render);
   G.actions.work = openWorkModal;
@@ -22,6 +23,7 @@
   }
 
   function render(view) {
+    currentView = view;
     const counts = {
       activa: S.data.works.filter(w => w.status === 'activa').length,
       pausada: S.data.works.filter(w => w.status === 'pausada').length,
@@ -43,6 +45,7 @@
       '<div class="grow"></div>' +
       '<button class="btn btn-primary" id="btnNew">' + UI.icon('plus', 16) + 'Nueva obra</button>' +
       '</div>' +
+      '<div id="bulkBar" class="bulk-bar" hidden></div>' +
       '<div id="listWrap">' + (state.view === 'board' ? boardHTML(filtered()) : tableHTML(filtered())) + '</div>';
 
     view.querySelector('#fq').addEventListener('input', e => { state.q = e.target.value; updateList(view); });
@@ -55,12 +58,16 @@
     });
     view.querySelector('#btnNew').addEventListener('click', () => openWorkModal());
     bindListActions(view.querySelector('#listWrap'));
+    bindSelection(view);
+    refreshBulkBar(view);
   }
 
   function updateList(view) {
     const wrap = view.querySelector('#listWrap');
     wrap.innerHTML = state.view === 'board' ? boardHTML(filtered()) : tableHTML(filtered());
     bindListActions(wrap);
+    bindSelection(view);
+    refreshBulkBar(view);
   }
 
   function boardHTML(list) {
@@ -113,15 +120,17 @@
   }
 
   function tableHTML(list) {
+    const allSel = list.length > 0 && list.every(w => state.sel[w.id]);
     return '<div class="card table-card"><div class="table-wrap">' +
       '<table class="data-table">' +
-      '<thead><tr><th>Obra</th><th>Cliente</th><th>Ubicación</th><th>Estado</th><th class="num">Presupuesto</th><th class="num">Cobrado</th><th class="num">Costos</th><th class="num">Margen</th><th style="width:150px">Avance físico</th><th></th></tr></thead>' +
+      '<thead><tr><th class="chk"><input type="checkbox" id="masterSel"' + (allSel ? ' checked' : '') + ' title="Seleccionar todas las visibles"></th><th>Obra</th><th>Cliente</th><th>Ubicación</th><th>Estado</th><th class="num">Presupuesto</th><th class="num">Cobrado</th><th class="num">Costos</th><th class="num">Margen</th><th style="width:150px">Avance físico</th><th></th></tr></thead>' +
       '<tbody>' +
       (list.map(w => {
         const st = S.workStats(w.id);
         const client = S.contactById(w.clientId);
         const sl = STATUS_LABEL[w.status] || ['', 'neutral'];
         return '<tr class="clickable" data-id="' + w.id + '">' +
+          '<td class="chk"><input type="checkbox" class="row-check-o" data-id="' + w.id + '"' + (state.sel[w.id] ? ' checked' : '') + '></td>' +
           '<td><strong>' + UI.escapeHtml(w.name) + '</strong><div class="muted small">' + UI.escapeHtml(w.code || '') + '</div></td>' +
           '<td>' + UI.escapeHtml(client ? client.name : '—') + '</td>' +
           '<td class="muted">' + UI.escapeHtml(w.location || '—') + '</td>' +
@@ -135,17 +144,17 @@
           '<button class="icon-btn sm" data-edit="' + w.id + '" title="Editar">' + UI.icon('edit', 15) + '</button>' +
           '<button class="icon-btn sm danger" data-del="' + w.id + '" title="Eliminar">' + UI.icon('trash', 15) + '</button>' +
           '</div></td></tr>';
-      }).join('') || '<tr><td colspan="10">' + UI.emptyState('hard-hat', 'No hay obras que coincidan', 'Probá con otra búsqueda o estado.') + '</td></tr>') +
+      }).join('') || '<tr><td colspan="11">' + UI.emptyState('hard-hat', 'No hay obras que coincidan', 'Probá con otra búsqueda o estado.') + '</td></tr>') +
       '</tbody></table></div></div>';
   }
 
   function bindListActions(wrap) {
     UI.on(wrap, '.work-card', 'click', e => {
-      if (e.target.closest('button')) return;
+      if (e.target.closest('button') || e.target.closest('input')) return;
       location.hash = '#/obra/' + e.currentTarget.dataset.id;
     });
     UI.on(wrap, 'tr.clickable', 'click', e => {
-      if (e.target.closest('button')) return;
+      if (e.target.closest('button') || e.target.closest('input')) return;
       location.hash = '#/obra/' + e.currentTarget.dataset.id;
     });
     UI.on(wrap, '[data-edit]', 'click', e => {
@@ -168,6 +177,40 @@
         UI.toast('Obra eliminada');
         G.router.refresh();
       }
+    });
+  }
+
+  function bindSelection(view) {
+    const wrap = view.querySelector('#listWrap');
+    if (!wrap) return;
+    UI.on(wrap, '.row-check-o', 'change', e => {
+      const id = e.target.closest('.row-check-o').dataset.id;
+      if (e.target.checked) state.sel[id] = true; else delete state.sel[id];
+      const master = wrap.querySelector('#masterSel');
+      if (master) master.checked = filtered().length > 0 && filtered().every(w => state.sel[w.id]);
+      refreshBulkBar(view);
+    });
+    UI.on(wrap, '#masterSel', 'change', e => {
+      const checked = e.target.checked;
+      filtered().forEach(w => { if (checked) state.sel[w.id] = true; else delete state.sel[w.id]; });
+      updateList(view);
+    });
+  }
+
+  function refreshBulkBar(view) {
+    const bar = view ? view.querySelector('#bulkBar') : null;
+    if (!bar) return;
+    const n = Object.keys(state.sel).filter(id => state.sel[id]).length;
+    bar.hidden = n === 0;
+    bar.innerHTML = n ? '<button class="btn btn-soft-danger" id="btnBulkDel">🗑️ Eliminar seleccionadas (' + n + ')</button>' : '';
+    if (n) bar.querySelector('#btnBulkDel').addEventListener('click', async () => {
+      const ids = Object.keys(state.sel).filter(id => state.sel[id]);
+      const ok = await UI.confirm({ title: 'Eliminar obras', message: '¿Eliminar <strong>' + ids.length + '</strong> obra(s) junto con sus ingresos y gastos asociados? Esta acción no se puede deshacer.', okLabel: 'Eliminar', tone: 'danger' });
+      if (!ok) return;
+      ids.forEach(id => S.removeWork(id));
+      state.sel = {};
+      UI.toast('Eliminadas ' + ids.length + ' obra(s)');
+      G.router.refresh();
     });
   }
 
