@@ -600,7 +600,15 @@
     const upTo = state.upTo || S.todayISO();
     const st = S.employeeStats(e.id, upTo);
     const stAll = S.employeeStats(e.id);
-    const ctx = { e, st, stAll, upTo };
+    /* Saldo de la semana en curso (devengado − adelantos de los últimos 7 días) */
+    const desdeSemana = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+    const horasSemana = (S.data.attendance || []).filter(a => a.employeeId === e.id && (a.date || '') >= desdeSemana && a.status === 'presente')
+      .reduce((s, a) => s + (a.hours || []).reduce((s2, h) => s2 + (Number(h.hours) || 0), 0), 0);
+    const devengadoSemana = horasSemana * (Number(e.hourlyRate) || 0);
+    const adelantosSemana = (S.data.expenses || []).filter(x => x.employeeId === e.id && x.expenseKind === 'adelanto' && (x.date || '') >= desdeSemana)
+      .reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    const pendSemana = Math.max(0, devengadoSemana - adelantosSemana);
+    const ctx = { e, st, stAll, upTo, pendSemana };
 
     view.innerHTML =
       '<div class="detail-head card">' +
@@ -614,6 +622,7 @@
       (e.notes ? ' · ' + UI.escapeHtml(e.notes) : '') + '</p>' +
       '</div>' +
       '<div class="detail-actions">' +
+      '<button class="btn btn-soft-success" id="btnPayWeek" title="Liquidar la semana (devengado − adelantos)">' + UI.icon('calendar-plus', 15) + 'Pagar Semana' + (pendSemana > 0 ? ' · ' + UI.fmtMoney(pendSemana) : '') + '</button>' +
       '<button class="btn btn-soft-success" id="btnPay">' + UI.icon('wallet', 15) + 'Registrar pago</button>' +
       '<button class="btn btn-soft-warning" id="btnAdv">' + UI.icon('zap', 15) + 'Adelanto</button>' +
       '<button class="btn btn-soft-info" id="btnAtt2">' + UI.icon('calendar-plus', 15) + 'Jornada</button>' +
@@ -655,6 +664,9 @@
     view.querySelector('#upTo').addEventListener('change', ev => {
       state.upTo = ev.target.value;
       G.router.refresh();
+    });
+    view.querySelector('#btnPayWeek').addEventListener('click', () => {
+      G.actions.expense({ type: 'general', employeeId: e.id, category: 'Sueldos', amount: pendSemana > 0 ? pendSemana : '' });
     });
     view.querySelector('#btnPay').addEventListener('click', () => G.actions.expense({ type: 'general', employeeId: e.id, category: 'Sueldos' }));
     view.querySelector('#btnAdv').addEventListener('click', () => G.actions.expense({ type: 'general', employeeId: e.id, category: 'Sueldos', expenseKind: 'adelanto' }));

@@ -87,7 +87,9 @@
         }).join('');
         return '<tr>' +
           '<td class="muted">' + UI.fmtDate(a.date) + '</td>' +
-          '<td><strong>' + UI.escapeHtml(eName) + '</strong></td>' +
+          '<td>' + (emp
+            ? '<a class="emp-link" href="#/empleado/' + emp.id + '" title="Ver legajo de ' + UI.escapeHtml(eName) + '">' + UI.escapeHtml(eName) + '</a>'
+            : '<strong>' + UI.escapeHtml(eName) + '</strong>') + '</td>' +
           '<td>' + (a.status === 'presente' ? UI.chip('Presente', 'success', 'check-circle') : UI.chip('Ausente', 'neutral', 'x-circle')) + '</td>' +
           '<td>' + (horas || '<span class="muted">—</span>') + '</td>' +
           '<td class="muted">' + UI.escapeHtml(a.notes || '—') + '</td>' +

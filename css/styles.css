@@ -311,6 +311,9 @@ body.sb-collapsed .main { margin-left: var(--sidebar-w-min); }
 /* Tarjetas KPI clickeables (Dashboard): cursor puntero + hover sutil */
 .kpi-link { text-decoration: none; color: inherit; cursor: pointer; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
 .kpi-link:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg, 0 10px 30px rgba(0,0,0,.18)); border-color: var(--primary, #4f46e5); }
+/* Enlace a legajo de empleado dentro de tablas (Jornadas) */
+.emp-link { color: inherit; text-decoration: none; font-weight: 700; }
+.emp-link:hover { color: var(--primary, #4f46e5); text-decoration: underline; }
 .kpi-ico { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; flex: none; }
 .kpi-success { background: var(--success-soft); color: var(--success); }
 .kpi-danger { background: var(--danger-soft); color: var(--danger); }
