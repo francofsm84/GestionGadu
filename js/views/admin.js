@@ -12,6 +12,8 @@
   const STATUS_LABEL = { active: 'Activa', trialing: 'Prueba', past_due: 'En mora', canceled: 'Cancelada', expired: 'Vencida' };
   let tab = 'usuarios';
   let soporteFilter = { tab: 'open', q: '' };
+  let selUsers = {};
+  let currentView = null;
 
   /* ---------- Exportación de usuarios ---------- */
   function userColumns(u, planes) {
@@ -57,6 +59,7 @@
   }
 
   function render(view) {
+    currentView = view;
     if (!G.plan.isAdmin()) {
       view.innerHTML = '<div class="card">' + UI.emptyState('lock', 'Sin permisos', 'Este panel es exclusivo para administradores.') +
         '<p style="text-align:center"><a class="btn btn-primary" href="#/dashboard">Volver al panel</a></p></div>';
@@ -644,8 +647,9 @@
       '<button class="btn btn-soft btn-sm" id="btnPDF" title="Exportar PDF">' + UI.icon('download', 14) + 'PDF</button>' +
       '<button class="btn btn-primary" id="btnInvite">' + UI.icon('plus', 16) + 'Registrar usuario</button>' +
       '</div>' +
+      '<div id="bulkBar" class="bulk-bar" hidden></div>' +
       '<div class="table-wrap"><table class="data-table">' +
-      '<thead><tr><th>Usuario</th><th>Rol</th><th>Plan</th><th>Suscripción</th><th>Estado</th><th class="num">Obras</th><th class="num">Gastos</th><th class="num">Empleados</th><th>Última conexión</th><th></th></tr></thead>' +
+      '<thead><tr><th class="chk"><input type="checkbox" id="masterSel" title="Seleccionar todos los visibles"></th><th>Usuario</th><th>Rol</th><th>Plan</th><th>Suscripción</th><th>Estado</th><th class="num">Obras</th><th class="num">Gastos</th><th class="num">Empleados</th><th>Última conexión</th><th></th></tr></thead>' +
       '<tbody>' + rows.map(u => userRow(u, planes, usage[u.user_id])).join('') + '</tbody></table></div>' +
       (invitaciones.length
         ? '<div class="card" style="margin-top:14px"><div class="card-head"><div><h3>Invitaciones pendientes</h3><p class="muted">Se activan solas cuando la persona entra por primera vez con Google.</p></div></div>' +
@@ -717,6 +721,49 @@
       UI.toast('Usuario eliminado');
       tabUsuarios(body);
     }));
+
+    /* Selección múltiple de usuarios + borrado masivo */
+    body.querySelectorAll('.row-check-u').forEach(cb => cb.addEventListener('change', e => {
+      const id = e.target.dataset.id;
+      if (e.target.checked) selUsers[id] = true; else delete selUsers[id];
+      const master = body.querySelector('#masterSel');
+      if (master) {
+        const visibles = Array.from(body.querySelectorAll('.row-check-u')).filter(cb => !cb.closest('tr').hidden);
+        master.checked = visibles.length > 0 && visibles.every(cb => cb.checked);
+      }
+      refreshBulkBar();
+    }));
+    body.querySelector('#masterSel').addEventListener('change', e => {
+      const checked = e.target.checked;
+      body.querySelectorAll('.row-check-u').forEach(cb => {
+        const id = cb.dataset.id;
+        if (cb.closest('tr').hidden) return;   // solo los visibles
+        cb.checked = checked;
+        if (checked) selUsers[id] = true; else delete selUsers[id];
+      });
+      refreshBulkBar();
+    });
+    refreshBulkBar();
+  }
+
+  function refreshBulkBar() {
+    const bar = currentView ? currentView.querySelector('#bulkBar') : null;
+    if (!bar) return;
+    const n = Object.keys(selUsers).filter(id => selUsers[id]).length;
+    bar.hidden = n === 0;
+    bar.innerHTML = n ? '<button class="btn btn-soft-danger" id="btnBulkDel">🗑️ Eliminar seleccionados (' + n + ')</button>' : '';
+    if (n) bar.querySelector('#btnBulkDel').addEventListener('click', async () => {
+      const ids = Object.keys(selUsers).filter(id => selUsers[id]);
+      const ok = await UI.confirm({ title: 'Eliminar usuarios', message: '¿Eliminar <strong>' + ids.length + '</strong> usuario(s)? Se eliminará su acceso y todos sus datos. Esta acción no se puede deshacer.', okLabel: 'Eliminar', tone: 'danger' });
+      if (!ok) return;
+      for (const id of ids) {
+        try { await G.api('DELETE', '/profiles?user_id=eq.' + encodeURIComponent(id)); } catch (e) {}
+      }
+      await G.plan.log('usuarios_eliminados', ids.length + ' usuarios');
+      selUsers = {};
+      UI.toast('Eliminados ' + ids.length + ' usuario(s)');
+      G.router.refresh();
+    });
   }
 
   function userRow(u, planes, usage) {
@@ -727,6 +774,9 @@
     const planOpts = planes.map(p => '<option value="' + p.id + '"' + (u.plan_id === p.id ? ' selected' : '') + '>' + p.nombre + '</option>').join('');
     const rolOpts = G.plan.ROLES.map(r => '<option value="' + r + '"' + (u.rol === r ? ' selected' : '') + '>' + (ROL_LABEL[r] || r) + '</option>').join('');
     return '<tr data-uid="' + u.user_id + '" data-plan="' + (u.plan_id || '') + '" data-status="' + (u.estado_cuenta === 'suspendido' ? 'suspendido' : (u.subscription_status || '')) + '" data-rubro="' + UI.escapeHtml(rubro) + '">' +
+      '<td class="chk">' + (protegido
+        ? '<span class="muted small" title="Cuenta protegida">🔒</span>'
+        : '<input type="checkbox" class="row-check-u" data-id="' + u.user_id + '"' + (selUsers[u.user_id] ? ' checked' : '') + '>') + '</td>' +
       '<td><strong>' + UI.escapeHtml(u.email || '—') + '</strong>' + (protegido ? ' ' + UI.chip('🔒 Protegida', 'success') : '') + '<br><span class="muted small">' + UI.escapeHtml(u.empresa_constructora || u.empresa || '—') + (rubro ? ' · ' + UI.escapeHtml(rubro) : '') + '</span></td>' +
       '<td><select class="select" data-sel="rol" data-uid="' + u.user_id + '"' + (protegido ? ' disabled' : '') + '>' + rolOpts + '</select></td>' +
       '<td><select class="select" data-sel="plan_id" data-uid="' + u.user_id + '"' + (protegido ? ' disabled' : '') + '>' + planOpts + '</select></td>' +

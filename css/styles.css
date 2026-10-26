@@ -605,7 +605,7 @@ canvas.chart { min-width: 0; max-width: 100%; }
 .contact-actions .spacer { flex: 1; }
 /* Selección múltiple de clientes (tabla/tarjetas) + barra de borrado masivo */
 .data-table .chk { width: 38px; }
-.data-table .chk input, .contact-card .card-check, .row-check, .row-check-j, .row-check-f, .row-check-e, .row-check-s, .row-check-b, .row-check-o { accent-color: var(--primary, #4f46e5); cursor: pointer; }
+.data-table .chk input, .contact-card .card-check, .row-check, .row-check-j, .row-check-f, .row-check-e, .row-check-s, .row-check-b, .row-check-o, .row-check-u { accent-color: var(--primary, #4f46e5); cursor: pointer; }
 .bulk-bar { position: sticky; bottom: 12px; z-index: 30; display: flex; justify-content: center; margin: 10px 0; }
 .bulk-bar .btn { box-shadow: var(--shadow-lg, 0 10px 30px rgba(0,0,0,.25)); }
 
