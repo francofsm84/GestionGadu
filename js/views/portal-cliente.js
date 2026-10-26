@@ -44,7 +44,7 @@
     const updatedAt = w.updatedAt || w.updated_at || w.lastUpdate || w.last_update || '';
 
     return '<div class="portal-wrap">' +
-      '<div class="portal-card" id="portalCard">' +
+      '<div class="portal-card" id="portalCardContent">' +
         '<div class="portal-head">' +
           '<div class="portal-logo">GADU <span>Construye</span></div>' +
           '<div class="portal-chip">' + status + '</div>' +
@@ -148,7 +148,7 @@
 
   function downloadPortalPDF(w) {
     if (typeof html2pdf === 'undefined') { return; }
-    const card = document.getElementById('portalCard');
+    const card = document.getElementById('portalCardContent');
     if (!card) return;
     const btn = document.getElementById('btnPdfPortal');
     const filename = 'Avance_' + String(w.name || 'obra').replace(/[^a-z0-9áéíóúñ ]/gi, '').replace(/\s+/g, '_') + '.pdf';
@@ -159,9 +159,9 @@
       margin: [10, 10, 10, 10],
       filename,
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, windowWidth: card.scrollWidth, logging: false },
+      /* useCORS + allowTaint: lee las fotos de la galería sin bloqueos de seguridad */
+      html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['avoid-all'] },
     }).save().then(() => {
       if (btn) btn.style.display = '';
       card.classList.remove('portal-card-print');
