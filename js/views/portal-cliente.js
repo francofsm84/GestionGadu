@@ -25,6 +25,14 @@
     const billing = Math.max(0, Math.min(100, Math.round(Number(w.billingProgress) || 0)));
     const status = STATUS_LABEL[w.status] || 'Activa';
     const photos = Array.isArray(w.photos) ? w.photos.filter(Boolean) : [];
+    /* Pagos/certificados + bitácora: campos flexibles según lo que devuelva el RPC.
+       NUNCA se muestran costos, márgenes ni sueldos (solo lo que abonó el cliente). */
+    const payments = Array.isArray(w.payments) ? w.payments
+      : Array.isArray(w.cobros) ? w.cobros
+      : Array.isArray(w.certificados) ? w.certificados : [];
+    const bitacora = Array.isArray(w.bitacora) ? w.bitacora
+      : Array.isArray(w.updates) ? w.updates
+      : Array.isArray(w.novedades) ? w.novedades : [];
 
     return '<div class="portal-wrap">' +
       '<div class="portal-card">' +
@@ -42,8 +50,27 @@
           '<div class="portal-bar-label"><span>Avance de Cobro</span><b>' + billing + '%</b></div>' +
           '<div class="portal-bar"><div class="portal-bar-fill portal-bar-fill--info" style="width:' + billing + '%"></div></div>' +
         '</div>' +
+        (payments.length
+          ? '<div class="portal-section"><h3 class="portal-section-title">Pagos / Certificados</h3>' +
+            payments.map(p => {
+              const monto = Number(p.amount || p.monto || 0);
+              const fecha = p.date || p.fecha || '';
+              const det = p.concept || p.concepto || p.description || p.detalle || 'Pago';
+              return '<div class="portal-pay-row"><span class="muted">' + (fecha ? UI.fmtDate(fecha) + ' · ' : '') + UI.escapeHtml(det) + '</span><b class="pos">' + UI.fmtMoney(monto) + '</b></div>';
+            }).join('') +
+            '</div>'
+          : '') +
+        (bitacora.length
+          ? '<div class="portal-section"><h3 class="portal-section-title">Bitácora de avances</h3>' +
+            bitacora.map(n => {
+              const fecha = n.date || n.fecha || '';
+              const nota = n.notes || n.nota || n.texto || n.detalle || '';
+              return '<div class="portal-note"><span class="muted">' + (fecha ? UI.fmtDate(fecha) : '') + '</span><span>' + UI.escapeHtml(nota) + '</span></div>';
+            }).join('') +
+            '</div>'
+          : '') +
         (photos.length
-          ? '<div class="portal-photos">' + photos.map(p => '<img src="' + UI.escapeHtml(p) + '" alt="Foto de la obra">').join('') + '</div>'
+          ? '<div class="portal-section"><h3 class="portal-section-title">Fotos de avance</h3><div class="portal-photos">' + photos.map(p => '<img src="' + UI.escapeHtml(p) + '" alt="Foto de la obra">').join('') + '</div></div>'
           : '<p class="portal-no-photos">El contratista aún no ha subido fotos de avance.</p>') +
         '<p class="portal-foot">Datos actualizados automáticamente · Generado por GADU</p>' +
       '</div></div>';

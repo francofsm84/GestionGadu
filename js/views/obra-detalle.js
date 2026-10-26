@@ -10,14 +10,16 @@
 
   G.router.add('obra', 'obra/:id', 'Detalle de obra', 'Todos los movimientos de la obra en un solo lugar', render);
 
-  function kpi(icon, tone, label, value, sub) {
-    return '<div class="kpi-card">' +
-      '<span class="kpi-ico kpi-' + tone + '">' + UI.icon(icon, 20) + '</span>' +
+  function kpi(icon, tone, label, value, sub, nav) {
+    const inner = '<span class="kpi-ico kpi-' + tone + '">' + UI.icon(icon, 20) + '</span>' +
       '<div class="kpi-body">' +
       '<span class="kpi-label">' + label + '</span>' +
       '<strong class="kpi-value">' + value + '</strong>' +
       '<span class="kpi-sub">' + sub + '</span>' +
-      '</div></div>';
+      '</div>';
+    return nav
+      ? '<a class="kpi-card kpi-link" data-nav="' + nav + '">' + inner + '</a>'
+      : '<div class="kpi-card">' + inner + '</div>';
   }
 
   function barRow(label, pct, color, sub) {
@@ -192,10 +194,10 @@
       '</div></div>' +
 
       '<section class="kpi-grid kpi-4">' +
-      kpi('file-text', 'neutral', 'Presupuesto', UI.fmtMoney(w.budgetTotal), budget ? 'Según ' + budget.code : 'Sin presupuesto asociado') +
-      kpi('trending-up', 'success', 'Cobrado', UI.fmtMoney(st.incomes), Math.round(st.advanceCobro) + '% del presupuesto') +
-      kpi('arrow-up-right', 'danger', 'Costos directos', UI.fmtMoney(st.costs), Math.round(st.advanceCosto) + '% del presupuesto') +
-      kpi('activity', st.margin >= 0 ? 'success' : 'danger', 'Margen', UI.fmtMoney(st.margin), st.marginPct.toFixed(1) + '% sobre lo cobrado') +
+      kpi('file-text', 'neutral', 'Presupuesto', UI.fmtMoney(w.budgetTotal), budget ? 'Según ' + budget.code : 'Sin presupuesto asociado', '#/presupuestos') +
+      kpi('trending-up', 'success', 'Cobrado', UI.fmtMoney(st.incomes), Math.round(st.advanceCobro) + '% del presupuesto', '#/ingresos') +
+      kpi('arrow-up-right', 'danger', 'Costos directos', UI.fmtMoney(st.costs), Math.round(st.advanceCosto) + '% del presupuesto', '#/gastos') +
+      kpi('activity', st.margin >= 0 ? 'success' : 'danger', 'Margen', UI.fmtMoney(st.margin), st.marginPct.toFixed(1) + '% sobre lo cobrado', 'finResumen') +
       '</section>' +
 
       '<section class="grid-2">' +
@@ -210,7 +212,7 @@
       barRow('Avance de cobro', st.advanceCobro, 'var(--info)', UI.fmtMoney(st.incomes) + ' cobrados') +
       barRow('Avance de costos', st.advanceCosto, 'var(--warning)', UI.fmtMoney(st.costs) + ' ejecutados') +
       '</div></div>' +
-      '<div class="card">' +
+      '<div class="card" id="finResumen">' +
       '<div class="card-head"><h3>Resumen financiero</h3></div>' +
       '<div class="stack">' +
       sumRow('Presupuesto total', UI.fmtMoney(w.budgetTotal)) +
@@ -267,6 +269,15 @@
     view.querySelector('#btnEdit').addEventListener('click', () => G.actions.work(w));
     view.querySelector('#btnPdf').addEventListener('click', () => exportPDF(ctx));
     view.querySelector('#btnShare').addEventListener('click', () => shareWithClient(w));
+
+    /* Tarjetas KPI clickeables: hash → navegar · id → scroll al desglose */
+    UI.on(view, '[data-nav]', 'click', e => {
+      const nav = e.currentTarget.dataset.nav;
+      if (!nav) return;
+      if (nav.indexOf('#/') === 0) { location.hash = nav; return; }
+      const el = document.getElementById(nav);
+      if (el) { try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e2) { el.scrollIntoView(); } }
+    });
 
     /* Galería de fotos de avance */
     const fotosInput = view.querySelector('#fotosInput');

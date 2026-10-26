@@ -1033,6 +1033,12 @@ body.no-session .app { display: none; }
 .portal-no-photos { text-align: center; color: #94a3b8; font-size: 13px; padding: 14px 0; }
 .portal-foot { text-align: center; color: #94a3b8; font-size: 12px; margin: 20px 0 0; }
 .portal-empty { text-align: center; color: #64748b; padding: 40px; font-size: 15px; }
+.portal-section { margin-top: 20px; border-top: 1px solid #eef2f7; padding-top: 16px; }
+.portal-section-title { font-size: 14px; font-weight: 700; color: #0f172a; margin: 0 0 10px; }
+.portal-pay-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px dashed #eef2f7; font-size: 13px; }
+.portal-pay-row .pos { color: #16a34a; font-weight: 700; }
+.portal-note { display: flex; flex-direction: column; gap: 2px; padding: 7px 0; border-bottom: 1px dashed #eef2f7; font-size: 13px; color: #334155; }
+.portal-note .muted { color: #94a3b8; font-size: 12px; }
 /* Filas de reporte (solo lectura): montos alineados a la derecha */
 .report-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #eef2f7; }
 .report-row:last-child { border-bottom: none; }
