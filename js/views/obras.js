@@ -91,9 +91,30 @@
     }).join('') + '</div>';
   }
 
+  /* Consumo presupuestario ejecutado: gastos de obra + jornales de mano de obra.
+     Los jornales se calculan en tiempo real desde attendance × tarifa horaria. */
+  function budgetConsumption(w) {
+    const st = S.workStats(w.id);
+    const labor = S.sum(S.workEmployees(w.id).map(e => Number(e.cost) || 0));
+    const ejecutado = st.costs + labor;
+    const budget = Number(w.budgetTotal) || 0;
+    const pct = budget > 0 ? Math.round(ejecutado / budget * 100) : (ejecutado > 0 ? 100 : 0);
+    return { ejecutado, budget, pct };
+  }
+
+  /* Semáforo de alerta presupuestaria: verde <75% · amarillo 75–95% · rojo >95% */
+  function budgetAlert(pct) {
+    if (pct < 75) return { tone: 'success', label: 'Saludable' };
+    if (pct <= 95) return { tone: 'warning', label: 'Presupuesto cercano al límite' };
+    return { tone: 'danger', label: 'Riesgo de margen / Desvío de presupuesto' };
+  }
+
   function cardHTML(w) {
     const st = S.workStats(w.id);
     const client = S.contactById(w.clientId);
+    const c = budgetConsumption(w);
+    const a = budgetAlert(c.pct);
+    const barColor = c.pct < 75 ? 'var(--success)' : (c.pct <= 95 ? 'var(--warning)' : 'var(--danger)');
     const tone = st.margin >= 0 ? 'success' : 'danger';
     return '<article class="work-card" data-id="' + w.id + '">' +
       '<div class="work-card-head">' +
@@ -113,10 +134,16 @@
       '<div class="work-progress-row"><span>Cobro</span><b>' + Math.round(st.advanceCobro) + '%</b></div>' +
       UI.progress(st.advanceCobro, 'var(--info)') +
       '</div>' +
+      '<div class="work-progress">' +
+      '<div class="work-progress-row"><span>Consumo</span><b>' + c.pct + '%</b></div>' +
+      UI.progress(Math.min(100, c.pct), barColor) +
+      '</div>' +
       '<div class="work-foot">' +
-      '<span class="muted small">Presupuesto <b>' + UI.fmtMoney(w.budgetTotal) + '</b></span>' +
+      '<span class="muted small">Presupuesto <b>' + UI.fmtMoney(w.budgetTotal) + '</b> · Ejecutado <b>' + UI.fmtMoney(c.ejecutado) + '</b></span>' +
       UI.chip(st.margin >= 0 ? 'Margen +' + UI.fmtMoney(st.margin) : 'Margen −' + UI.fmtMoney(Math.abs(st.margin)), tone) +
-      '</div></article>';
+      '</div>' +
+      '<div class="work-foot" style="justify-content:flex-end;padding-top:0">' + UI.chip(a.label, a.tone) + '</div>' +
+      '</article>';
   }
 
   function tableHTML(list) {
