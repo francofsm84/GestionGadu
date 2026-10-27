@@ -504,14 +504,17 @@ export function executeAction(
     const montoFmt = monto.toLocaleString("es-AR");
     const ob = resolveObra();
     if (ob.missing) {
-      /* Quick Capture: sin obra → se guarda "sin asignar" (workId null). */
-      (d.expenses || (d.expenses = [])).unshift({
-        id: idGen(), type: "general", workId: null, date: todayISO, amount: monto,
-        category: cat, providerId: null, employeeId: null, expenseKind: null,
-        description: String(sourceText || "").slice(0, 200), invoiceNumber: "", paymentMethod: "", source: "whatsapp",
-      } as unknown as Record<string, unknown>);
-      console.log("[GADU-WA-INBOX] gasto sin obra guardado en bandeja: $" + monto + " (" + cat + ")");
-      return { ok: true, pendingWork: true, label: "Gasto registrado: $" + montoFmt + " en " + concepto + " (" + cat + ") (Pendiente de asignar a obra)" };
+      if (activas.length === 0) {
+        /* Sin obras: queda como gasto general (workId null) y se sugiere crear una obra */
+        (d.expenses || (d.expenses = [])).unshift({
+          id: idGen(), type: "general", workId: null, date: todayISO, amount: monto,
+          category: cat, providerId: null, employeeId: null, expenseKind: null,
+          description: String(sourceText || "").slice(0, 200), invoiceNumber: "", paymentMethod: "", source: "whatsapp",
+        } as unknown as Record<string, unknown>);
+        return { ok: true, label: "Gasto registrado: $" + montoFmt + " en " + concepto + " (" + cat + ") · Sin obras: quedó como gasto general. Creá una obra para imputarlo." };
+      }
+      /* Múltiples obras activas: pedir la obra ANTES de consolidar (no guardar aún) */
+      return { ok: false, missing: "la obra" };
     }
     (d.expenses || (d.expenses = [])).unshift({
       id: idGen(), type: "obra", workId: ob.workId, date: todayISO, amount: monto,

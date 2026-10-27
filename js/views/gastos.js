@@ -375,11 +375,19 @@
       /* Edición: re-clasificar General ↔ Obra según el destino elegido.
          Carga nueva: preservar el tipo original (y exigir obra si es de obra). */
       let finalType;
+      const hayObras = (S.data.works || []).length > 0;
       if (isEdit) {
         finalType = isInv ? 'general' : (workId ? 'obra' : 'general');
       } else {
-        if (type === 'obra' && !workId) { UI.toast('Seleccioná la obra', 'error'); return; }
-        finalType = type;
+        /* Blindaje: si hay obras cargadas, TODO gasto (salvo inversión) exige obra */
+        if (!isInv && hayObras && !workId) {
+          UI.toast('Todo gasto debe asociarse a una obra. Seleccioná la obra antes de guardar.', 'error');
+          return;
+        }
+        if (!isInv && !hayObras && !workId) {
+          UI.toast('No tenés obras: este gasto quedará como gasto general. Te recomendamos crear una obra.', 'info');
+        }
+        finalType = isInv ? 'general' : (workId ? 'obra' : 'general');
       }
       if (amount <= 0) { UI.toast('Ingresá un monto mayor a cero', 'error'); return; }
       if (!desc) { UI.toast('Ingresá la descripción del gasto', 'error'); return; }

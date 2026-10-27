@@ -504,14 +504,17 @@ export function executeAction(
     const montoFmt = monto.toLocaleString("es-AR");
     const ob = resolveObra();
     if (ob.missing) {
-      /* Quick Capture: sin obra -> se guarda "sin asignar" (workId null). */
-      (d.expenses || (d.expenses = [])).unshift({
-        id: idGen(), type: "general", workId: null, date: todayISO, amount: monto,
-        category: cat, providerId: null, employeeId: null, expenseKind: null,
-        description: String(sourceText || "").slice(0, 200), invoiceNumber: "", paymentMethod: "", source: "whatsapp",
-      } as unknown as Record<string, unknown>);
-      console.log("[GADU-WA-INBOX] gasto sin obra guardado en bandeja: $" + monto + " (" + cat + ")");
-      return { ok: true, pendingWork: true, label: "Gasto registrado: $" + montoFmt + " en " + concepto + " (" + cat + ") (Pendiente de asignar a obra)" };
+      if (activas.length === 0) {
+        /* Sin obras: queda como gasto general (workId null) y se sugiere crear una obra */
+        (d.expenses || (d.expenses = [])).unshift({
+          id: idGen(), type: "general", workId: null, date: todayISO, amount: monto,
+          category: cat, providerId: null, employeeId: null, expenseKind: null,
+          description: String(sourceText || "").slice(0, 200), invoiceNumber: "", paymentMethod: "", source: "whatsapp",
+        } as unknown as Record<string, unknown>);
+        return { ok: true, label: "Gasto registrado: $" + montoFmt + " en " + concepto + " (" + cat + ")   Sin obras: quedo como gasto general. Crea una obra para imputarlo." };
+      }
+      /* Multiples obras activas: pedir la obra ANTES de consolidar (no guardar aun) */
+      return { ok: false, missing: "la obra" };
     }
     (d.expenses || (d.expenses = [])).unshift({
       id: idGen(), type: "obra", workId: ob.workId, date: todayISO, amount: monto,
@@ -3659,6 +3662,13 @@ async function processMessage(body: unknown) {
     if (enWizardGastoObra) {
       const t = String(inc.text || "").trim();
       const esGeneral = /^(general|sin asignar|sin obra)$/i.test(t);
+      /* Blindaje: si hay obras activas, NO permitir "gasto general"; pedir obra */
+      const obrasActivas = ((data.works || []) as any[]).filter((w: any) => w.status === "activa");
+      if (esGeneral && obrasActivas.length > 0) {
+        const lista = obrasActivas.map((w: any) => "- " + (w.name || w.nombre)).join("\n");
+        fireAndForget(sendWhatsApp(inc.from, "Todo gasto debe imputarse a una obra. A cual corresponde?\n\n*Obras activas:*\n" + lista));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
       const actionG = { modulo: "gasto", campos: { monto: gastoObraCtx.monto, categoria: gastoObraCtx.categoria, obra: esGeneral ? "" : t } };
       const resG = executeAction(data, actionG, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
       if (resG.ok) {
@@ -5200,6 +5210,15 @@ async function processMessage(body: unknown) {
           await askForWork(inc.from, row.user_id, data);
         }
         return json({ ok: true, from: inc.from, reply });
+      }
+      /* Gasto sin obra + multiples obras activas -> preguntar a cual antes de guardar */
+      if (action.modulo === "gasto" && res.missing === "la obra") {
+        const cm = (action.campos || {}) as Record<string, unknown>;
+        await upsertSession(inc.from, row.user_id, "WAITING_GASTO_OBRA", { monto: cm.monto, categoria: cm.categoria });
+        const obrasActivas = ((data.works || []) as any[]).filter((w: any) => w.status === "activa");
+        const lista = obrasActivas.map((w: any) => "- " + (w.name || w.nombre)).join("\n");
+        fireAndForget(sendWhatsApp(inc.from, "A que obra corresponde este gasto?\n\n*Obras activas:*\n" + lista));
+        return json({ ok: true, from: inc.from, reply: "" });
       }
       const reply = res.notFound ? res.notFound : "\uD83E\uDD16 Me falta " + (res.missing || "un dato") + " para cargarlo. Decimelo por aca.";
       fireAndForget(sendWhatsApp(inc.from, reply));

@@ -2022,6 +2022,13 @@ async function processMessage(body: unknown) {
     if (enWizardGastoObra) {
       const t = String(inc.text || "").trim();
       const esGeneral = /^(general|sin asignar|sin obra)$/i.test(t);
+      /* Blindaje: si hay obras activas, NO permitir "gasto general"; pedir obra */
+      const obrasActivas = ((data.works || []) as any[]).filter((w: any) => w.status === "activa");
+      if (esGeneral && obrasActivas.length > 0) {
+        const lista = obrasActivas.map((w: any) => "• " + (w.name || w.nombre)).join("\n");
+        fireAndForget(sendWhatsApp(inc.from, "Todo gasto debe imputarse a una obra. ¿A cuál corresponde?\n\n*Obras activas:*\n" + lista));
+        return json({ ok: true, from: inc.from, reply: "" });
+      }
       const actionG = { modulo: "gasto", campos: { monto: gastoObraCtx.monto, categoria: gastoObraCtx.categoria, obra: esGeneral ? "" : t } };
       const resG = executeAction(data, actionG, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
       if (resG.ok) {
@@ -3563,6 +3570,15 @@ async function processMessage(body: unknown) {
           await askForWork(inc.from, row.user_id, data);
         }
         return json({ ok: true, from: inc.from, reply });
+      }
+      /* Gasto sin obra + múltiples obras activas → preguntar a cuál antes de guardar */
+      if (action.modulo === "gasto" && res.missing === "la obra") {
+        const cm = (action.campos || {}) as Record<string, unknown>;
+        await upsertSession(inc.from, row.user_id, "WAITING_GASTO_OBRA", { monto: cm.monto, categoria: cm.categoria });
+        const obrasActivas = ((data.works || []) as any[]).filter((w: any) => w.status === "activa");
+        const lista = obrasActivas.map((w: any) => "• " + (w.name || w.nombre)).join("\n");
+        fireAndForget(sendWhatsApp(inc.from, "¿A qué obra corresponde este gasto?\n\n*Obras activas:*\n" + lista));
+        return json({ ok: true, from: inc.from, reply: "" });
       }
       const reply = res.notFound ? res.notFound : "🤖 Me falta " + (res.missing || "un dato") + " para cargarlo. Decímelo por acá.";
       fireAndForget(sendWhatsApp(inc.from, reply));
