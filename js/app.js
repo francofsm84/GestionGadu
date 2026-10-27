@@ -271,6 +271,8 @@
     const cfg = (S.data.settings && S.data.settings.cloud) || {};
     const sess = G.auth.getSession();
     const pi = planInfo();
+    const lastSync = (S.data.settings && S.data.settings.lastCloudSync) || '';
+    const lastSyncLabel = lastSync ? new Date(lastSync).toLocaleString('es-AR') : '';
     const m = UI.openModal({
       title: 'Respaldos y datos',
       subtitle: 'Tu información se guarda automáticamente en este navegador (localStorage).',
@@ -281,6 +283,15 @@
         '<input type="file" id="fileImport" accept="application/json,.json" hidden>' +
         '</div>' +
         '<p class="form-hint" style="margin-top:14px">Recomendación: exportá un respaldo antes de importar. El respaldo incluye obras, presupuestos, ingresos, gastos, contactos, empleados, herramientas y liquidaciones.</p>' +
+        '<div class="card-inset" style="margin:12px 0">' +
+        '<h4>🔄 Salud de sincronización</h4>' +
+        '<p class="form-hint">Última sincronización con la nube: <b>' + (lastSync ? lastSyncLabel : 'Nunca') + '</b></p>' +
+        (cfg.autoPush === false
+          ? '<p class="form-hint" style="color:var(--warning)">⚠️ Sincronización automática desactivada: tus cambios no se suben solos.</p>'
+          : (lastSync
+            ? '<p class="form-hint" style="color:var(--success)">✅ Todos tus datos están resguardados en la nube.</p>'
+            : '<p class="form-hint" style="color:var(--warning)">⚠️ Aún no hay respaldo en la nube. Tocá "Subir mis datos ahora".</p>')) +
+        '</div>' +
         '<div class="card-inset">' +
         '<h4>👤 Mi cuenta</h4>' +
         '<p class="form-hint">' + UI.escapeHtml((sess && sess.email) || '') + ' · ' + UI.chip(pi.label, pi.tone, piIcon(pi)) + '</p>' +
@@ -368,14 +379,22 @@
       }
     });
     m.panel.querySelector('#bPush').addEventListener('click', async () => {
-      setStatus('Subiendo…');
+      const btn = m.panel.querySelector('#bPush');
+      const orig = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="sync-syncing" style="display:inline-block;vertical-align:middle;margin-right:6px"></span> Subiendo…';
+      setStatus('Subiendo tus datos…');
       try {
         await G.sync.push(S.data);
         S.data.settings.lastCloudSync = new Date().toISOString();
         S.save();
         setStatus('✅ Datos subidos a la nube (' + new Date().toLocaleTimeString('es-AR') + ').', true);
+        UI.toast('✅ Datos resguardados en la nube', 'success');
       } catch (err) {
         setStatus('❌ No se pudo subir: ' + ((err && err.message) || err), false);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
       }
     });
     m.panel.querySelector('#bPull').addEventListener('click', async () => {
