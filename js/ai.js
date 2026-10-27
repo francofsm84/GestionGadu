@@ -120,12 +120,59 @@
   /* Modo dinámico según la vista actual: #/admin → COO Virtual · resto → Capataz Digital */
   function currentMode() { return location.hash.indexOf('#/admin') === 0 ? 'admin' : 'usuario'; }
   function isAdminMode() { return currentMode() === 'admin'; }
-  /* Clave de contexto (modo + obra activa). Detecta si el usuario entró/salió de
-     una vista de obra para refrescar el saludo y la botonera. */
+  /* Clave de contexto (modo + obra activa + sección del menú). Detecta si el
+     usuario cambió de vista para refrescar el saludo y la botonera. */
   function contextKey() {
     const admin = isAdminMode();
     const ctx = admin ? null : currentWorkContext();
-    return (admin ? 'admin' : 'usuario') + '|' + (ctx ? ctx.id : 'global');
+    return (admin ? 'admin' : 'usuario') + '|' + (ctx ? ctx.id : routeGroup());
+  }
+
+  /* Agrupa la ruta activa del Hash Router en una sección lógica */
+  function routeGroup() {
+    const h = String(location.hash || '');
+    if (/^#\/jornadas/.test(h)) return 'jornadas';
+    if (/^#\/(libro|ingresos|gastos|deudas|bandeja)/.test(h)) return 'contabilidad';
+    if (/^#\/(obras|presupuestos)/.test(h)) return 'obras';
+    if (/^#\/(clientes|directorio)/.test(h)) return 'clientes';
+    if (/^#\/empleados/.test(h)) return 'empleados';
+    if (h === '' || h === '#' || h === '#/' || /^#\/dashboard/.test(h)) return 'dashboard';
+    return 'otros';
+  }
+
+  /* Botonera contextual por sección. Devuelve null para usar la general. */
+  function routePills() {
+    const g = routeGroup();
+    if (g === 'jornadas') return [
+      { k: 'new-jornada', e: '📅', l: 'Registrar jornada' },
+      { k: 'hoy', e: '👷', l: 'Ver horas de la semana' },
+      { k: 'empleados', e: '👥', l: 'Resumen de personal' },
+    ];
+    if (g === 'contabilidad') return [
+      { k: 'new-ingreso', e: '💰', l: 'Cargar ingreso' },
+      { k: 'new-gasto', e: '💸', l: 'Cargar gasto' },
+      { k: 'contabilidad', e: '📊', l: 'Consultar balance' },
+    ];
+    if (g === 'obras') return [
+      { k: 'new-obra', e: '🏗️', l: 'Nueva obra' },
+      { k: 'contabilidad', e: '📊', l: 'Ver margen' },
+      { k: 'new-presupuesto', e: '📄', l: 'Presupuesto' },
+    ];
+    if (g === 'clientes') return [
+      { k: 'new-cliente', e: '👤', l: 'Nuevo cliente' },
+      { k: 'clientes', e: '📇', l: 'Ver historial' },
+    ];
+    if (g === 'empleados') return [
+      { k: 'new-empleado', e: '👷', l: 'Cargar empleado' },
+      { k: 'pago', e: '💳', l: 'Pago / Adelanto' },
+      { k: 'new-jornada', e: '📅', l: 'Registrar jornada' },
+    ];
+    return null;
+  }
+
+  /* Etiqueta legible de la sección para el saludo contextual */
+  function sectionLabel(g) {
+    return ({ jornadas: 'Jornadas y Asistencia', contabilidad: 'Contabilidad', obras: 'Obras y Presupuestos', clientes: 'Clientes', empleados: 'Empleados', dashboard: 'el Panel', otros: 'esta sección' })[g] || 'esta sección';
   }
 
   /* Registra la última obra/cliente tratado para el contexto de sesión */
@@ -1096,17 +1143,20 @@
 
     /* Contexto de obra: botones dinámicos específicos de esa obra */
     const ctxWork = admin ? null : currentWorkContext();
+    const routeSet = (admin || ctxWork) ? null : routePills();
     const pills = admin ? pillsAdmin : (ctxWork ? [
       { k: '__adv_' + ctxWork.id, e: '💸', l: 'Adelanto a empleado (' + ctxWork.name + ')' },
       { k: '__exp_' + ctxWork.id, e: '💰', l: 'Cargar gasto en ' + ctxWork.name },
       { k: '__who_' + ctxWork.id, e: '👷', l: '¿Quién trabajó en ' + ctxWork.name + ' hoy?' },
-    ] : pillsUser);
+    ] : (routeSet || pillsUser));
 
     const saludo = admin
       ? '¡Hola Super Admin 👑! Soy tu COO Virtual. Consultame métricas o gestiona el SaaS.'
       : (ctxWork
         ? '¡Hola! 👋 Estás en la obra <b>' + esc(ctxWork.name) + '</b>. Tocá una acción rápida de esta obra.'
-        : '¡Hola! 👋 Soy tu asistente GADU. Tocá una acción rápida o preguntame lo que necesites.');
+        : (routeSet
+          ? '¡Hola! 👋 Estás en <b>' + esc(sectionLabel(routeGroup())) + '</b>. Tocá una acción rápida de esta sección.'
+          : '¡Hola! 👋 Soy tu asistente GADU. Tocá una acción rápida o preguntame lo que necesites.'));
 
     /* Acceso directo a WhatsApp (solo para usuarios, no para el COO admin).
        Se renderiza DENTRO de la fila deslizable, como un pill destacado. */
