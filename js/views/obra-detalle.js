@@ -97,6 +97,35 @@
     });
   }
 
+  /* Adicional / extra de obra: suma al presupuesto y queda registrado como anexo */
+  function openAdicionalModal(w) {
+    const m = UI.openModal({
+      title: 'Agregar Adicional / Extra',
+      subtitle: 'Amplía el techo presupuestado de <b>' + UI.escapeHtml(w.name) + '</b>. El presupuesto original queda trazable.',
+      body:
+        '<div class="grid-form">' +
+        '<div class="field span-2"><label>Concepto del adicional *</label><input class="input" id="adConcepto" placeholder="Ej.: Instalación de tomacorrientes extra"></div>' +
+        '<div class="field"><label>Monto acordado ($) *</label><input class="input" type="number" id="adMonto" min="0" step="100" placeholder="0"></div>' +
+        '<div class="field"><label>Fecha</label><input class="input" type="date" id="adFecha" value="' + S.todayISO() + '"></div>' +
+        '</div>',
+      footer: '<button class="btn btn-ghost" data-cancel>Cancelar</button><button class="btn btn-primary" data-save>Agregar adicional</button>',
+    });
+    m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+    m.panel.querySelector('[data-save]').addEventListener('click', () => {
+      const concepto = m.panel.querySelector('#adConcepto').value.trim();
+      const monto = UI.readNum(m.panel.querySelector('#adMonto'));
+      if (!concepto) { UI.toast('Ingresá el concepto del adicional', 'error'); return; }
+      if (monto <= 0) { UI.toast('Ingresá un monto mayor a cero', 'error'); return; }
+      const fecha = m.panel.querySelector('#adFecha').value || S.todayISO();
+      const adicionales = (w.adicionales || []).concat([{ id: S.uid(), concepto, monto, fecha, createdAt: new Date().toISOString() }]);
+      const nuevoPresupuesto = (Number(w.budgetTotal) || 0) + monto;
+      S.update('works', w.id, { budgetTotal: nuevoPresupuesto, adicionales });
+      UI.toast('✅ Adicional agregado · presupuesto actualizado a ' + UI.fmtMoney(nuevoPresupuesto), 'success');
+      m.close();
+      G.router.refresh();
+    });
+  }
+
   /* Genera un reporte ejecutivo en PDF (exclusivo Plan PRO/Empresa) */
   async function exportPDF(ctx) {
     const plan = (G.plan && G.plan.currentPlan) ? G.plan.currentPlan() : { id: 'free' };
@@ -184,7 +213,9 @@
     const empAdv = S.workEmployeeAdvances(w.id);
     const workEmps = S.workEmployees(w.id);
     const advNet = clientAdv.total - empAdv.total;
-    const ctx = { w, st, incomes, costs, budget, clientAdv, empAdv, workEmps, advNet };
+    const adics = w.adicionales || [];
+    const sumAdics = S.sum(adics.map(a => Number(a.monto) || 0));
+    const ctx = { w, st, incomes, costs, budget, clientAdv, empAdv, workEmps, advNet, adics, sumAdics };
 
     view.innerHTML =
       '<div class="detail-head card">' +
@@ -201,6 +232,7 @@
       '</select>' +
       '<button class="btn btn-soft" id="btnPdf">' + UI.icon('file-text', 15) + 'Exportar PDF</button>' +
       '<button class="btn btn-soft" id="btnShare">' + UI.icon('whatsapp', 15) + 'Compartir con el Cliente</button>' +
+      '<button class="btn btn-soft-warning" id="btnAdicional">' + UI.icon('plus', 15) + 'Adicional / Extra</button>' +
       '<button class="btn btn-soft" id="btnEdit">' + UI.icon('edit', 15) + 'Editar</button>' +
       '<button class="btn btn-soft-danger" id="btnDel" title="Eliminar obra">' + UI.icon('trash', 15) + '</button>' +
       '</div></div>' +
@@ -228,6 +260,9 @@
       '<div class="card-head"><h3>Resumen financiero</h3></div>' +
       '<div class="stack">' +
       sumRow('Presupuesto total', UI.fmtMoney(w.budgetTotal)) +
+      (adics.length ? sumRow('↳ Adicionales (' + adics.length + ')', '+' + UI.fmtMoney(sumAdics), 'warning-text') : '') +
+      (adics.length ? sumRow('Presupuesto original', UI.fmtMoney(Math.max(0, (Number(w.budgetTotal) || 0) - sumAdics))) : '') +
+      adics.map(a => '<div class="split-row"><span class="muted small">· ' + UI.escapeHtml(a.concepto || 'Adicional') + (a.fecha ? ' (' + UI.fmtDate(a.fecha) + ')' : '') + '</span><b class="warning-text">+' + UI.fmtMoney(a.monto) + '</b></div>').join('') +
       sumRow('Ingresos recibidos', UI.fmtMoney(st.incomes), 'pos') +
       sumRow('Gastos directos', '−' + UI.fmtMoney(st.costs), 'neg') +
       sumRow('Margen de ganancia', UI.fmtMoney(st.margin), st.margin >= 0 ? 'pos' : 'neg', true) +
@@ -279,6 +314,7 @@
     });
 
     view.querySelector('#btnEdit').addEventListener('click', () => G.actions.work(w));
+    view.querySelector('#btnAdicional').addEventListener('click', () => openAdicionalModal(w));
     view.querySelector('#btnPdf').addEventListener('click', () => exportPDF(ctx));
     view.querySelector('#btnShare').addEventListener('click', () => shareWithClient(w));
 
