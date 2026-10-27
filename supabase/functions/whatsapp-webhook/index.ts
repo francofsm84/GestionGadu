@@ -1624,6 +1624,12 @@ async function handleButtonReply(from: string, buttonId: string) {
 /* ===== Procesamiento del mensaje (extraído del handler) ===== */
 async function processMessage(body: unknown) {
   try {
+    /* [typing_on INMEDIATO] Disparar "escribiendo..." ANTES de cualquier
+       procesamiento pesado (transcripción de audio, visión, consultas a
+       Supabase). extractFrom es un parse liviano del payload (sin red). */
+    const earlyFrom = extractFrom(body);
+    if (earlyFrom) fireAndForget(sendTypingOn(earlyFrom));
+
     /* Mensajes interactivos (botones) → asignar gasto pendiente */
     const btn = detectInteractive(body);
     if (btn) {
