@@ -668,6 +668,7 @@
     obj.id = obj.id || uid();
     if (coll === 'works' && !obj.publicToken) obj.publicToken = publicToken();
     if (coll === 'attendance') return addAttendance(obj);   // anti-duplicados por empleado+fecha
+    if (!Array.isArray(data[coll])) data[coll] = [];   // blindaje: colección nueva/desconocida
     data[coll].unshift(obj); save(); return obj;
   }
   /* Alta de jornada ANTI-DUPLICADOS: una sola jornada por empleado y fecha.
@@ -693,8 +694,12 @@
     save();
     return prev;
   }
-  function update(coll, id, patch) { const it = data[coll].find(x => x.id === id); if (it) Object.assign(it, patch); save(); return it; }
+  function update(coll, id, patch) {
+    if (!Array.isArray(data[coll])) data[coll] = [];   // blindaje defensivo
+    const it = data[coll].find(x => x.id === id); if (it) Object.assign(it, patch); save(); return it;
+  }
   function remove(coll, id) {
+    if (!Array.isArray(data[coll])) data[coll] = [];   // blindaje defensivo
     const it = data[coll].find(x => x.id === id);
     if (it) {
       data.trash = data.trash || [];

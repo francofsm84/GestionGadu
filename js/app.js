@@ -37,8 +37,15 @@
       const params = {};
       let ok = true;
       parts.forEach((p, i) => {
-        if (p.startsWith(':')) params[p.slice(1)] = decodeURIComponent(segs[i]);
-        else if (p !== segs[i]) ok = false;
+        if (p.startsWith(':')) {
+          /* decodeURIComponent puede lanzar URIError con un hash malformado;
+             en ese caso se conserva el segmento crudo para no tumbar el router. */
+          let v = segs[i];
+          try { v = decodeURIComponent(segs[i]); } catch (e) { v = segs[i]; }
+          params[p.slice(1)] = v;
+        } else if (p !== segs[i]) {
+          ok = false;
+        }
       });
       if (ok) return { route: r, params };
     }
@@ -57,40 +64,49 @@
   }
 
   async function renderNow() {
-    const m = match(parseSegs()) || match(['dashboard']);
-    current = m;
-    const { route, params } = m;
-    document.title = route.title + ' · GADU Construye · Tu gestión perfecta';
-    document.getElementById('pageTitle').textContent = route.title;
-    document.getElementById('pageSubtitle').textContent = route.subtitle || '';
-    /* En el panel de administración se ocultan las acciones operativas (+/ingresos/gastos/obras) */
-    document.body.classList.toggle('on-admin', route.key === 'admin');
-    document.querySelectorAll('.nav-link').forEach(a => {
-      const r = a.getAttribute('data-route');
-      if (r) {
-        const active = r === route.key || (route.key === 'obra' && r === 'obras') || (route.key === 'empleado' && r === 'empleados');
-        a.classList.toggle('active', active);
-        /* La ruta activa destapa su grupo y todas las categorías contenedoras */
-        if (active) {
-          let g = a.closest('.nav-group');
-          while (g) {
-            g.classList.add('open');
-            g = g.parentElement ? g.parentElement.closest('.nav-group') : null;
+    try {
+      const m = match(parseSegs()) || match(['dashboard']);
+      current = m;
+      const { route, params } = m;
+      document.title = route.title + ' · GADU Construye · Tu gestión perfecta';
+      const pt = document.getElementById('pageTitle');
+      if (pt) pt.textContent = route.title;
+      const ps = document.getElementById('pageSubtitle');
+      if (ps) ps.textContent = route.subtitle || '';
+      /* En el panel de administración se ocultan las acciones operativas (+/ingresos/gastos/obras) */
+      document.body.classList.toggle('on-admin', route.key === 'admin');
+      document.querySelectorAll('.nav-link').forEach(a => {
+        const r = a.getAttribute('data-route');
+        if (r) {
+          const active = r === route.key || (route.key === 'obra' && r === 'obras') || (route.key === 'empleado' && r === 'empleados');
+          a.classList.toggle('active', active);
+          /* La ruta activa destapa su grupo y todas las categorías contenedoras */
+          if (active) {
+            let g = a.closest('.nav-group');
+            while (g) {
+              g.classList.add('open');
+              g = g.parentElement ? g.parentElement.closest('.nav-group') : null;
+            }
           }
         }
+      });
+      const view = document.getElementById('view');
+      if (view) {
+        view.innerHTML = '';
+        try {
+          await route.render(view, params);
+        } catch (err) {
+          console.error(err);
+          view.innerHTML = UI.emptyState('alert-triangle', 'No se pudo mostrar esta sección', String((err && err.message) || err));
+        }
       }
-    });
-    const view = document.getElementById('view');
-    view.innerHTML = '';
-    window.scrollTo(0, 0);
-    try {
-      await route.render(view, params);
+      window.scrollTo(0, 0);
+      /* Aislamiento: si los badges o el cierre del menú fallan, no tumbar la navegación */
+      try { updateBadges(); } catch (e) { console.error('[renderNow] updateBadges:', e); }
+      try { closeMobileSidebar(); } catch (e) { console.error('[renderNow] closeMobileSidebar:', e); }
     } catch (err) {
-      console.error(err);
-      view.innerHTML = UI.emptyState('alert-triangle', 'No se pudo mostrar esta sección', String((err && err.message) || err));
+      console.error('[renderNow] error fatal en renderizado:', err);
     }
-    updateBadges();
-    closeMobileSidebar();
   }
 
   function updateBadges() {
