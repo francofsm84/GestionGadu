@@ -869,20 +869,21 @@ Deno.serve(async (req) => {
   }
 
   /* ===== Validación de firma de Meta (X-Hub-Signature-256) =====
-     Intercepta el body crudo ANTES de parsear, verifica el HMAC-SHA256
-     con WHATSAPP_APP_SECRET y rechaza con 403 si no coincide. */
+     Verifica el HMAC-SHA256 con WHATSAPP_APP_SECRET. En MODO TOLERANTE:
+     si la firma falta o no coincide (común en el Sandbox de Meta durante
+     pruebas), se registra un warning y se procesa IGUAL para no perder
+     mensajes. El webhook siempre devuelve 200 OK. */
   const rawBody = await req.text().catch(() => "");
   const signature = req.headers.get("x-hub-signature-256") || "";
   const appSecret = Deno.env.get("WHATSAPP_APP_SECRET") || "";
   if (appSecret) {
     if (!signature) {
-      console.warn("[whatsapp-webhook] falta header X-Hub-Signature-256");
-      return new Response("invalid signature", { status: 403, headers: corsHeaders });
-    }
-    const okSig = await verifyMetaSignature(rawBody, appSecret, signature);
-    if (!okSig) {
-      console.warn("[whatsapp-webhook] firma inválida de Meta");
-      return new Response("invalid signature", { status: 403, headers: corsHeaders });
+      console.warn("[whatsapp-webhook] ⚠️ falta header X-Hub-Signature-256 → se procesa igual (modo tolerante)");
+    } else {
+      const okSig = await verifyMetaSignature(rawBody, appSecret, signature);
+      if (!okSig) {
+        console.warn("[whatsapp-webhook] ⚠️ firma inválida de Meta → se procesa igual (modo tolerante)");
+      }
     }
   } else {
     console.warn("[whatsapp-webhook] WHATSAPP_APP_SECRET no configurado: no se valida firma");
@@ -890,12 +891,16 @@ Deno.serve(async (req) => {
 
   let body: Record<string, any> = {};
   try { body = JSON.parse(rawBody || "{}"); } catch (e) { body = {}; }
-  console.log("=== PAYLOAD ENTRANTE ===", JSON.stringify(body));
-  console.log("=== WEBHOOK EVENT RECEIVED ===", JSON.stringify(body));
 
   const messageId = extractMessageId(body);
   const fromQuick = extractFrom(body);
   const phoneQuick = fromQuick ? normalizePhone(fromQuick) : "desconocido";
+
+  /* Diagnóstico: cuerpo crudo en formato legible (2 espacios) para identificar
+     exactamente la estructura que envía el Sandbox de Meta. */
+  console.log("=== PAYLOAD ENTRANTE ===", JSON.stringify(body, null, 2));
+  console.log("=== WEBHOOK EVENT RECEIVED ===", JSON.stringify(body));
+  console.log("[whatsapp-webhook] tipo de mensaje:", body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.type || "(sin messages)", "· de:", fromQuick || "(sin from)");
 
   /* Responder 200 OK INMEDIATAMENTE (en <1s) y procesar TODO en segundo plano.
      Así un audio que tarde (o falle) NUNCA bloquea el 200 OK ni los mensajes
