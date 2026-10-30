@@ -245,6 +245,10 @@
     const isEdit = !!work;
     opts = opts || {};
     const selClient = work ? work.clientId : (opts.clientId || '');
+    /* Opciones del selector de cliente + opción destacada de alta al vuelo */
+    const clientOptionsHTML = (selectedId) =>
+      UI.selectOptions(S.data.contacts.filter(c => c.type === 'cliente').map(c => ({ v: c.id, l: c.name })), selectedId, true, 'Sin cliente asignado') +
+      '<option value="__new__">+ Agregar nuevo cliente</option>';
     const m = UI.openModal({
       title: isEdit ? 'Editar obra' : 'Nueva obra',
       subtitle: isEdit ? (work.code || '') : 'Cargá los datos principales del proyecto.',
@@ -255,7 +259,7 @@
         '<div class="field"><label>Cliente</label>' +
         '<div class="select-with-add">' +
         '<select class="select" id="fClient">' +
-        UI.selectOptions(S.data.contacts.filter(c => c.type === 'cliente').map(c => ({ v: c.id, l: c.name })), selClient, true, 'Sin cliente asignado') +
+        clientOptionsHTML(selClient) +
         '</select>' +
         '<button type="button" class="icon-btn sm" id="btnNewClient" title="Agregar nuevo cliente">' + UI.icon('plus', 14) + '</button>' +
         '</div>' +
@@ -273,15 +277,22 @@
       footer: '<button class="btn btn-ghost" data-cancel>Cancelar</button><button class="btn btn-primary" data-save>' + (isEdit ? 'Guardar cambios' : 'Crear obra') + '</button>',
     });
     const fClient = m.panel.querySelector('#fClient');
-    m.panel.querySelector('#btnNewClient').addEventListener('click', () => {
+    /* Alta de cliente al vuelo: abre el modal sin perder el progreso de la obra */
+    const openNewClient = () => {
       G.actions.client(null, nuevo => {
-        fClient.innerHTML = UI.selectOptions(S.data.contacts.filter(c => c.type === 'cliente').map(c => ({ v: c.id, l: c.name })), nuevo ? nuevo.id : '', true, 'Sin cliente asignado');
+        fClient.innerHTML = clientOptionsHTML(nuevo ? nuevo.id : '');
       });
+    };
+    m.panel.querySelector('#btnNewClient').addEventListener('click', openNewClient);
+    /* La opción "+ Agregar nuevo cliente" del desplegable también abre el modal */
+    fClient.addEventListener('change', () => {
+      if (fClient.value === '__new__') openNewClient();
     });
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
     m.panel.querySelector('[data-save]').addEventListener('click', () => {
       const name = m.panel.querySelector('#fName').value.trim();
-      const clientId = m.panel.querySelector('#fClient').value || null;
+      const clientIdRaw = m.panel.querySelector('#fClient').value || null;
+      const clientId = clientIdRaw === '__new__' ? null : clientIdRaw;   // no guardar la opción de alta
       const location = m.panel.querySelector('#fLoc').value.trim();
       if (!name) { UI.toast('Ingresá el nombre de la obra', 'error'); return; }
       /* Obra nueva: exigir ubicación + cliente (sin obra huérfana) */
