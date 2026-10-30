@@ -632,6 +632,45 @@
     return pi.tone === 'success' ? 'check-circle' : 'user';
   }
 
+  /* ---------- Consentimiento legal para usuarios existentes (beta) ---------- */
+  function initTermsGate() {
+    if (document.getElementById('termsGate')) return;
+    try {
+      G.auth.getProfile().then(prof => {
+        if (prof && !prof.terms_accepted_at) {
+          const overlay = document.createElement('div');
+          overlay.id = 'termsGate';
+          overlay.className = 'lock-overlay';
+          overlay.innerHTML =
+            '<div class="lock-card">' +
+            '<img src="' + logoUrl() + '" alt="GADU" class="login-logo" style="width:110px">' +
+            '<h2>Actualizamos nuestros términos</h2>' +
+            '<p>Actualizamos nuestros términos. Por favor, aceptalos para continuar.</p>' +
+            '<div style="max-height:40vh;overflow-y:auto;text-align:left;font-size:13px;line-height:1.6;margin-bottom:12px">' +
+            '<h4>Términos y Condiciones</h4><p>1. GADU es una plataforma de gestión para obras y finanzas de tu emprendimiento.</p><p>2. Los datos que cargues se almacenan de forma segura en tu cuenta.</p><p>3. Sos responsable de la veracidad de tus datos y del resguardo de tu acceso.</p>' +
+            '<h4 style="margin-top:10px">Aviso de Privacidad</h4><p>1. Tus datos son privados: solo vos y los administradores pueden verlos.</p><p>2. No compartimos tu información con terceros.</p><p>3. Podés solicitar la eliminación de tus datos en cualquier momento.</p>' +
+            '</div>' +
+            '<button class="btn btn-primary btn-block" id="termsAccept">Aceptar y continuar</button>' +
+            '<button class="btn btn-ghost btn-block" id="termsLogout">Cerrar sesión</button>' +
+            '</div>';
+          document.body.appendChild(overlay);
+          overlay.querySelector('#termsAccept').addEventListener('click', async () => {
+            const btn = overlay.querySelector('#termsAccept');
+            btn.disabled = true;
+            btn.textContent = 'Guardando…';
+            const ok = await G.auth.acceptTerms();
+            if (ok) location.reload();
+            else { btn.disabled = false; btn.textContent = 'Aceptar y continuar'; UI.toast('No se pudo guardar. Reintentá.', 'error'); }
+          });
+          overlay.querySelector('#termsLogout').addEventListener('click', () => {
+            G.auth.logout();
+            location.reload();
+          });
+        }
+      }).catch(() => {});
+    } catch (e) {}
+  }
+
   function renderLock() {
     const pi = planInfo();
     const overlay = document.createElement('div');
@@ -919,6 +958,7 @@
       '<select class="select" id="fTipo">' +
       '<option>Contratista</option><option>Oficio / particular</option><option>Empresa constructora</option><option>Otro</option>' +
       '</select>' +
+      '<label class="consent-row" style="text-align:left;margin-top:8px;line-height:1.5"><input type="checkbox" id="acceptTerms"><span>He leído y acepto los <a class="link" id="linkTerms">Términos y Condiciones</a> y el <a class="link" id="linkPrivacy">Aviso de Privacidad</a>.</span></label>' +
       '</div>' +
       '<input class="input" id="fEmail" type="email" placeholder="Correo electrónico" autocomplete="email">' +
       '<input class="input" id="fPass" type="password" placeholder="Contraseña" autocomplete="current-password">' +
@@ -939,8 +979,48 @@
       host.querySelector('#regFields').hidden = (m !== 'register');
       host.querySelector('#btnSubmit').textContent = (m === 'register' ? 'Crear cuenta' : 'Iniciar sesión');
       host.querySelector('#fPass').setAttribute('autocomplete', (m === 'register' ? 'new-password' : 'current-password'));
+      if (m !== 'register') host.querySelector('#btnSubmit').disabled = false;
+      else updateSubmit();
       setMsg('', false);
     };
+
+    /* Texto legal (reemplazable) + modales de Términos y Privacidad */
+    const TERMS_LEGAL = `<h4>Términos y Condiciones de Uso</h4>
+<p>1. GADU es una plataforma de gestión para obras, remodelaciones y finanzas de tu emprendimiento.</p>
+<p>2. Al usar GADU aceptás que los datos que cargues (obras, clientes, empleados, gastos, ingresos, etc.) se almacenan de forma segura en tu cuenta y se sincronizan entre tus dispositivos.</p>
+<p>3. Sos responsable de la veracidad de los datos y del resguardo de tu acceso.</p>
+<p>4. Los planes de suscripción y sus límites se describen en la sección "Mi suscripción".</p>
+<p>5. Al aceptar, registramos la fecha de tu consentimiento como prueba de aceptación.</p>`;
+
+    const PRIVACY_LEGAL = `<h4>Aviso de Privacidad</h4>
+<p>1. Tus datos personales y de tu negocio son privados: solo vos y los administradores de tu cuenta pueden verlos.</p>
+<p>2. No compartimos tu información con terceros; la usamos únicamente para brindarte el servicio.</p>
+<p>3. Si sincronizás con Google, solo se accede a tu correo y nombre para identificarte y respaldar tus datos.</p>
+<p>4. Podés solicitar la eliminación de tus datos en cualquier momento.</p>`;
+
+    const openLegalModal = (title, html) => {
+      const m = UI.openModal({
+        title: title,
+        subtitle: 'GADU · Gestión de obras y remodelaciones',
+        body: '<div style="max-height:55vh;overflow-y:auto;font-size:13px;line-height:1.6">' + html + '</div>',
+        footer: '<button class="btn btn-primary" data-cancel>Entendido</button>',
+      });
+      m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+    };
+    const openTermsModal = () => openLegalModal('Términos y Condiciones', TERMS_LEGAL);
+    const openPrivacyModal = () => openLegalModal('Aviso de Privacidad', PRIVACY_LEGAL);
+
+    const updateSubmit = () => {
+      const btn = host.querySelector('#btnSubmit');
+      const cb = host.querySelector('#acceptTerms');
+      if (authMode === 'register') btn.disabled = !(cb && cb.checked);
+    };
+    const cbTerms = host.querySelector('#acceptTerms');
+    if (cbTerms) cbTerms.addEventListener('change', updateSubmit);
+    const linkTerms = host.querySelector('#linkTerms');
+    if (linkTerms) linkTerms.addEventListener('click', e => { e.preventDefault(); openTermsModal(); });
+    const linkPrivacy = host.querySelector('#linkPrivacy');
+    if (linkPrivacy) linkPrivacy.addEventListener('click', e => { e.preventDefault(); openPrivacyModal(); });
 
     /* Dirección con Google Maps (autocomplete) para el registro */
     const placeData = { direccion: '', lat: null, lng: null };
@@ -988,6 +1068,8 @@
       if (!email || !pass) { setMsg('Completá email y contraseña.', true); return; }
       let meta = null;
       if (authMode === 'register') {
+        const cb = host.querySelector('#acceptTerms');
+        if (!cb || !cb.checked) { setMsg('Debés aceptar los Términos y Condiciones y el Aviso de Privacidad.', true); return; }
         const nombre = host.querySelector('#fNombre').value.trim();
         const apellido = host.querySelector('#fApellido').value.trim();
         const tel = host.querySelector('#fTel').value.trim();
@@ -1008,7 +1090,10 @@
       btn.disabled = true;
       setMsg('', false);
       try {
-        if (authMode === 'register') await G.auth.signup(email, pass, meta);
+        if (authMode === 'register') {
+          await G.auth.signup(email, pass, meta);
+          try { await G.auth.acceptTerms(); } catch (e) {}   // registra la aceptación (no bloquea)
+        }
         else await G.auth.login(email, pass);
         await startApp();
       } catch (err) {
@@ -1559,6 +1644,7 @@
         G.auth.onAuthStateChange((event, s) => {
           if (s) {
             try { G.auth.ensureUserProfile(); } catch (e) {}   // upsert redundante (nunca bloquea)
+            try { initTermsGate(); } catch (e) {}              // bloqueo si no aceptó los términos
             const h = location.hash || '';
             if (!h || h === '#' || h === '#/' || h.indexOf('#/login') === 0) {
               location.hash = '#/dashboard';

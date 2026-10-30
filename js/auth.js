@@ -165,15 +165,35 @@
   /* Perfil (plan y vencimientos) del usuario actual */
   async function getProfile() {
     const uid = session ? session.userId : null;
-    const url = SUPABASE_URL + '/rest/v1/profiles?select=plan,trial_end,paid_until,email' +
-      (uid ? '&user_id=eq.' + encodeURIComponent(uid) : '') + '&limit=1';
-    const res = await fetchT(url, { headers: headers() });
+    const base = SUPABASE_URL + '/rest/v1/profiles?user_id=eq.' + encodeURIComponent(uid || '') + '&limit=1';
+    let res = await fetchT(base + '&select=plan,trial_end,paid_until,email,terms_accepted_at,terms_version', { headers: headers() });
     if (!res.ok) {
       if (res.status === 401) { const r = await refresh(); if (r) return getProfile(); }
-      throw new Error('HTTP ' + res.status);
+      /* Fallback: si la columna terms_accepted_at todavía no existe (migración pendiente) */
+      if (res.status === 400) {
+        res = await fetchT(base + '&select=plan,trial_end,paid_until,email', { headers: headers() });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+      } else {
+        throw new Error('HTTP ' + res.status);
+      }
     }
     const arr = await res.json();
     return arr[0] || null;
+  }
+
+  /* Acepta los Términos y Privacidad (guarda la prueba de aceptación) */
+  async function acceptTerms() {
+    try {
+      const res = await fetchT(SUPABASE_URL + '/rest/v1/rpc/accept_terms', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   /* Redundancia segura: si el trigger no creó el perfil, lo insertamos nosotros.
@@ -237,5 +257,5 @@
     } catch (e) { return false; }
   }
 
-  G.auth = { SUPABASE_URL, SUPABASE_ANON_KEY, override, load, setSession, getSession, clear, headers, signup, login, refresh, logout, getProfile, ensureUserProfile, signInWithGoogle, handleOAuthRedirect, onAuthStateChange };
+  G.auth = { SUPABASE_URL, SUPABASE_ANON_KEY, override, load, setSession, getSession, clear, headers, signup, login, refresh, logout, getProfile, acceptTerms, ensureUserProfile, signInWithGoogle, handleOAuthRedirect, onAuthStateChange };
 })(typeof window !== 'undefined' ? window : globalThis);
