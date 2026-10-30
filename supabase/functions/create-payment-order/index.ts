@@ -72,22 +72,21 @@ serve(async (req) => {
       : (userEmail || "cliente@example.com");
 
     const amountStr = amount.toFixed(2);   // "5000.00"
+    const itemTitle = "Plan GADU " + planId.charAt(0).toUpperCase() + planId.slice(1) + " (" + periodo.charAt(0).toUpperCase() + periodo.slice(1) + ")";
     const origin = String(req.headers.get("Origin") || req.headers.get("origin") || "https://gadu.app").replace(/\/$/, "");
     const mpBody = {
       type: "online",
       processing_mode: "manual",
       total_amount: amountStr,
       external_reference,
-      transactions: {
-        payments: [{
-          amount: amountStr,
-          payment_method: {
-            id: "master",
-            type: "credit_card",
-          },
-        }],
-      },
       payer: { email: payerEmail },
+      items: [{
+        title: itemTitle,
+        unit_price: amountStr,
+        quantity: 1,
+        unit_measure: "unit",
+        total_amount: amountStr,
+      }],
       back_urls: {
         success: origin + "/#/planes",
         pending: origin + "/#/planes",
