@@ -80,6 +80,15 @@ serve(async (req) => {
       total_amount: amountStr,
       external_reference,
       payer: { email: payerEmail },
+      transactions: {
+        payments: [{
+          amount: amountStr,
+          payment_method: {
+            id: "master",
+            type: "credit_card",
+          },
+        }],
+      },
       items: [{
         title: itemTitle,
         unit_price: amountStr,
@@ -115,7 +124,13 @@ serve(async (req) => {
     console.log("[create-payment-order] MP response body:", mpText.slice(0, 1500));
 
     if (!mpRes.ok || !mp.id) {
-      return json({ error: "MercadoPago: " + (mp.message || ("HTTP " + mpRes.status)), detail: mp }, 502);
+      // Exponer el error EXACTO de MercadoPago (message + cause) al frontend
+      const cause = Array.isArray(mp.cause)
+        ? mp.cause.map((c: any) => String(c.description || c.code || "")).filter(Boolean).join("; ")
+        : "";
+      const msg = String(mp.message || mp.error || ("HTTP " + mpRes.status)) + (cause ? " · " + cause : "");
+      console.error("[create-payment-order] MP error completo:", mpText.slice(0, 1500));
+      return json({ error: "MercadoPago: " + msg, detail: mp }, 502);
     }
 
     // 4) Guardar la orden en Supabase (service role → salta RLS)
