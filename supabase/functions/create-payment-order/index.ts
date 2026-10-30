@@ -61,18 +61,32 @@ serve(async (req) => {
       .replace(/[^a-zA-Z0-9_-]/g, "")
       .slice(0, 64);
 
-    // 2) Armar el body de la orden (total_amount = unit_price * quantity)
-    const itemTitle = "Plan GADU " + planId + " (" + periodo + ")";
+    // 2) Armar el body de la orden (API de Orders):
+    //    - total_amount y payments[].amount van como STRING con 2 decimales.
+    //    - transactions.payments es OBLIGATORIO (payment_method).
+    //    - payer.email en Sandbox debe terminar en @testuser.com.
+    const amountStr = amount.toFixed(2);   // "5000.00"
+    const origin = String(req.headers.get("Origin") || req.headers.get("origin") || "https://gadu.app").replace(/\/$/, "");
     const mpBody = {
       type: "online",
-      total_amount: amount,
+      total_amount: amountStr,
       external_reference,
-      items: [{
-        title: itemTitle,
-        quantity: 1,
-        unit_price: amount,
-      }],
-      payer: { email: userEmail },
+      transactions: {
+        payments: [{
+          amount: amountStr,
+          payment_method: {
+            id: "master",
+            type: "credit_card",
+          },
+        }],
+      },
+      payer: { email: userEmail || "test_user@testuser.com" },
+      back_urls: {
+        success: origin + "/#/planes",
+        pending: origin + "/#/planes",
+        failure: origin + "/#/planes",
+      },
+      notification_url: SUPABASE_URL + "/functions/v1/mercadopago-webhook",
     };
 
     console.log("[create-payment-order] POST /v1/orders body:", JSON.stringify(mpBody));
