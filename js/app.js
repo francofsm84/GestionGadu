@@ -1016,11 +1016,33 @@
 <h5>9. Ley Aplicable y Jurisdicción</h5>
 <p>Estos Términos se rigen por las leyes de la República Argentina. Las partes se someten a la jurisdicción de los Tribunales Ordinarios de la Ciudad de Alta Gracia, Córdoba.</p>`;
 
-    const PRIVACY_LEGAL = `<h4>Aviso de Privacidad</h4>
-<p>1. Tus datos personales y de tu negocio son privados: solo vos y los administradores de tu cuenta pueden verlos.</p>
-<p>2. No compartimos tu información con terceros; la usamos únicamente para brindarte el servicio.</p>
-<p>3. Si sincronizás con Google, solo se accede a tu correo y nombre para identificarte y respaldar tus datos.</p>
-<p>4. Podés solicitar la eliminación de tus datos en cualquier momento.</p>`;
+    const PRIVACY_LEGAL = `<h4>Aviso de Privacidad y Protección de Datos</h4>
+<p><strong>Responsable:</strong> Franco Maldonado<br><strong>Contacto:</strong> Francofsm84@gmail.com</p>
+
+<h5>1. Datos que Recopilamos</h5>
+<ul>
+  <li><strong>Datos de Registro:</strong> Nombre, email, teléfono.</li>
+  <li><strong>Datos de la Cuenta:</strong> Obras, gastos, ingresos, empleados, clientes.</li>
+  <li><strong>Datos de Uso:</strong> Mensajes de WhatsApp, audios, imágenes de tickets, dirección IP.</li>
+</ul>
+
+<h5>2. Finalidad del Tratamiento</h5>
+<p>Prestar el servicio, procesar audios/imágenes mediante IA, enviar notificaciones y mejorar la plataforma (analítica agregada).</p>
+
+<h5>3. Base Legal</h5>
+<p>El tratamiento se basa en el Consentimiento (al aceptar este Aviso), la Ejecución contractual y el Interés legítimo (prevención de fraudes).</p>
+
+<h5>4. Transferencia Internacional</h5>
+<p>Los datos se alojan en Supabase. Para la transcripción, los archivos se envían a Groq, Google (Gemini) y DeepSeek, ubicados en EE.UU. u otros países. Al aceptar, consientes esta transferencia bajo estándares de seguridad razonables.</p>
+
+<h5>5. Derechos del Titular (ARCO)</h5>
+<p>De acuerdo con las leyes de LatAm (Ley 25.326 de Argentina, entre otras), tenés derecho a Acceso, Rectificación, Cancelación y Oposición. Para ejercerlos, escribí a Francofsm84@gmail.com. Responderemos en un plazo máximo de 10 días hábiles.</p>
+
+<h5>6. Retención de Datos</h5>
+<p>Conservamos tus datos mientras uses la Plataforma. Si cancelás la cuenta, los eliminaremos en 30 días (salvo obligaciones fiscales). Los mensajes procesados de WhatsApp se eliminan de la cola tras 30 días.</p>
+
+<h5>7. Seguridad y Cookies</h5>
+<p>Implementamos encriptación en tránsito y en reposo (RLS). La PWA utiliza localStorage e IndexedDB para funcionar offline. No usamos cookies de rastreo publicitario.</p>`;
 
     const openLegalModal = (title, html) => {
       const m = UI.openModal({
