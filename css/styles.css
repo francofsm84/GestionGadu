@@ -314,6 +314,11 @@ body.sb-collapsed .main { margin-left: var(--sidebar-w-min); }
 /* Enlace a legajo de empleado dentro de tablas (Jornadas) */
 .emp-link { color: inherit; text-decoration: none; font-weight: 700; }
 .emp-link:hover { color: var(--primary, #4f46e5); text-decoration: underline; }
+/* Selector de rendimiento (Alto/Medio/Bajo) */
+.rend-select { font-weight: 700; }
+.rend-alto { color: var(--success, #16a34a); border-color: var(--success, #16a34a); }
+.rend-medio { color: var(--warning, #f59e0b); border-color: var(--warning, #f59e0b); }
+.rend-bajo { color: var(--danger, #ef4444); border-color: var(--danger, #ef4444); }
 .kpi-ico { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; flex: none; }
 .kpi-success { background: var(--success-soft); color: var(--success); }
 .kpi-danger { background: var(--danger-soft); color: var(--danger); }

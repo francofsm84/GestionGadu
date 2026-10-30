@@ -509,6 +509,20 @@
     return '<div class="cards-grid">' + list.map(empCard).join('') + '</div>';
   }
 
+  /* Selector rápido de rendimiento (Alto/Medio/Bajo) con color distintivo */
+  function rendimientoSelect(e) {
+    const cur = e.rendimiento || '';
+    const opts = [
+      ['', 'Sin calificar', ''],
+      ['alto', 'Alto', 'rend-alto'],
+      ['medio', 'Medio', 'rend-medio'],
+      ['bajo', 'Bajo', 'rend-bajo'],
+    ];
+    return '<select class="select rend-select ' + (cur === 'alto' ? 'rend-alto' : cur === 'medio' ? 'rend-medio' : cur === 'bajo' ? 'rend-bajo' : '') + '" data-rend="' + e.id + '" title="Rendimiento">' +
+      opts.map(o => '<option value="' + o[0] + '"' + (cur === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') +
+      '</select>';
+  }
+
   function empCard(e) {
     const st = S.employeeStats(e.id);
     const mst = S.employeeMonth(e.id);
@@ -524,6 +538,9 @@
       (e.active === false ? UI.chip('De baja', 'danger') : UI.chip('Activo', 'success')) +
       '</div>' +
       '<div class="contact-chips">' + aliasChip(e.paymentData) + '</div>' +
+      '<div style="margin-top:8px;display:flex;align-items:center;gap:8px">' +
+      '<span class="muted small">Rendimiento</span>' + rendimientoSelect(e) +
+      '</div>' +
       /* Dinero acumulado pendiente: destacado en tiempo real (horas × tarifa − adelantos) */
       '<div style="margin-top:2px;padding:8px 11px;border-radius:10px;background:var(--primary-soft);display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
       '<b style="color:var(--primary);font-size:12.5px">💰 Dinero acumulado pendiente</b>' +
@@ -548,7 +565,7 @@
 
   function bindList(wrap) {
     UI.on(wrap, '.contact-card, tr.clickable', 'click', e => {
-      if (e.target.closest('button') || e.target.closest('a') || e.target.closest('input')) return;
+      if (e.target.closest('button') || e.target.closest('a') || e.target.closest('input') || e.target.closest('select')) return;
       location.hash = '#/empleado/' + e.currentTarget.dataset.id;
     });
     UI.on(wrap, '[data-pay]', 'click', e => {
@@ -562,6 +579,13 @@
     UI.on(wrap, '[data-att]', 'click', e => {
       e.stopPropagation();
       openAttendanceModal({ employeeId: e.target.closest('[data-att]').dataset.att });
+    });
+    UI.on(wrap, '[data-rend]', 'change', e => {
+      e.stopPropagation();
+      const id = e.target.closest('[data-rend]').dataset.rend;
+      const val = e.target.value;
+      S.update('employees', id, { rendimiento: val || null });
+      UI.toast('✅ Rendimiento actualizado');
     });
     UI.on(wrap, '[data-edit]', 'click', e => {
       e.stopPropagation();
