@@ -64,11 +64,18 @@ serve(async (req) => {
     // 2) Armar el body de la orden (API de Orders):
     //    - total_amount y payments[].amount van como STRING con 2 decimales.
     //    - transactions.payments es OBLIGATORIO (payment_method).
+    //    - processing_mode "manual" es obligatorio para Checkout Pro.
     //    - payer.email en Sandbox debe terminar en @testuser.com.
+    const isSandbox = MP_ACCESS_TOKEN.startsWith("TEST-");
+    const payerEmail = isSandbox
+      ? "test_user_" + crypto.randomUUID().replace(/-/g, "") + "@testuser.com"
+      : (userEmail || "cliente@example.com");
+
     const amountStr = amount.toFixed(2);   // "5000.00"
     const origin = String(req.headers.get("Origin") || req.headers.get("origin") || "https://gadu.app").replace(/\/$/, "");
     const mpBody = {
       type: "online",
+      processing_mode: "manual",
       total_amount: amountStr,
       external_reference,
       transactions: {
@@ -80,7 +87,7 @@ serve(async (req) => {
           },
         }],
       },
-      payer: { email: userEmail || "test_user@testuser.com" },
+      payer: { email: payerEmail },
       back_urls: {
         success: origin + "/#/planes",
         pending: origin + "/#/planes",
