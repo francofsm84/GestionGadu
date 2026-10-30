@@ -17,6 +17,11 @@ function json(obj: unknown, status = 200): Response {
   return new Response(JSON.stringify(obj), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
 
+/* Redondea a 2 decimales (evita floats largos que rechaza MercadoPago) */
+function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
@@ -32,8 +37,8 @@ serve(async (req) => {
     const body = await req.json();
     const planId = String(body.planId || "");
     const periodo = String(body.periodo || "");
-    const amount = Number(body.amount || 0);
     const userEmail = String(body.userEmail || "");
+    const amount = round2(Number(body.amount || 0));
 
     if (!planId || !periodo || !(amount > 0)) {
       return json({ error: "faltan planId, periodo o amount" }, 400);
@@ -50,34 +55,52 @@ serve(async (req) => {
     const userId = String(user.id || "");
     if (!userId) return json({ error: "usuario no identificado" }, 401);
 
-    const external_reference = userId + "|" + planId + "|" + periodo;
+    // external_reference válido: solo [a-z0-9_-], máx 64 chars.
+    // Usamos "_" como separador (el user_id UUID ya trae guiones "-").
+    const external_reference = (userId + "_" + planId + "_" + periodo)
+      .replace(/[^a-zA-Z0-9_-]/g, "")
+      .slice(0, 64);
 
-    // 2) Crear la orden en MercadoPago (API de Orders)
+    // 2) Armar el body de la orden (total_amount = unit_price * quantity)
+    const itemTitle = "Plan GADU " + planId + " (" + periodo + ")";
+    const mpBody = {
+      type: "online",
+      total_amount: amount,
+      external_reference,
+      items: [{
+        title: itemTitle,
+        quantity: 1,
+        unit_price: amount,
+      }],
+      payer: { email: userEmail },
+    };
+
+    console.log("[create-payment-order] POST /v1/orders body:", JSON.stringify(mpBody));
+    console.log("[create-payment-order] X-Idempotency-Key:", "generada");
+
+    // 3) Crear la orden en MercadoPago (API de Orders) con idempotencia
     const mpRes = await fetch("https://api.mercadopago.com/v1/orders", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": "Bearer " + MP_ACCESS_TOKEN,
+        "X-Idempotency-Key": crypto.randomUUID(),
       },
-      body: JSON.stringify({
-        type: "online",
-        total_amount: amount,
-        external_reference,
-        items: [{
-          title: "Plan GADU " + planId + " (" + periodo + ")",
-          quantity: 1,
-          unit_price: amount,
-        }],
-        payer: { email: userEmail },
-      }),
+      body: JSON.stringify(mpBody),
     });
-    const mp = await mpRes.json().catch(() => ({}));
+
+    const mpText = await mpRes.text();
+    let mp: Record<string, unknown> = {};
+    try { mp = JSON.parse(mpText); } catch { mp = { raw: mpText }; }
+
+    console.log("[create-payment-order] MP response status:", mpRes.status);
+    console.log("[create-payment-order] MP response body:", mpText.slice(0, 1500));
+
     if (!mpRes.ok || !mp.id) {
-      console.error("[create-payment-order] MP error:", mpRes.status, JSON.stringify(mp));
-      return json({ error: "MercadoPago: " + (mp.message || ("HTTP " + mpRes.status)) }, 502);
+      return json({ error: "MercadoPago: " + (mp.message || ("HTTP " + mpRes.status)), detail: mp }, 502);
     }
 
-    // 3) Guardar la orden en Supabase (service role → salta RLS)
+    // 4) Guardar la orden en Supabase (service role → salta RLS)
     try {
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       const { error } = await supabase.from("mercadopago_orders").insert({
@@ -97,6 +120,7 @@ serve(async (req) => {
 
     return json({ init_point: mp.checkout_url });
   } catch (e) {
+    console.error("[create-payment-order] error general:", e);
     return json({ error: String((e as Error)?.message || e) }, 500);
   }
 });

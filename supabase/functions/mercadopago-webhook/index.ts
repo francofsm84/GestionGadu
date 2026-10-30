@@ -63,8 +63,8 @@ serve(async (req) => {
 
         // 2) Aprobado: status "approved" (payment) o "paid"/"completed" (order)
         const approved = status === "approved" || status === "paid" || status === "completed";
-        if (approved && externalRef && externalRef.includes("|")) {
-          const parts = externalRef.split("|");
+        if (approved && externalRef && externalRef.includes("_")) {
+          const parts = externalRef.split("_");
           const userId = String(parts[0] || "");
           const planId = String(parts[1] || "");
           const periodo = String(parts[2] || "trimestral");
