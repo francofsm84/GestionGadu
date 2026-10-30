@@ -612,6 +612,25 @@ export function executeAction(
     return { ok: true, label: "Tarea agregada a la obra " + wLabel + ": " + titulo };
   }
 
+  if (action.modulo === "complete_task") {
+    const titulo = (String(c.title || c.titulo || c.tarea || "").trim() || cleanConcept(String(sourceText || "")).slice(0, 120)).trim();
+    if (!titulo) return { ok: false, missing: "la tarea a completar" };
+    const tareas = (d.tasks || []) as Array<Record<string, unknown>>;
+    const fn = flat(titulo);
+    const tarea = tareas.find(t => {
+      const tn = flat(String(t.title || ""));
+      return !!tn && (tn.includes(fn) || fn.includes(tn));
+    });
+    if (!tarea) return { ok: false, notFound: "No encontre la tarea \"" + titulo + "\"." };
+    tarea.isDone = true;
+    let wLabel = "obra";
+    if (tarea.workId) {
+      const w = works.find(x => String(x.id) === String(tarea.workId));
+      if (w) wLabel = workLabel(w);
+    }
+    return { ok: true, label: "Tarea '" + String(tarea.title || titulo) + "' marcada como completada en " + wLabel };
+  }
+
   if (action.modulo === "obra") {
     const nombreObra = String(c.nombre || "").trim();
     if (!nombreObra) return { ok: false, missing: "el nombre de la obra" };
@@ -635,7 +654,7 @@ export function executeAction(
    ===================================================================== */
 
 export interface QueryIntent {
-  type: "sueldos" | "balance" | "balance_general" | "gastos" | "ingresos" | "agenda" | "herramientas" | "empleado_historial";
+  type: "sueldos" | "balance" | "balance_general" | "gastos" | "ingresos" | "agenda" | "herramientas" | "empleado_historial" | "tareas";
   target: string;
   periodo: "semana" | "mes" | "hoy";
 }
@@ -653,6 +672,16 @@ function normWork(s: string): string {
 export function detectQueryIntent(text: string): QueryIntent | null {
   const f = flat(String(text || "")).trim();
   if (!f) return null;
+
+  /* Tareas pendientes de una obra */
+  if (/(tareas?|pendientes?|to[- ]?do|checklist)/.test(f) &&
+      /(pendientes?|tareas?|qu[ee]|mostr[aa]|ver|list[aa]|tengo|hay)/.test(f)) {
+    const target = f
+      .replace(/^.*?(?:tareas?|pendientes?|checklist)/, "")
+      .replace(/\b(?:de|del|la|el|los|las|en|para|obra|qu[ee]|mostr[aa]|ver|list[aa]|tengo|hay|mis)\b/g, " ")
+      .replace(/\s+/g, " ").trim();
+    return { type: "tareas", target, periodo: "hoy" };
+  }
 
   /* Historial / legajo completo de un empleado */
   if (/(historial|legajo|ficha|toda la informaci[oo]n|info completa)/.test(f) &&
@@ -790,6 +819,25 @@ export function computeQuery(data: Record<string, any>, q: QueryIntent): string 
       "- Adelantos: -" + fmt(adelantos) + "\n" +
       "- Saldo pendiente: " + fmt(saldo) + "\n\n" +
       "*Ultimas jornadas:*\n" + (ultimas || "Sin jornadas registradas.");
+  }
+
+  if (q.type === "tareas") {
+    const tareas = (data.tasks || []) as any[];
+    const pend = tareas.filter((t: any) => !t.isDone);
+    let targetWork: any = null;
+    if (q.target) {
+      const tn = normWork(q.target);
+      targetWork = works.find((w: any) => {
+        const n = normWork(String(w.name || w.nombre || ""));
+        return !!n && (n.includes(tn) || tn.includes(n));
+      });
+    }
+    const lista = targetWork ? pend.filter((t: any) => String(t.workId) === String(targetWork.id)) : pend;
+    const titulo = targetWork ? "\uD83D\uDCCB Tareas pendientes en " + (targetWork.name || targetWork.nombre) : "\uD83D\uDCCB Tareas pendientes";
+    if (!lista.length) {
+      return targetWork ? "No hay tareas pendientes en " + (targetWork.name || targetWork.nombre) + "." : "No hay tareas pendientes.";
+    }
+    return titulo + "\n" + lista.map((t: any) => "- " + (t.title || "Tarea")).join("\n");
   }
 
   if (q.type === "balance") {
@@ -4957,7 +5005,7 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
     }
 
-    const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra", "inversion", "reporte", "nueva_deuda", "tarea"];
+    const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra", "inversion", "reporte", "nueva_deuda", "tarea", "complete_task"];
     console.log("[GADU-WA-INTENT] texto a interpretar:", JSON.stringify(inc.text));
 
     const aiController = new AbortController();
@@ -5214,7 +5262,7 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply: "" });
     }
 
-    if (action && ["gasto", "ingreso", "empleado", "adelanto", "obra", "inversion", "tarea"].includes(action.modulo)) {
+    if (action && ["gasto", "ingreso", "empleado", "adelanto", "obra", "inversion", "tarea", "complete_task"].includes(action.modulo)) {
       /* [EMPLEADO multi-paso] Si hay nombre pero faltan oficio/tarifa/telefono,
          arrancar el wizard secuencial en lugar de crear un empleado incompleto. */
       if (action.modulo === "empleado") {
