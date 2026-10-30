@@ -122,7 +122,7 @@
     if (!sess || !sess.userId) { UI.toast('Iniciá sesión para comprar', 'error'); return; }
     UI.toast('Generando enlace de pago…', 'info');
     try {
-      const res = await fetch(G.auth.SUPABASE_URL + '/functions/v1/create-payment-preference', {
+      const res = await fetch(G.auth.SUPABASE_URL + '/functions/v1/create-payment-order', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
