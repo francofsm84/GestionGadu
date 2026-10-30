@@ -985,12 +985,36 @@
     };
 
     /* Texto legal (reemplazable) + modales de Términos y Privacidad */
-    const TERMS_LEGAL = `<h4>Términos y Condiciones de Uso</h4>
-<p>1. GADU es una plataforma de gestión para obras, remodelaciones y finanzas de tu emprendimiento.</p>
-<p>2. Al usar GADU aceptás que los datos que cargues (obras, clientes, empleados, gastos, ingresos, etc.) se almacenan de forma segura en tu cuenta y se sincronizan entre tus dispositivos.</p>
-<p>3. Sos responsable de la veracidad de los datos y del resguardo de tu acceso.</p>
-<p>4. Los planes de suscripción y sus límites se describen en la sección "Mi suscripción".</p>
-<p>5. Al aceptar, registramos la fecha de tu consentimiento como prueba de aceptación.</p>`;
+    const TERMS_LEGAL = `<h4>Términos y Condiciones de Servicio de GADU</h4>
+<p><strong>Última actualización:</strong> 30 de octubre de 2026</p>
+<p>El servicio GADU (en adelante, "la Plataforma") es operado por <strong>Franco Maldonado</strong>, con domicilio en Lima 766, Alta Gracia, Córdoba, y correo de contacto <strong>Francofsm84@gmail.com</strong>.</p>
+
+<h5>1. Objeto y Aceptación</h5>
+<p>La Plataforma es un software como servicio (SaaS) para la gestión de obras, finanzas y personal, que incluye una aplicación web progresiva (PWA) y un asistente virtual vía WhatsApp. Al registrarse, acceder o utilizar la Plataforma, el usuario acepta de forma plena estos Términos.</p>
+
+<h5>2. Registro y Cuenta</h5>
+<p>El Cliente garantiza que los datos proporcionados son veraces. Es el único responsable de custodiar sus credenciales. La cuenta es personal e intransferible.</p>
+
+<h5>3. Planes y Facturación Prepaga</h5>
+<p>GADU opera bajo un modelo de licencias prepagas (Trimestral, Semestral o Anual). Una vez canjeado el código, no se realizan reembolsos por períodos no utilizados. Al finalizar el período prepago, la cuenta se degradará al Plan Gratuito.</p>
+
+<h5>4. Uso de Inteligencia Artificial</h5>
+<p>La Plataforma utiliza modelos de IA (Groq, Gemini, DeepSeek) para transcribir audios y analizar imágenes de tickets. El Cliente reconoce que la IA es una tecnología probabilística y es el único responsable de revisar y validar los montos extraídos antes de usarlos para fines contables, fiscales o legales.</p>
+
+<h5>5. Integración con WhatsApp</h5>
+<p>El servicio depende de la API de WhatsApp Business de Meta Platforms Inc. El Prestador no controla ni garantiza la disponibilidad, continuidad o políticas de Meta. Si la cuenta de WhatsApp Business del Cliente es bloqueada por Meta, el Prestador queda eximido de responsabilidad.</p>
+
+<h5>6. Propiedad Intelectual</h5>
+<p>El código fuente, diseño, logotipos y la marca "GADU" son propiedad exclusiva del Prestador. Los datos que el Cliente cargue (obras, gastos, empleados) son de su exclusiva propiedad.</p>
+
+<h5>7. Protección de Datos Personales</h5>
+<p>El tratamiento de datos personales se rige por el Aviso de Privacidad. El Cliente, al cargar datos de terceros (ej. empleados), declara contar con el consentimiento necesario para su tratamiento.</p>
+
+<h5>8. Limitación de Responsabilidad</h5>
+<p>La Plataforma se proporciona "tal cual". La responsabilidad total del Prestador se limitará al monto total abonado por el Cliente en los 12 meses anteriores. No será responsable por daños indirectos, lucro cesante o interrupciones causadas por fallas de terceros (Meta, Supabase, proveedores de IA).</p>
+
+<h5>9. Ley Aplicable y Jurisdicción</h5>
+<p>Estos Términos se rigen por las leyes de la República Argentina. Las partes se someten a la jurisdicción de los Tribunales Ordinarios de la Ciudad de Alta Gracia, Córdoba.</p>`;
 
     const PRIVACY_LEGAL = `<h4>Aviso de Privacidad</h4>
 <p>1. Tus datos personales y de tu negocio son privados: solo vos y los administradores de tu cuenta pueden verlos.</p>
