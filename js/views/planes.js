@@ -51,7 +51,12 @@
       '<ul class="plan-feats">' + feats.map(f => '<li>' + UI.escapeHtml(f) + '</li>').join('') + '</ul>' +
       (esActual
         ? '<button class="btn btn-ghost btn-block" disabled>Plan actual</button>'
-        : '<a class="btn ' + (destacado ? 'btn-primary' : 'btn-soft') + ' btn-block" href="https://wa.me/' + BOT + '?text=' + encodeURIComponent('Hola, quiero comprar el Plan ' + titulo + ' de GADU en formato ' + per.label + '.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 15) + ' Suscribirme</a>') +
+        : '<div class="stack" style="gap:6px">' +
+          (precioValor > 0
+            ? '<button class="btn btn-primary btn-block" data-buy="' + p.id + '" data-periodo="' + per.id + '">💳 Comprar con Tarjeta</button>'
+            : '') +
+          '<a class="btn ' + (precioValor > 0 ? 'btn-soft' : (destacado ? 'btn-primary' : 'btn-soft')) + ' btn-block" href="https://wa.me/' + BOT + '?text=' + encodeURIComponent('Hola, quiero comprar el Plan ' + titulo + ' de GADU en formato ' + per.label + '.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 15) + (precioValor > 0 ? ' Suscribirme por WhatsApp' : ' Suscribirme') + '</a>' +
+          '</div>') +
       '</div>';
   }
 
@@ -107,6 +112,34 @@
     });
   }
 
+  /* Compra con MercadoPago: crea la preferencia de pago y redirige al checkout */
+  async function buyWithCard(planId, periodo) {
+    const plan = ((G.plan && G.plan.planes) || []).find(p => p.id === planId);
+    const per = PERIODOS.find(x => x.id === periodo) || PERIODOS[0];
+    const amount = plan ? Number(plan[per.campo] || 0) : 0;
+    if (!plan || amount <= 0) { UI.toast('Plan no disponible', 'error'); return; }
+    const sess = G.auth.getSession();
+    if (!sess || !sess.userId) { UI.toast('Iniciá sesión para comprar', 'error'); return; }
+    UI.toast('Generando enlace de pago…', 'info');
+    try {
+      const res = await fetch(G.auth.SUPABASE_URL + '/functions/v1/create-payment-preference', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': G.auth.SUPABASE_ANON_KEY,
+          'Authorization': 'Bearer ' + (sess.accessToken || sess.access_token || ''),
+        },
+        body: JSON.stringify({ planId, periodo, amount, userEmail: sess.email || '' }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.error || ('HTTP ' + res.status));
+      if (!j.init_point) throw new Error('No se recibió el enlace de pago');
+      window.location.href = j.init_point;   // redirigir a MercadoPago
+    } catch (e) {
+      UI.toast('❌ No se pudo iniciar el pago: ' + ((e && e.message) || e), 'error');
+    }
+  }
+
   function render(view) {
     const planes = (G.plan && G.plan.planes) || [];
     const actual = G.plan ? G.plan.currentPlan() : { id: '' };
@@ -124,6 +157,10 @@
         ? '<div class="plans-grid">' + planes.map(p => cardHTML(p, actual.id, state.periodo)).join('') + '</div>'
         : fallbackHTML(state.periodo));
     bindRedeem(view);
+    /* Compra con tarjeta (MercadoPago) */
+    view.querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', () => {
+      buyWithCard(b.dataset.buy, b.dataset.periodo || state.periodo);
+    }));
     /* Toggle de período: re-renderiza las tarjetas con el precio del período elegido */
     view.querySelectorAll('[data-periodo]').forEach(b => b.addEventListener('click', () => {
       state.periodo = b.dataset.periodo;
