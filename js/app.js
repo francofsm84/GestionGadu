@@ -10,24 +10,6 @@
   /* Número de WhatsApp del bot (producción), en formato internacional sin '+'. */
   G.BOT_PHONE_NUMBER = G.BOT_PHONE_NUMBER || '5493547665984';
 
-  /* ---------- Sentry (frontend) ----------
-     Solo se activa en producción (no en localhost) y si el bundle de Sentry
-     ya cargó en index.html. TODO: reemplazar SENTRY_DSN por el DSN real. */
-  const SENTRY_DSN = 'https://33e55a34fa23321155f236800e3d827e@o450000.ingest.us.sentry.io/450000000';
-  if (typeof window !== 'undefined' && window.Sentry &&
-      location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-    window.Sentry.init({
-      dsn: SENTRY_DSN,
-      tracesSampleRate: 1.0,
-      replaysSessionSampleRate: 0.1,
-      replaysOnErrorSampleRate: 1.0,
-      integrations: [
-        window.Sentry.browserTracingIntegration(),
-        window.Sentry.replayIntegration(),
-      ],
-    });
-  }
-
   const routes = [];
   let current = null;
   let resizeTimer = null;
