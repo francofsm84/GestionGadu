@@ -450,6 +450,59 @@
     });
   }
 
+  /* ---------- Búsqueda global (Ctrl+K / Cmd+K) ---------- */
+  function openGlobalSearch() {
+    const m = UI.openModal({
+      title: '🔍 Búsqueda global',
+      subtitle: 'Encontrá cualquier registro al instante.',
+      size: 'wide',
+      body:
+        '<input class="input" id="gsInput" placeholder="Buscar obras, gastos, empleados, clientes…" autocomplete="off" style="font-size:16px;padding:12px 14px">' +
+        '<div id="gsResults" style="margin-top:12px;max-height:58vh;overflow:auto"></div>',
+      footer: '<button class="btn btn-ghost" data-cancel>Cerrar</button>',
+    });
+    m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+    const input = m.panel.querySelector('#gsInput');
+    const resultsEl = m.panel.querySelector('#gsResults');
+    setTimeout(() => { try { input.focus(); } catch (e) {} }, 50);
+
+    const flat = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const esc = UI.escapeHtml;
+    const go = (hash) => { m.close(); location.hash = hash; };
+
+    function renderResults(raw) {
+      const q = flat(raw);
+      if (!q) { resultsEl.innerHTML = '<p class="form-hint">Escribí para buscar en toda la app…</p>'; return; }
+      const has = (s) => flat(s).includes(q);
+      const groups = [];
+      const push = (title, rows) => { if (rows.length) groups.push('<div class="gs-group"><h4 class="gs-group-title">' + title + '</h4>' + rows.slice(0, 5).join('') + '</div>'); };
+
+      push('🏗️ Obras', (S.data.works || []).filter(w => has((w.name || '') + ' ' + (w.code || '') + ' ' + (w.location || ''))).map(w =>
+        '<button class="gs-row" data-nav="#/obra/' + w.id + '"><span class="gs-row-main"><strong>' + esc(w.name) + '</strong><span class="muted small">' + esc(w.code || '') + (w.location ? ' · ' + esc(w.location) : '') + '</span></span><span class="gs-go">→</span></button>'));
+
+      push('💸 Gastos', (S.data.expenses || []).filter(x => has((x.description || '') + ' ' + (x.category || ''))).map(x =>
+        '<button class="gs-row" data-nav="#/gastos?id=' + x.id + '"><span class="gs-row-main"><strong>' + esc(x.description || x.category || 'Gasto') + '</strong><span class="muted small">' + esc(x.category || '') + ' · $' + UI.fmtNum(x.amount || 0) + '</span></span><span class="gs-go">→</span></button>'));
+
+      push('💰 Ingresos', (S.data.incomes || []).filter(x => has(x.concept || '')).map(x =>
+        '<button class="gs-row" data-nav="#/ingresos"><span class="gs-row-main"><strong>' + esc(x.concept || 'Ingreso') + '</strong><span class="muted small">$' + UI.fmtNum(x.amount || 0) + '</span></span><span class="gs-go">→</span></button>'));
+
+      push('👷 Empleados', (S.data.employees || []).filter(e => has(S.employeeName(e) + ' ' + (e.role || ''))).map(e =>
+        '<button class="gs-row" data-nav="#/empleado/' + e.id + '"><span class="gs-row-main"><strong>' + esc(S.employeeName(e)) + '</strong><span class="muted small">' + esc(e.role || '') + (e.hourlyRate ? ' · $' + UI.fmtNum(e.hourlyRate) + '/h' : '') + '</span></span><span class="gs-go">→</span></button>'));
+
+      push('👤 Contactos', (S.data.contacts || []).filter(c => has((c.name || '') + ' ' + (c.company || ''))).map(c =>
+        '<button class="gs-row" data-nav="#/clientes"><span class="gs-row-main"><strong>' + esc(c.name || 'Contacto') + '</strong><span class="muted small">' + esc(c.type || '') + '</span></span><span class="gs-go">→</span></button>'));
+
+      push('💳 Deudas', (S.data.debts || []).filter(d => has(d.concepto || '')).map(d =>
+        '<button class="gs-row" data-nav="#/deudas"><span class="gs-row-main"><strong>' + esc(d.concepto || 'Deuda') + '</strong><span class="muted small">Cuota ' + (d.cuotaActual || 0) + '/' + (d.cuotasTotales || 0) + '</span></span><span class="gs-go">→</span></button>'));
+
+      resultsEl.innerHTML = groups.length ? groups.join('') : '<p class="form-hint">Sin resultados para "<b>' + esc(raw) + '</b>".</p>';
+      resultsEl.querySelectorAll('[data-nav]').forEach(b => b.addEventListener('click', () => go(b.dataset.nav)));
+    }
+
+    input.addEventListener('input', e => renderResults(e.target.value));
+    renderResults('');
+  }
+
   /* ---------- Botón flotante de soporte ---------- */
   function initSupportFab() {
     try {
@@ -1475,6 +1528,13 @@
       initSidebar();
       initTopbar();
       bind('btnBackup', 'click', openBackup);
+      bind('btnSearch', 'click', openGlobalSearch);
+      window.addEventListener('keydown', e => {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+          e.preventDefault();
+          openGlobalSearch();
+        }
+      });
       window.addEventListener('hashchange', renderNow);
       let lastWidth = window.innerWidth;
       window.addEventListener('resize', () => {
