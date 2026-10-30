@@ -219,7 +219,10 @@
       };
       const res = await fetchT(SUPABASE_URL + '/rest/v1/profiles?on_conflict=user_id', {
         method: 'POST',
-        headers: Object.assign({}, headers(true), { 'Prefer': 'resolution=merge-duplicates' }),
+        /* ignore-duplicates (NO merge): si el perfil ya existe NO se toca.
+           merge-duplicates pisaba rol/plan/subscription de un usuario existente
+           (ej. degradaba super_admin a gestor_obra en cada login). */
+        headers: Object.assign({}, headers(true), { 'Prefer': 'resolution=ignore-duplicates' }),
         body: JSON.stringify(body),
       });
       if (!res.ok) console.error('[ensureUserProfile] falló con status', res.status);
