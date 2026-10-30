@@ -55,7 +55,7 @@
           (precioValor > 0
             ? '<button class="btn btn-primary btn-block" data-buy="' + p.id + '" data-periodo="' + per.id + '">💳 Comprar con Tarjeta</button>'
             : '') +
-          '<a class="btn ' + (precioValor > 0 ? 'btn-soft' : (destacado ? 'btn-primary' : 'btn-soft')) + ' btn-block" href="https://wa.me/' + BOT + '?text=' + encodeURIComponent('Hola, quiero comprar el Plan ' + titulo + ' de GADU en formato ' + per.label + '.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 15) + (precioValor > 0 ? ' Suscribirme por WhatsApp' : ' Suscribirme') + '</a>' +
+          '<a class="btn ' + (precioValor > 0 ? 'btn-soft' : (destacado ? 'btn-primary' : 'btn-soft')) + ' btn-block" href="https://wa.me/' + BOT + '?text=' + encodeURIComponent('Hola, quiero pagar por transferencia el Plan ' + titulo + ' de GADU en formato ' + per.label + '.') + '" target="_blank" rel="noopener">' + (precioValor > 0 ? '💬 Pagar por Transferencia' : '💬 Suscribirme') + '</a>' +
           '</div>') +
       '</div>';
   }
