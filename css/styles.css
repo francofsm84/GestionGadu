@@ -326,6 +326,23 @@ body.sb-collapsed .main { margin-left: var(--sidebar-w-min); }
 .gs-row:hover { background: var(--primary-soft, rgba(79,70,229,.1)); border-color: var(--primary, #4f46e5); }
 .gs-row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .gs-go { color: var(--muted, #94a3b8); font-weight: 700; }
+/* Atajo de teclado visible (kbd) junto al botón de búsqueda global */
+.kbd-hint {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted, #94a3b8);
+  background: var(--surface, #0f172a);
+  border: 1px solid var(--border, #334155);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  padding: 2px 7px;
+  line-height: 1;
+  white-space: nowrap;
+}
+@media (max-width: 768px) {
+  .kbd-hint { display: none; }
+}
 .kpi-ico { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; flex: none; }
 .kpi-success { background: var(--success-soft); color: var(--success); }
 .kpi-danger { background: var(--danger-soft); color: var(--danger); }
