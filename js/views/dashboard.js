@@ -42,19 +42,50 @@
     const prof = (S.data && S.data.settings && S.data.settings.profile) || {};
     const wa = prof.whatsapp || {};
     const linked = !!(wa.linked || wa.verified || prof.whatsapp_verified);
-    return '<div class="card" style="text-align:center;padding:48px 24px;max-width:520px;margin:0 auto">' +
+    return '<div class="card" style="text-align:center;padding:48px 24px;max-width:560px;margin:0 auto">' +
       '<span class="empty-ico">' + UI.icon('hard-hat', 40) + '</span>' +
       '<h2 style="margin:12px 0 6px">¡Bienvenido a GADU! 👋</h2>' +
-      '<p class="muted" style="margin-bottom:20px">Todavía no tenés obras ni gastos cargados. Arrancá en 3 pasos simples.</p>' +
+      '<p class="muted" style="margin-bottom:20px">Tu gestión, perfecta. Para empezar, vinculá tu WhatsApp y mandale un audio al bot con tu primer gasto.</p>' +
       '<div class="stack" style="gap:10px">' +
-        '<button class="btn btn-primary btn-block" id="btnFirstWork">' + UI.icon('hard-hat', 16) + ' Crear mi primera Obra</button>' +
-        '<button class="btn btn-soft btn-block" id="btnFirstExpense">' + UI.icon('receipt', 16) + ' Cargar un Gasto</button>' +
-        (linked ? '' : '<button class="btn btn-soft-success btn-block" id="btnFirstWhatsApp">' + UI.icon('whatsapp', 16) + ' Vincular mi WhatsApp</button>') +
+        '<button class="btn btn-primary btn-block" id="btnGuide">📖 Ver Guía de Inicio Rápido</button>' +
+        '<button class="btn btn-soft btn-block" id="btnFirstWork">🏗️ Crear mi primera Obra</button>' +
+        '<button class="btn btn-soft btn-block" id="btnFirstExpense">💸 Cargar un Gasto</button>' +
+        (linked ? '' : '<button class="btn btn-soft-success btn-block" id="btnFirstWhatsApp">🔗 Vincular mi WhatsApp</button>') +
       '</div>' +
     '</div>';
   }
 
+  /* Un paso de la guía de inicio rápido */
+  function guideStep(emoji, title, desc) {
+    return '<div class="card-inset" style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px">' +
+      '<span style="font-size:28px;line-height:1">' + emoji + '</span>' +
+      '<div><strong>' + UI.escapeHtml(title) + '</strong><p class="muted" style="margin:2px 0 0">' + UI.escapeHtml(desc) + '</p></div>' +
+      '</div>';
+  }
+
+  /* Modal de la Guía de Inicio Rápido (4 pasos) */
+  function openGuideModal() {
+    const m = UI.openModal({
+      title: '📖 Guía de Inicio Rápido',
+      subtitle: '4 pasos para sacarle el máximo provecho a GADU.',
+      body:
+        '<div>' +
+        guideStep('🔗', 'Vinculá tu WhatsApp', 'Andá a "Mi Perfil" y seguí los pasos para conectar tu número.') +
+        guideStep('🎙️', 'Mandá un Audio', 'Escribile al bot de GADU: "Gasté 5000 en cemento". El bot lo procesará automáticamente.') +
+        guideStep('📥', 'Revisá la Bandeja', 'Si el gasto no tiene obra, aparecerá en "Bandeja WhatsApp". Asignalo a una obra con un clic.') +
+        guideStep('🔄', 'Recuperá lo borrado', 'Si borraste algo por error, andá a "Respaldos y datos" > "Papelera de Reciclaje".') +
+        '</div>',
+      footer: '<button class="btn btn-primary btn-block" id="btnGuideDone">¡Entendido, a trabajar!</button>',
+    });
+    m.panel.querySelector('#btnGuideDone').addEventListener('click', () => {
+      try { localStorage.setItem('gadu_guide_seen', 'true'); } catch (e) {}
+      m.close();
+    });
+  }
+
   function bindEmptyState(view) {
+    const guide = view.querySelector('#btnGuide');
+    if (guide) guide.addEventListener('click', openGuideModal);
     const firstWork = view.querySelector('#btnFirstWork');
     if (firstWork) firstWork.addEventListener('click', () => { try { G.actions.work(); } catch (e) { location.hash = '#/obras'; } });
     const firstExp = view.querySelector('#btnFirstExpense');
@@ -72,10 +103,12 @@
       view.innerHTML = UI.emptyState('activity', 'Cargando tus datos…', '');
       return;
     }
-    /* Empty state: usuario nuevo sin obras ni gastos → bienvenida + 3 acciones */
+    /* Empty state: usuario nuevo sin obras ni gastos → bienvenida + guía */
     if (S.data.works.length === 0 && S.data.expenses.length === 0) {
       view.innerHTML = emptyStateHTML();
       bindEmptyState(view);
+      /* Auto-abrir la guía la primera vez (no vuelve a aparecer si ya la cerró) */
+      try { if (!localStorage.getItem('gadu_guide_seen')) openGuideModal(); } catch (e) {}
       return;
     }
     const range = periodRange();
