@@ -127,6 +127,67 @@
     });
   }
 
+  /* HTML del presupuesto para generar el PDF en el cliente */
+  function budgetPDFHTML(b) {
+    const client = S.contactById(b.clientId);
+    const work = b.workId ? S.data.works.find(w => w.id === b.workId) : null;
+    return '<div style="font-family:Arial,Helvetica,sans-serif;color:#1e293b;padding:28px;background:#fff;max-width:760px">' +
+      '<div style="display:flex;justify-content:space-between;border-bottom:3px solid #f59e0b;padding-bottom:12px;margin-bottom:16px">' +
+      '<div><div style="font-size:20px;font-weight:800">GADU Construye</div><div style="font-size:12px;color:#64748b">Presupuesto</div></div>' +
+      '<div style="text-align:right;font-size:12px;color:#94a3b8">' + UI.escapeHtml(b.code || '') + '</div></div>' +
+      '<h1 style="font-size:18px;margin:0 0 8px">' + UI.escapeHtml(b.name) + '</h1>' +
+      '<p style="font-size:13px;color:#64748b;margin:0 0 16px">Cliente: ' + UI.escapeHtml(client ? client.name : '—') + (work ? ' · Obra: ' + UI.escapeHtml(work.name) : '') + ' · ' + UI.fmtDate(b.date) + '</p>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
+      '<tr style="background:#f1f5f9"><th style="text-align:left;padding:6px 8px">Ítem</th><th style="text-align:right;padding:6px 8px">Cant.</th><th style="text-align:right;padding:6px 8px">P. unit.</th><th style="text-align:right;padding:6px 8px">Subtotal</th></tr>' +
+      b.items.map(it => '<tr><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">' + UI.escapeHtml(it.desc) + '</td><td style="text-align:right;padding:6px 8px;border-bottom:1px solid #e2e8f0">' + UI.fmtNum(it.qty) + '</td><td style="text-align:right;padding:6px 8px;border-bottom:1px solid #e2e8f0">' + UI.fmtMoney(it.price, 2) + '</td><td style="text-align:right;padding:6px 8px;border-bottom:1px solid #e2e8f0">' + UI.fmtMoney(Number(it.price || 0) * Number(it.qty || 0), 2) + '</td></tr>').join('') +
+      '</table>' +
+      '<div style="margin-top:12px;text-align:right">' +
+      '<div style="font-size:12px;color:#64748b">Subtotal: ' + UI.fmtMoney(b.subtotal) + '</div>' +
+      (b.discount ? '<div style="font-size:12px;color:#dc2626">Descuento (' + b.discount + '%): −' + UI.fmtMoney(b.subtotal - b.total) + '</div>' : '') +
+      '<div style="font-size:16px;font-weight:800;margin-top:4px">TOTAL: ' + UI.fmtMoney(b.total) + '</div></div>' +
+      '<div style="text-align:center;color:#94a3b8;font-size:11px;margin-top:24px;border-top:1px solid #e2e8f0;padding-top:12px">Generado por GADU - Tu gestión, perfecta</div>' +
+      '</div>';
+  }
+
+  /* Envía el presupuesto en PDF al WhatsApp del cliente */
+  async function sendBudgetPDF(b, client) {
+    if (!b.clientId) { UI.toast('Asigná un cliente al presupuesto primero.', 'error'); return; }
+    if (!client) { UI.toast('No se encontró el cliente.', 'error'); return; }
+    const phone = client.whatsapp || client.phone || '';
+    if (!phone) { UI.toast('El cliente no tiene teléfono. Agregalo antes de enviar.', 'error'); return; }
+    if (typeof html2pdf === 'undefined') { UI.toast('Cargando el generador de PDF…', 'info'); return; }
+    UI.toast('Generando y enviando el presupuesto…', 'info');
+    try {
+      const el = document.createElement('div');
+      el.style.position = 'fixed'; el.style.left = '0'; el.style.top = '0';
+      el.style.width = '800px'; el.style.maxWidth = '100%'; el.style.zIndex = '-9999';
+      el.style.opacity = '0'; el.style.background = '#fff';
+      el.innerHTML = budgetPDFHTML(b);
+      document.body.appendChild(el);
+      const dataUri = await html2pdf().from(el).set({
+        margin: 8,
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      }).output('datauristring');
+      document.body.removeChild(el);
+      const pdfBase64 = String(dataUri).includes(',') ? String(dataUri).split(',')[1] : String(dataUri);
+      const sess = G.auth.getSession();
+      const res = await fetch(G.auth.SUPABASE_URL + '/functions/v1/send-budget-pdf', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': G.auth.SUPABASE_ANON_KEY,
+          'Authorization': 'Bearer ' + (sess ? (sess.access_token || sess.accessToken) : ''),
+        },
+        body: JSON.stringify({ phone, budgetData: { name: b.name, total: b.total }, pdfBase64 }),
+      });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || 'HTTP ' + res.status); }
+      UI.toast('✅ Presupuesto enviado al WhatsApp de ' + client.name, 'success');
+    } catch (e) {
+      UI.toast('❌ No se pudo enviar: ' + ((e && e.message) || e), 'error');
+    }
+  }
+
   function openBudgetDetail(b) {
     if (!b) return;
     const client = S.contactById(b.clientId);
@@ -158,10 +219,12 @@
         (b.notes ? '<p class="form-hint" style="margin-top:10px"><strong>Notas:</strong> ' + UI.escapeHtml(b.notes) + '</p>' : ''),
       footer:
         '<button class="btn btn-ghost" data-cancel>Cerrar</button>' +
+        '<button class="btn btn-soft-success" data-sendwa>' + UI.icon('whatsapp', 15) + 'Enviar al Cliente</button>' +
         '<button class="btn btn-soft" data-edit>Editar</button>' +
         (b.status === 'aprobado' && b.workId ? '<button class="btn btn-soft-success" data-cobrar>' + UI.icon('trending-up', 15) + 'Registrar cobro</button>' : ''),
     });
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+    m.panel.querySelector('[data-sendwa]').addEventListener('click', () => sendBudgetPDF(b, client));
     m.panel.querySelector('[data-edit]').addEventListener('click', () => { m.close(); openBudgetModal(b); });
     const cobrar = m.panel.querySelector('[data-cobrar]');
     if (cobrar) cobrar.addEventListener('click', () => {
