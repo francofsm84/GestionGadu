@@ -198,6 +198,68 @@
     }).save().then(() => { try { document.body.removeChild(container); } catch (e) {} });
   }
 
+  /* ---------- Certificado de Cierre (PDF) ---------- */
+  async function exportCertificate(ctx) {
+    if (typeof html2pdf === 'undefined') { UI.toast('Cargando el generador de PDF…', 'info'); return; }
+    const w = ctx.w, st = ctx.st;
+    const client = S.contactById(w.clientId);
+    const tareas = (S.data.tasks || []).filter(t => t.workId === w.id);
+    const hechas = tareas.filter(t => t.isDone).length;
+    const pendientes = tareas.length - hechas;
+
+    const html =
+      '<div style="font-family:Arial,Helvetica,sans-serif;color:#1e293b;padding:28px;background:#fff;max-width:760px;border:2px solid #f59e0b;border-radius:12px">' +
+      '<div style="text-align:center;border-bottom:3px solid #f59e0b;padding-bottom:14px;margin-bottom:20px">' +
+        '<div style="font-size:24px;font-weight:800;color:#0f172a">GADU Construye</div>' +
+        '<div style="font-size:14px;color:#64748b">Certificado de Cierre de Obra</div>' +
+      '</div>' +
+      '<h1 style="font-size:20px;margin:0 0 4px;color:#0f172a">' + UI.escapeHtml(w.name) + '</h1>' +
+      '<div style="font-size:13px;color:#64748b;margin-bottom:14px">Cliente: <b>' + UI.escapeHtml(client ? client.name : 'Sin cliente') + '</b> · Ubicación: ' + UI.escapeHtml(w.location || '—') + '</div>' +
+      '<table style="width:100%;border-collapse:collapse;margin-bottom:14px;font-size:13px">' +
+        '<tr><td style="padding:5px 0;color:#64748b">Fecha de inicio</td><td style="text-align:right"><b>' + UI.fmtDate(w.startDate) + '</b></td></tr>' +
+        '<tr><td style="padding:5px 0;color:#64748b">Fecha de cierre</td><td style="text-align:right"><b>' + UI.fmtDate(w.closedAt || new Date().toISOString()) + '</b></td></tr>' +
+      '</table>' +
+      '<div style="font-weight:700;margin:12px 0 6px">Balance final</div>' +
+      '<table style="width:100%;border-collapse:collapse;margin-bottom:16px">' +
+        '<tr><td style="padding:6px 8px;color:#64748b">Presupuesto total</td><td style="text-align:right;font-weight:700">' + UI.fmtMoney(w.budgetTotal) + '</td></tr>' +
+        '<tr><td style="padding:6px 8px;color:#64748b">Total cobrado</td><td style="text-align:right;color:#16a34a;font-weight:700">' + UI.fmtMoney(st.incomes) + '</td></tr>' +
+        '<tr><td style="padding:6px 8px;color:#64748b">Total gastado (mano de obra + materiales)</td><td style="text-align:right;color:#dc2626;font-weight:700">−' + UI.fmtMoney(st.costs) + '</td></tr>' +
+        '<tr style="border-top:2px solid #cbd5e1"><td style="padding:9px 8px;font-weight:800">Margen de ganancia final</td><td style="text-align:right;font-weight:800;font-size:16px;color:' + (st.margin >= 0 ? '#16a34a' : '#dc2626') + '">' + UI.fmtMoney(st.margin) + '</td></tr>' +
+      '</table>' +
+      '<div style="font-weight:700;margin:12px 0 6px">Tareas de la obra</div>' +
+      '<div style="font-size:13px;color:#64748b;margin-bottom:6px">✅ ' + hechas + ' completadas · ⏳ ' + pendientes + ' pendientes</div>' +
+      (tareas.length
+        ? '<ul style="margin:0 0 16px;padding-left:18px;font-size:12.5px">' + tareas.map(t => '<li style="margin-bottom:3px">' + (t.isDone ? '✅ ' : '⏳ ') + UI.escapeHtml(t.title) + '</li>').join('') + '</ul>'
+        : '<p style="font-size:12px;color:#94a3b8">Sin tareas registradas.</p>') +
+      '<div style="text-align:center;color:#94a3b8;font-size:12px;margin-top:22px;border-top:1px solid #e2e8f0;padding-top:12px">Documento generado por GADU - Tu gestión, perfecta</div>' +
+      '</div>';
+
+    const container = document.createElement('div');
+    container.style.position = 'fixed';
+    container.style.left = '0';
+    container.style.top = '0';
+    container.style.width = '800px';
+    container.style.maxWidth = '100%';
+    container.style.zIndex = '-9999';
+    container.style.opacity = '0';
+    container.style.pointerEvents = 'none';
+    container.style.background = '#ffffff';
+    container.style.color = '#111827';
+    container.innerHTML = html;
+    document.body.appendChild(container);
+
+    const filename = 'Certificado_Cierre_' + String(w.name || 'obra').replace(/[^a-z0-9áéíóúñ ]/gi, '').replace(/\s+/g, '_') + '.pdf';
+    await new Promise(r => setTimeout(r, 250));
+
+    html2pdf().from(container).set({
+      margin: 8,
+      filename: filename,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    }).save().then(() => { try { document.body.removeChild(container); } catch (e) {} });
+  }
+
   /* ---------- Tareas y pendientes de la obra ---------- */
   function tasksListHTML(workId) {
     const tasks = (S.data.tasks || []).filter(t => t.workId === workId)
@@ -280,6 +342,10 @@
       '<select class="select" id="statusSel" style="max-width:160px">' +
       S.WORK_STATUS.map(s => '<option value="' + s + '"' + (w.status === s ? ' selected' : '') + '>' + (s === 'activa' ? 'Activa' : s === 'pausada' ? 'Pausada' : 'Finalizada') + '</option>').join('') +
       '</select>' +
+      (w.status === 'finalizada'
+        ? '<button class="btn btn-soft-success" id="btnReopen">' + UI.icon('play', 15) + 'Reabrir Obra</button>' +
+          '<button class="btn btn-soft" id="btnCertificate">' + UI.icon('file-text', 15) + 'Descargar Certificado</button>'
+        : '<button class="btn btn-soft-danger" id="btnClose">' + UI.icon('lock', 15) + 'Cerrar Obra</button>') +
       '<button class="btn btn-soft" id="btnPdf">' + UI.icon('file-text', 15) + 'Exportar PDF</button>' +
       '<button class="btn btn-soft" id="btnShare">' + UI.icon('whatsapp', 15) + 'Compartir con el Cliente</button>' +
       '<button class="btn btn-soft-warning" id="btnAdicional">' + UI.icon('plus', 15) + 'Adicional / Extra</button>' +
@@ -377,6 +443,47 @@
     view.querySelector('#btnPdf').addEventListener('click', () => exportPDF(ctx));
     view.querySelector('#btnShare').addEventListener('click', () => shareWithClient(w));
     bindTasks(view, w);
+
+    /* Cerrar obra (bloquea gastos y tareas) */
+    const btnClose = view.querySelector('#btnClose');
+    if (btnClose) btnClose.addEventListener('click', async () => {
+      const ok = await UI.confirm({
+        title: 'Cerrar obra',
+        message: 'Al cerrar la obra, no podrás agregar más gastos ni tareas. ¿Estás seguro?',
+        okLabel: 'Cerrar obra',
+        tone: 'danger',
+      });
+      if (!ok) return;
+      S.update('works', w.id, { status: 'finalizada', closedAt: new Date().toISOString() });
+      UI.toast('🔒 Obra cerrada', 'success');
+      G.router.refresh();
+    });
+
+    /* Reabrir obra */
+    const btnReopen = view.querySelector('#btnReopen');
+    if (btnReopen) btnReopen.addEventListener('click', async () => {
+      const ok = await UI.confirm({ title: 'Reabrir obra', message: 'La obra volverá al estado Activa y podrás seguir cargando gastos y tareas.', okLabel: 'Reabrir' });
+      if (!ok) return;
+      S.update('works', w.id, { status: 'activa', closedAt: null });
+      UI.toast('🔓 Obra reabierta', 'success');
+      G.router.refresh();
+    });
+
+    /* Certificado de cierre */
+    const btnCertificate = view.querySelector('#btnCertificate');
+    if (btnCertificate) btnCertificate.addEventListener('click', () => exportCertificate(ctx));
+
+    /* Bloqueo post-cierre: gastos y tareas deshabilitados en obra finalizada */
+    if (w.status === 'finalizada') {
+      const taskInput = view.querySelector('#taskInput');
+      const btnAddTask = view.querySelector('#btnAddTask');
+      if (taskInput) { taskInput.disabled = true; taskInput.placeholder = 'Obra cerrada · reabrila para editar'; }
+      if (btnAddTask) btnAddTask.disabled = true;
+      const btnAdicional = view.querySelector('#btnAdicional');
+      if (btnAdicional) { btnAdicional.disabled = true; }
+      const blocked = () => UI.toast('La obra está cerrada. Reabrila para editar.', 'warning');
+      UI.on(view, '[data-eexp], [data-dinc], [data-dexp]', 'click', e => { e.stopPropagation(); blocked(); });
+    }
 
     /* Tarjetas KPI clickeables: hash → navegar · id → scroll al desglose */
     UI.on(view, '[data-nav]', 'click', e => {
