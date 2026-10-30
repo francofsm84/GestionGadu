@@ -632,6 +632,78 @@
     return pi.tone === 'success' ? 'check-circle' : 'user';
   }
 
+  /* ---------- Texto legal (compartido por registro y gate) ---------- */
+  const TERMS_LEGAL = `<h4>Términos y Condiciones de Servicio de GADU</h4>
+<p><strong>Última actualización:</strong> 30 de octubre de 2026</p>
+<p>El servicio GADU (en adelante, "la Plataforma") es operado por <strong>Franco Maldonado</strong>, con domicilio en Lima 766, Alta Gracia, Córdoba, y correo de contacto <strong>Francofsm84@gmail.com</strong>.</p>
+
+<h5>1. Objeto y Aceptación</h5>
+<p>La Plataforma es un software como servicio (SaaS) para la gestión de obras, finanzas y personal, que incluye una aplicación web progresiva (PWA) y un asistente virtual vía WhatsApp. Al registrarse, acceder o utilizar la Plataforma, el usuario acepta de forma plena estos Términos.</p>
+
+<h5>2. Registro y Cuenta</h5>
+<p>El Cliente garantiza que los datos proporcionados son veraces. Es el único responsable de custodiar sus credenciales. La cuenta es personal e intransferible.</p>
+
+<h5>3. Planes y Facturación Prepaga</h5>
+<p>GADU opera bajo un modelo de licencias prepagas (Trimestral, Semestral o Anual). Una vez canjeado el código, no se realizan reembolsos por períodos no utilizados. Al finalizar el período prepago, la cuenta se degradará al Plan Gratuito.</p>
+
+<h5>4. Uso de Inteligencia Artificial</h5>
+<p>La Plataforma utiliza modelos de IA (Groq, Gemini, DeepSeek) para transcribir audios y analizar imágenes de tickets. El Cliente reconoce que la IA es una tecnología probabilística y es el único responsable de revisar y validar los montos extraídos antes de usarlos para fines contables, fiscales o legales.</p>
+
+<h5>5. Integración con WhatsApp</h5>
+<p>El servicio depende de la API de WhatsApp Business de Meta Platforms Inc. El Prestador no controla ni garantiza la disponibilidad, continuidad o políticas de Meta. Si la cuenta de WhatsApp Business del Cliente es bloqueada por Meta, el Prestador queda eximido de responsabilidad.</p>
+
+<h5>6. Propiedad Intelectual</h5>
+<p>El código fuente, diseño, logotipos y la marca "GADU" son propiedad exclusiva del Prestador. Los datos que el Cliente cargue (obras, gastos, empleados) son de su exclusiva propiedad.</p>
+
+<h5>7. Protección de Datos Personales</h5>
+<p>El tratamiento de datos personales se rige por el Aviso de Privacidad. El Cliente, al cargar datos de terceros (ej. empleados), declara contar con el consentimiento necesario para su tratamiento.</p>
+
+<h5>8. Limitación de Responsabilidad</h5>
+<p>La Plataforma se proporciona "tal cual". La responsabilidad total del Prestador se limitará al monto total abonado por el Cliente en los 12 meses anteriores. No será responsable por daños indirectos, lucro cesante o interrupciones causadas por fallas de terceros (Meta, Supabase, proveedores de IA).</p>
+
+<h5>9. Ley Aplicable y Jurisdicción</h5>
+<p>Estos Términos se rigen por las leyes de la República Argentina. Las partes se someten a la jurisdicción de los Tribunales Ordinarios de la Ciudad de Alta Gracia, Córdoba.</p>`;
+
+  const PRIVACY_LEGAL = `<h4>Aviso de Privacidad y Protección de Datos</h4>
+<p><strong>Responsable:</strong> Franco Maldonado<br><strong>Contacto:</strong> Francofsm84@gmail.com</p>
+
+<h5>1. Datos que Recopilamos</h5>
+<ul>
+  <li><strong>Datos de Registro:</strong> Nombre, email, teléfono.</li>
+  <li><strong>Datos de la Cuenta:</strong> Obras, gastos, ingresos, empleados, clientes.</li>
+  <li><strong>Datos de Uso:</strong> Mensajes de WhatsApp, audios, imágenes de tickets, dirección IP.</li>
+</ul>
+
+<h5>2. Finalidad del Tratamiento</h5>
+<p>Prestar el servicio, procesar audios/imágenes mediante IA, enviar notificaciones y mejorar la plataforma (analítica agregada).</p>
+
+<h5>3. Base Legal</h5>
+<p>El tratamiento se basa en el Consentimiento (al aceptar este Aviso), la Ejecución contractual y el Interés legítimo (prevención de fraudes).</p>
+
+<h5>4. Transferencia Internacional</h5>
+<p>Los datos se alojan en Supabase. Para la transcripción, los archivos se envían a Groq, Google (Gemini) y DeepSeek, ubicados en EE.UU. u otros países. Al aceptar, consientes esta transferencia bajo estándares de seguridad razonables.</p>
+
+<h5>5. Derechos del Titular (ARCO)</h5>
+<p>De acuerdo con las leyes de LatAm (Ley 25.326 de Argentina, entre otras), tenés derecho a Acceso, Rectificación, Cancelación y Oposición. Para ejercerlos, escribí a Francofsm84@gmail.com. Responderemos en un plazo máximo de 10 días hábiles.</p>
+
+<h5>6. Retención de Datos</h5>
+<p>Conservamos tus datos mientras uses la Plataforma. Si cancelás la cuenta, los eliminaremos en 30 días (salvo obligaciones fiscales). Los mensajes procesados de WhatsApp se eliminan de la cola tras 30 días.</p>
+
+<h5>7. Seguridad y Cookies</h5>
+<p>Implementamos encriptación en tránsito y en reposo (RLS). La PWA utiliza localStorage e IndexedDB para funcionar offline. No usamos cookies de rastreo publicitario.</p>`;
+
+  const openLegalModal = (title, html) => {
+    const m = UI.openModal({
+      title: title,
+      subtitle: 'GADU · Gestión de obras y remodelaciones',
+      body: '<div style="max-height:55vh;overflow-y:auto;font-size:13px;line-height:1.6">' + html + '</div>',
+      footer: '<button class="btn btn-primary" data-cancel>Entendido</button>',
+    });
+    m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
+  };
+  const openTermsModal = () => openLegalModal('Términos y Condiciones', TERMS_LEGAL);
+  const openPrivacyModal = () => openLegalModal('Aviso de Privacidad', PRIVACY_LEGAL);
+
   /* ---------- Consentimiento legal para usuarios existentes (beta) ---------- */
   function initTermsGate() {
     if (document.getElementById('termsGate')) return;
@@ -644,16 +716,18 @@
           overlay.innerHTML =
             '<div class="lock-card">' +
             '<img src="' + logoUrl() + '" alt="GADU" class="login-logo" style="width:110px">' +
-            '<h2>Actualizamos nuestros términos</h2>' +
-            '<p>Actualizamos nuestros términos. Por favor, aceptalos para continuar.</p>' +
-            '<div style="max-height:40vh;overflow-y:auto;text-align:left;font-size:13px;line-height:1.6;margin-bottom:12px">' +
-            '<h4>Términos y Condiciones</h4><p>1. GADU es una plataforma de gestión para obras y finanzas de tu emprendimiento.</p><p>2. Los datos que cargues se almacenan de forma segura en tu cuenta.</p><p>3. Sos responsable de la veracidad de tus datos y del resguardo de tu acceso.</p>' +
-            '<h4 style="margin-top:10px">Aviso de Privacidad</h4><p>1. Tus datos son privados: solo vos y los administradores pueden verlos.</p><p>2. No compartimos tu información con terceros.</p><p>3. Podés solicitar la eliminación de tus datos en cualquier momento.</p>' +
+            '<h2>Actualización de Términos Legales</h2>' +
+            '<p>Antes de continuar, necesitamos que aceptes nuestra versión actualizada de los Términos y Condiciones y el Aviso de Privacidad. Al usar GADU, aceptás que procesemos tus audios y fotos mediante IA para extraer datos financieros.</p>' +
+            '<div class="stack" style="gap:6px;margin-bottom:12px">' +
+            '<button type="button" class="btn btn-soft btn-block" id="termsReadTerms">📄 Leer Términos y Condiciones completos</button>' +
+            '<button type="button" class="btn btn-soft btn-block" id="termsReadPrivacy">🔒 Leer Aviso de Privacidad completo</button>' +
             '</div>' +
-            '<button class="btn btn-primary btn-block" id="termsAccept">Aceptar y continuar</button>' +
+            '<button class="btn btn-primary btn-block" id="termsAccept">✅ Aceptar y continuar</button>' +
             '<button class="btn btn-ghost btn-block" id="termsLogout">Cerrar sesión</button>' +
             '</div>';
           document.body.appendChild(overlay);
+          overlay.querySelector('#termsReadTerms').addEventListener('click', openTermsModal);
+          overlay.querySelector('#termsReadPrivacy').addEventListener('click', openPrivacyModal);
           overlay.querySelector('#termsAccept').addEventListener('click', async () => {
             const btn = overlay.querySelector('#termsAccept');
             btn.disabled = true;
@@ -984,78 +1058,7 @@
       setMsg('', false);
     };
 
-    /* Texto legal (reemplazable) + modales de Términos y Privacidad */
-    const TERMS_LEGAL = `<h4>Términos y Condiciones de Servicio de GADU</h4>
-<p><strong>Última actualización:</strong> 30 de octubre de 2026</p>
-<p>El servicio GADU (en adelante, "la Plataforma") es operado por <strong>Franco Maldonado</strong>, con domicilio en Lima 766, Alta Gracia, Córdoba, y correo de contacto <strong>Francofsm84@gmail.com</strong>.</p>
-
-<h5>1. Objeto y Aceptación</h5>
-<p>La Plataforma es un software como servicio (SaaS) para la gestión de obras, finanzas y personal, que incluye una aplicación web progresiva (PWA) y un asistente virtual vía WhatsApp. Al registrarse, acceder o utilizar la Plataforma, el usuario acepta de forma plena estos Términos.</p>
-
-<h5>2. Registro y Cuenta</h5>
-<p>El Cliente garantiza que los datos proporcionados son veraces. Es el único responsable de custodiar sus credenciales. La cuenta es personal e intransferible.</p>
-
-<h5>3. Planes y Facturación Prepaga</h5>
-<p>GADU opera bajo un modelo de licencias prepagas (Trimestral, Semestral o Anual). Una vez canjeado el código, no se realizan reembolsos por períodos no utilizados. Al finalizar el período prepago, la cuenta se degradará al Plan Gratuito.</p>
-
-<h5>4. Uso de Inteligencia Artificial</h5>
-<p>La Plataforma utiliza modelos de IA (Groq, Gemini, DeepSeek) para transcribir audios y analizar imágenes de tickets. El Cliente reconoce que la IA es una tecnología probabilística y es el único responsable de revisar y validar los montos extraídos antes de usarlos para fines contables, fiscales o legales.</p>
-
-<h5>5. Integración con WhatsApp</h5>
-<p>El servicio depende de la API de WhatsApp Business de Meta Platforms Inc. El Prestador no controla ni garantiza la disponibilidad, continuidad o políticas de Meta. Si la cuenta de WhatsApp Business del Cliente es bloqueada por Meta, el Prestador queda eximido de responsabilidad.</p>
-
-<h5>6. Propiedad Intelectual</h5>
-<p>El código fuente, diseño, logotipos y la marca "GADU" son propiedad exclusiva del Prestador. Los datos que el Cliente cargue (obras, gastos, empleados) son de su exclusiva propiedad.</p>
-
-<h5>7. Protección de Datos Personales</h5>
-<p>El tratamiento de datos personales se rige por el Aviso de Privacidad. El Cliente, al cargar datos de terceros (ej. empleados), declara contar con el consentimiento necesario para su tratamiento.</p>
-
-<h5>8. Limitación de Responsabilidad</h5>
-<p>La Plataforma se proporciona "tal cual". La responsabilidad total del Prestador se limitará al monto total abonado por el Cliente en los 12 meses anteriores. No será responsable por daños indirectos, lucro cesante o interrupciones causadas por fallas de terceros (Meta, Supabase, proveedores de IA).</p>
-
-<h5>9. Ley Aplicable y Jurisdicción</h5>
-<p>Estos Términos se rigen por las leyes de la República Argentina. Las partes se someten a la jurisdicción de los Tribunales Ordinarios de la Ciudad de Alta Gracia, Córdoba.</p>`;
-
-    const PRIVACY_LEGAL = `<h4>Aviso de Privacidad y Protección de Datos</h4>
-<p><strong>Responsable:</strong> Franco Maldonado<br><strong>Contacto:</strong> Francofsm84@gmail.com</p>
-
-<h5>1. Datos que Recopilamos</h5>
-<ul>
-  <li><strong>Datos de Registro:</strong> Nombre, email, teléfono.</li>
-  <li><strong>Datos de la Cuenta:</strong> Obras, gastos, ingresos, empleados, clientes.</li>
-  <li><strong>Datos de Uso:</strong> Mensajes de WhatsApp, audios, imágenes de tickets, dirección IP.</li>
-</ul>
-
-<h5>2. Finalidad del Tratamiento</h5>
-<p>Prestar el servicio, procesar audios/imágenes mediante IA, enviar notificaciones y mejorar la plataforma (analítica agregada).</p>
-
-<h5>3. Base Legal</h5>
-<p>El tratamiento se basa en el Consentimiento (al aceptar este Aviso), la Ejecución contractual y el Interés legítimo (prevención de fraudes).</p>
-
-<h5>4. Transferencia Internacional</h5>
-<p>Los datos se alojan en Supabase. Para la transcripción, los archivos se envían a Groq, Google (Gemini) y DeepSeek, ubicados en EE.UU. u otros países. Al aceptar, consientes esta transferencia bajo estándares de seguridad razonables.</p>
-
-<h5>5. Derechos del Titular (ARCO)</h5>
-<p>De acuerdo con las leyes de LatAm (Ley 25.326 de Argentina, entre otras), tenés derecho a Acceso, Rectificación, Cancelación y Oposición. Para ejercerlos, escribí a Francofsm84@gmail.com. Responderemos en un plazo máximo de 10 días hábiles.</p>
-
-<h5>6. Retención de Datos</h5>
-<p>Conservamos tus datos mientras uses la Plataforma. Si cancelás la cuenta, los eliminaremos en 30 días (salvo obligaciones fiscales). Los mensajes procesados de WhatsApp se eliminan de la cola tras 30 días.</p>
-
-<h5>7. Seguridad y Cookies</h5>
-<p>Implementamos encriptación en tránsito y en reposo (RLS). La PWA utiliza localStorage e IndexedDB para funcionar offline. No usamos cookies de rastreo publicitario.</p>`;
-
-    const openLegalModal = (title, html) => {
-      const m = UI.openModal({
-        title: title,
-        subtitle: 'GADU · Gestión de obras y remodelaciones',
-        body: '<div style="max-height:55vh;overflow-y:auto;font-size:13px;line-height:1.6">' + html + '</div>',
-        footer: '<button class="btn btn-primary" data-cancel>Entendido</button>',
-      });
-      m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
-    };
-    const openTermsModal = () => openLegalModal('Términos y Condiciones', TERMS_LEGAL);
-    const openPrivacyModal = () => openLegalModal('Aviso de Privacidad', PRIVACY_LEGAL);
-
+    /* (TERMS_LEGAL, PRIVACY_LEGAL y los modales legales ahora viven a nivel de módulo) */
     const updateSubmit = () => {
       const btn = host.querySelector('#btnSubmit');
       const cb = host.querySelector('#acceptTerms');
