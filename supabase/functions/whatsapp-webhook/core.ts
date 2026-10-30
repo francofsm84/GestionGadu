@@ -162,7 +162,7 @@ export function workLabel(w: Record<string, unknown> | null | undefined): string
   return "";
 }
 
-function flat(s: string): string {
+export function flat(s: string): string {
   return String(s || "").toLowerCase().normalize("NFD").split("").filter((c: string) => { const n = c.charCodeAt(0); return n < 768 || n > 879; }).join("");
 }
 
@@ -598,6 +598,7 @@ export function executeAction(
     (d.works || (d.works = [])).unshift({
       id: idGen(), nombre: nombreObra, ubicacion: String(c.ubicacion || ""), status: "activa", source: "whatsapp",
       budgetTotal: Number(c.presupuesto) || 0,
+      clientId: String(c.clientId || "") || null,
     } as unknown as Record<string, unknown>);
     return { ok: true, label: "Obra '" + nombreObra + "' creada ✓" };
   }

@@ -162,7 +162,7 @@ export function workLabel(w: Record<string, unknown> | null | undefined): string
   return "";
 }
 
-function flat(s: string): string {
+export function flat(s: string): string {
   return String(s || "").toLowerCase().normalize("NFD").split("").filter((c: string) => { const n = c.charCodeAt(0); return n < 768 || n > 879; }).join("");
 }
 
@@ -598,6 +598,7 @@ export function executeAction(
     (d.works || (d.works = [])).unshift({
       id: idGen(), nombre: nombreObra, ubicacion: String(c.ubicacion || ""), status: "activa", source: "whatsapp",
       budgetTotal: Number(c.presupuesto) || 0,
+      clientId: String(c.clientId || "") || null,
     } as unknown as Record<string, unknown>);
     return { ok: true, label: "Obra '" + nombreObra + "' creada OK" };
   }
@@ -4138,8 +4139,8 @@ async function processMessage(body: unknown) {
         const mObra = tObra.match(/^(.*?)\s+en\s+(.+)$/i);
         if (mObra) {
           /* "Casa Perez en Alta Gracia" -> nombre + ubicacion en un solo mensaje */
-          await upsertSession(inc.from, row.user_id, "WAITING_OBRA_PRESUPUESTO", { nombre: String(mObra[1]).trim(), ubicacion: String(mObra[2]).trim() });
-          fireAndForget(sendWhatsApp(inc.from, "Cual es el presupuesto total? (ej. 100000   escribi *omitir* si no lo sabes)"));
+          await upsertSession(inc.from, row.user_id, "WAITING_OBRA_CLIENTE", { nombre: String(mObra[1]).trim(), ubicacion: String(mObra[2]).trim() });
+          fireAndForget(sendWhatsApp(inc.from, "Para que cliente es esta obra? (Escribi el nombre o *omitir*)"));
           return json({ ok: true, from: inc.from, reply: "" });
         }
         if (tObra) {
@@ -4162,12 +4163,41 @@ async function processMessage(body: unknown) {
     if (enWizardObraUbi) {
       const t = String(inc.text || "").trim();
       const ubicacion = /^omitir$/i.test(t) ? "" : t;
-      await upsertSession(inc.from, row.user_id, "WAITING_OBRA_PRESUPUESTO", { nombre: obraUbiCtx.nombre, ubicacion });
+      await upsertSession(inc.from, row.user_id, "WAITING_OBRA_CLIENTE", { nombre: obraUbiCtx.nombre, ubicacion });
+      fireAndForget(sendWhatsApp(inc.from, "Para que cliente es esta obra? (Escribi el nombre o *omitir*)"));
+      return json({ ok: true, from: inc.from, reply: "" });
+    }
+
+    /* Obra paso 3: cliente (WAITING_OBRA_CLIENTE) -> busca o crea al vuelo */
+    let enWizardObraCli = false;
+    let obraCliCtx: Record<string, unknown> = {};
+    try {
+      const sessOC = await getSession(normalizePhone(inc.from));
+      if (sessOC && sessOC.state === "WAITING_OBRA_CLIENTE") { enWizardObraCli = true; obraCliCtx = (sessOC.context as Record<string, unknown>) || {}; }
+    } catch (e) {}
+    if (enWizardObraCli) {
+      const t = String(inc.text || "").trim();
+      const omitir = /^omitir$/i.test(t) || !t;
+      let clientId: string | null = null;
+      if (!omitir) {
+        const fn = flat(t);
+        const contactos = (data.contacts || []) as any[];
+        let cliente = contactos.find((c: any) => {
+          const n = flat(String(c.name || c.razonSocial || c.company || ""));
+          return !!n && (n.includes(fn) || fn.includes(n));
+        });
+        if (!cliente) {
+          cliente = { id: crypto.randomUUID(), name: t, type: "cliente", phone: "", email: "", address: "", source: "whatsapp" };
+          (data.contacts || (data.contacts = [])).unshift(cliente);
+        }
+        clientId = String(cliente.id || "");
+      }
+      await upsertSession(inc.from, row.user_id, "WAITING_OBRA_PRESUPUESTO", { nombre: obraCliCtx.nombre, ubicacion: obraCliCtx.ubicacion, clientId });
       fireAndForget(sendWhatsApp(inc.from, "Cual es el presupuesto total? (ej. 100000   escribi *omitir* si no lo sabes)"));
       return json({ ok: true, from: inc.from, reply: "" });
     }
 
-    /* Obra paso 3: presupuesto -> crear (WAITING_OBRA_PRESUPUESTO) */
+    /* Obra paso 4: presupuesto -> crear (WAITING_OBRA_PRESUPUESTO) */
     let enWizardObraPre = false;
     let obraPreCtx: Record<string, unknown> = {};
     try {
@@ -4182,7 +4212,7 @@ async function processMessage(body: unknown) {
         fireAndForget(sendWhatsApp(inc.from, "\uD83E\uDD16 Eso no es un monto valido. Cual es el presupuesto total? (o *omitir*)"));
         return json({ ok: true, from: inc.from, reply: "" });
       }
-      const res = executeAction(data, { modulo: "obra", campos: { nombre: String(obraPreCtx.nombre || ""), ubicacion: String(obraPreCtx.ubicacion || ""), presupuesto } }, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
+      const res = executeAction(data, { modulo: "obra", campos: { nombre: String(obraPreCtx.nombre || ""), ubicacion: String(obraPreCtx.ubicacion || ""), presupuesto, clientId: String(obraPreCtx.clientId || "") } }, inc.text, () => crypto.randomUUID(), new Date().toISOString().slice(0, 10));
       if (res.ok) {
         const upObra = await rest("app_data?user_id=eq." + encodeURIComponent(row.user_id), {
           method: "PATCH",
