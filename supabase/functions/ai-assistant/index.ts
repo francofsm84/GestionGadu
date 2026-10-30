@@ -52,6 +52,7 @@ MAPEO DE CAMPOS POR MÓDULO:
 - INGRESO: "monto" = número, "concepto" = adelanto/certificación/cobro, "obra" = obra si la nombra.
 - INVERSIÓN: si el usuario dice "invertí", "inversión" o "invertir" + un monto + un concepto (ej. "Invertí 50000 en una máquina", "Inversión de 10000 en capital de trabajo"), la intención es modulo="inversion" (NO es un gasto común). "monto" = número, "categoria" = concepto.
 - JORNADA: "empleado" = nombre del empleado, "horas" = número, "obra" = obra si la nombra.
+- TAREA: si el usuario quiere ANOTAR una tarea o pendiente para una obra ("Anotá tarea para la obra Casa Ángel: comprar cemento", "Recordame comprar ladrillos para la obra de Pérez"), usá modulo="tarea" con campos={"obra":"<nombre de la obra>","title":"<descripción de la tarea>"}. Es un pendiente, NO un gasto ni un reporte.
 - DIFERENCIACIÓN (CRÍTICO): Si el usuario dice "Gasté 5000 en la obra X", la acción es modulo="gasto" y la obra es SOLO una referencia (NO crees una obra nueva). Si el usuario dice "Crear obra X" / "Nueva obra X", la acción es modulo="obra". NUNCA mezcles ambas intenciones ni crees una obra a partir de un gasto.
 - MONEDA / RELLENO: ignorá las palabras de moneda o relleno entre el número y el concepto ("pesos", "peso", "mangos", "lucas", "ARS", "USD", "$"). Ej: "Invertí 170000 pesos en clavos" → monto=170000, categoria="clavos". NUNCA incluyas "pesos" ni "mangos" dentro de la categoría.
 - REPORTE (PRIORITARIO): si el usuario pide un CÁLCULO GERENCIAL o un número (balance, saldo, días trabajados, pagos, deuda), usá SIEMPRE modulo="reporte" (JAMÁS "consulta" ni "gasto"). Es SOLO LECTURA:
@@ -131,7 +132,7 @@ function tools() {
       parameters: {
         type: "OBJECT",
         properties: {
-          modulo: { type: "STRING", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "inversion", "jornada", "adelanto", "consulta", "presupuesto_pdf", "asistencia", "reporte", "nueva_deuda"], description: "Qué formulario abrir o reporte generar. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = presupuesto en PDF. 'asistencia' = registrar horas trabajadas de empleados. 'reporte' = balance de obra, días trabajados, pagos o deuda de un empleado. 'nueva_deuda' = registrar una deuda en cuotas (concepto, monto, cuotas)." },
+          modulo: { type: "STRING", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "inversion", "jornada", "adelanto", "consulta", "presupuesto_pdf", "asistencia", "reporte", "nueva_deuda", "tarea"], description: "Qué formulario abrir o reporte generar. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = presupuesto en PDF. 'asistencia' = registrar horas trabajadas de empleados. 'reporte' = balance de obra, días trabajados, pagos o deuda de un empleado. 'nueva_deuda' = registrar una deuda en cuotas (concepto, monto, cuotas)." },
           campos: {
             type: "OBJECT",
             description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol, cliente, obra, empleado, monto, concepto, categoria, horas, ubicacion, presupuesto, query_type, target, items (solo con modulo='presupuesto_pdf').",
@@ -197,7 +198,7 @@ function toolsOpenAI() {
       parameters: {
         type: "object",
         properties: {
-          modulo: { type: "string", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "inversion", "jornada", "adelanto", "consulta", "presupuesto_pdf", "asistencia", "reporte", "nueva_deuda"], description: "Qué formulario abrir o reporte generar. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = presupuesto en PDF. 'asistencia' = registrar horas trabajadas de empleados. 'reporte' = balance de obra, días trabajados, pagos o deuda de un empleado. 'nueva_deuda' = registrar una deuda en cuotas (concepto, monto, cuotas)." },
+          modulo: { type: "string", enum: ["empleado", "obra", "cliente", "presupuesto", "gasto", "ingreso", "inversion", "jornada", "adelanto", "consulta", "presupuesto_pdf", "asistencia", "reporte", "nueva_deuda", "tarea"], description: "Qué formulario abrir o reporte generar. 'adelanto' = adelanto de dinero a un empleado. 'consulta' = pregunta sobre sus datos. 'presupuesto_pdf' = presupuesto en PDF. 'asistencia' = registrar horas trabajadas de empleados. 'reporte' = balance de obra, días trabajados, pagos o deuda de un empleado. 'nueva_deuda' = registrar una deuda en cuotas (concepto, monto, cuotas)." },
           campos: {
             type: "object",
             description: "Datos detectados por voz/texto. Claves posibles: nombre, apellido, rol, cliente, obra, empleado, monto, concepto, categoria, horas, ubicacion, presupuesto, query_type, target, items (solo con modulo='presupuesto_pdf').",
@@ -443,7 +444,7 @@ serve(async (req) => {
             const args = functionCall.args || {};
             action = { modulo: args.modulo, campos: args.campos || {} };
             if (!reply) {
-              const etiquetas: Record<string, string> = { empleado: "Empleados", obra: "Obras", cliente: "Clientes", presupuesto: "Presupuestos", gasto: "Gastos", ingreso: "Ingresos", jornada: "Jornada" };
+              const etiquetas: Record<string, string> = { empleado: "Empleados", obra: "Obras", cliente: "Clientes", presupuesto: "Presupuestos", gasto: "Gastos", ingreso: "Ingresos", jornada: "Jornada", tarea: "Tareas" };
               reply = `¡De acuerdo! Abrí el formulario de ${etiquetas[action.modulo] || action.modulo}. Completá lo que falta o confirmá la carga.`;
               send({ text: reply });
             }
@@ -521,7 +522,7 @@ serve(async (req) => {
       const campos = (args.campos || {}) as Record<string, unknown>;
       action = { modulo, campos };
       console.log("[ai-assistant] abrir_formulario →", JSON.stringify(action));
-      const etiquetas: Record<string, string> = { empleado: "Empleados", obra: "Obras", cliente: "Clientes", presupuesto: "Presupuestos", gasto: "Gastos", ingreso: "Ingresos", jornada: "Jornada" };
+      const etiquetas: Record<string, string> = { empleado: "Empleados", obra: "Obras", cliente: "Clientes", presupuesto: "Presupuestos", gasto: "Gastos", ingreso: "Ingresos", jornada: "Jornada", tarea: "Tareas" };
       const resumen = Object.entries(campos).map(([k, v]) => `${k}: ${v}`).join(", ");
       reply = `¡De acuerdo! Abrí el formulario de ${etiquetas[modulo] || modulo}${resumen ? " con " + resumen : ""}. Completá lo que falta o confirmá la carga.`;
     }

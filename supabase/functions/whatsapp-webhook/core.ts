@@ -592,6 +592,26 @@ export function executeAction(
     return { ok: true, label: "Adelanto de $" + montoAd + " a " + nombreEmp + " registrado ✓" };
   }
 
+  if (action.modulo === "tarea") {
+    const titulo = (String(c.title || c.titulo || c.tarea || "").trim() || cleanConcept(String(sourceText || "")).slice(0, 120)).trim();
+    if (!titulo) return { ok: false, missing: "la descripción de la tarea" };
+    let workId: string | null = null;
+    let wLabel = "obra";
+    if (c.obra) {
+      const w = findWork(works, String(c.obra));
+      if (!w) return { ok: false, notFound: "No encontré la obra \"" + String(c.obra) + "\". ¿Querés que la cree o escribas el nombre exacto?" };
+      workId = String(w.id);
+      wLabel = workLabel(w);
+    } else if (activas.length === 1) {
+      workId = String(activas[0].id);
+      wLabel = workLabel(activas[0]);
+    }
+    (d.tasks || (d.tasks = [] as unknown as Array<Record<string, unknown>>)).unshift({
+      id: idGen(), workId, title: titulo, isDone: false, createdAt: new Date().toISOString(),
+    } as unknown as Record<string, unknown>);
+    return { ok: true, label: "Tarea agregada a la obra " + wLabel + ": " + titulo };
+  }
+
   if (action.modulo === "obra") {
     const nombreObra = String(c.nombre || "").trim();
     if (!nombreObra) return { ok: false, missing: "el nombre de la obra" };

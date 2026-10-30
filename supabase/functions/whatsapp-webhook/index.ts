@@ -3297,7 +3297,7 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
     }
 
-    const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra", "inversion", "reporte", "nueva_deuda"];
+    const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra", "inversion", "reporte", "nueva_deuda", "tarea"];
     console.log("[GADU-WA-INTENT] texto a interpretar:", JSON.stringify(inc.text));
 
     const aiController = new AbortController();
@@ -3554,7 +3554,7 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply: "" });
     }
 
-    if (action && ["gasto", "ingreso", "empleado", "adelanto", "obra", "inversion"].includes(action.modulo)) {
+    if (action && ["gasto", "ingreso", "empleado", "adelanto", "obra", "inversion", "tarea"].includes(action.modulo)) {
       /* [EMPLEADO multi-paso] Si hay nombre pero faltan oficio/tarifa/teléfono,
          arrancar el wizard secuencial en lugar de crear un empleado incompleto. */
       if (action.modulo === "empleado") {

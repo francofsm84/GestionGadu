@@ -592,6 +592,26 @@ export function executeAction(
     return { ok: true, label: "Adelanto de $" + montoAd + " a " + nombreEmp + " registrado OK" };
   }
 
+  if (action.modulo === "tarea") {
+    const titulo = (String(c.title || c.titulo || c.tarea || "").trim() || cleanConcept(String(sourceText || "")).slice(0, 120)).trim();
+    if (!titulo) return { ok: false, missing: "la descripcion de la tarea" };
+    let workId: string | null = null;
+    let wLabel = "obra";
+    if (c.obra) {
+      const w = findWork(works, String(c.obra));
+      if (!w) return { ok: false, notFound: "No encontre la obra \"" + String(c.obra) + "\". Queres que la cree o escribas el nombre exacto?" };
+      workId = String(w.id);
+      wLabel = workLabel(w);
+    } else if (activas.length === 1) {
+      workId = String(activas[0].id);
+      wLabel = workLabel(activas[0]);
+    }
+    (d.tasks || (d.tasks = [] as unknown as Array<Record<string, unknown>>)).unshift({
+      id: idGen(), workId, title: titulo, isDone: false, createdAt: new Date().toISOString(),
+    } as unknown as Record<string, unknown>);
+    return { ok: true, label: "Tarea agregada a la obra " + wLabel + ": " + titulo };
+  }
+
   if (action.modulo === "obra") {
     const nombreObra = String(c.nombre || "").trim();
     if (!nombreObra) return { ok: false, missing: "el nombre de la obra" };
@@ -4937,7 +4957,7 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
     }
 
-    const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra", "inversion", "reporte", "nueva_deuda"];
+    const RECOGNIZED_MODULOS = ["saludo", "consulta", "presupuesto_pdf", "asistencia", "gasto", "ingreso", "empleado", "adelanto", "obra", "inversion", "reporte", "nueva_deuda", "tarea"];
     console.log("[GADU-WA-INTENT] texto a interpretar:", JSON.stringify(inc.text));
 
     const aiController = new AbortController();
@@ -5194,7 +5214,7 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply: "" });
     }
 
-    if (action && ["gasto", "ingreso", "empleado", "adelanto", "obra", "inversion"].includes(action.modulo)) {
+    if (action && ["gasto", "ingreso", "empleado", "adelanto", "obra", "inversion", "tarea"].includes(action.modulo)) {
       /* [EMPLEADO multi-paso] Si hay nombre pero faltan oficio/tarifa/telefono,
          arrancar el wizard secuencial en lugar de crear un empleado incompleto. */
       if (action.modulo === "empleado") {
