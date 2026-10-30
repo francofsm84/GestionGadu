@@ -37,6 +37,104 @@
       : '<div class="kpi-card">' + inner + '</div>';
   }
 
+  /* Reporte Ejecutivo Mensual en PDF (solo planes PRO) */
+  async function exportExecutiveReport(range, t) {
+    const plan = (G.plan && G.plan.currentPlan) ? G.plan.currentPlan() : { id: 'free' };
+    if (plan.id !== 'pro' && plan.id !== 'empresa') {
+      UI.toast('Los reportes en PDF son exclusivos del Plan PRO', 'warning');
+      if (G.upgrade) G.upgrade();
+      return;
+    }
+    if (typeof html2pdf === 'undefined') { UI.toast('Cargando el generador de PDF…', 'info'); return; }
+
+    const inRange = x => (!range.from || String(x.date || '') >= range.from) && (!range.to || String(x.date || '') <= range.to);
+    const incF = S.data.incomes.filter(inRange);
+    const expF = S.data.expenses.filter(inRange);
+    const incTotal = S.sum(incF.map(x => Number(x.amount) || 0));
+    const expTotal = S.sum(expF.map(x => Number(x.amount) || 0));
+    const directTotal = S.sum(expF.filter(x => x.type === 'obra').map(x => Number(x.amount) || 0));
+    const generalTotal = S.sum(expF.filter(x => x.type !== 'obra').map(x => Number(x.amount) || 0));
+    const net = incTotal - expTotal;
+    const sueldos = S.sum(expF.filter(x => x.employeeId && x.expenseKind !== 'adelanto').map(x => Number(x.amount) || 0));
+    const adelantos = S.sum(expF.filter(x => x.employeeId && x.expenseKind === 'adelanto').map(x => Number(x.amount) || 0));
+
+    const workRows = (S.data.works || []).map(w => ({
+      w,
+      inc: S.sum(incF.filter(x => x.workId === w.id).map(x => Number(x.amount) || 0)),
+      exp: S.sum(expF.filter(x => x.workId === w.id).map(x => Number(x.amount) || 0)),
+      budget: Number(w.budgetTotal) || 0,
+    }));
+
+    const cats = {};
+    expF.forEach(x => { const c = String(x.category || 'Otros'); cats[c] = (cats[c] || 0) + (Number(x.amount) || 0); });
+    const catRows = Object.entries(cats).sort((a, b) => b[1] - a[1]);
+
+    const today = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
+    const periodLabel = range.label || 'período';
+    const html =
+      '<div style="font-family:Arial,Helvetica,sans-serif;color:#1e293b;padding:26px;background:#fff;max-width:780px">' +
+      '<div style="display:flex;justify-content:space-between;border-bottom:3px solid #4f46e5;padding-bottom:12px;margin-bottom:16px">' +
+        '<div><div style="font-size:22px;font-weight:800;color:#0f172a">GADU Construye</div><div style="font-size:14px;color:#4f46e5;font-weight:700">Reporte Ejecutivo</div></div>' +
+        '<div style="text-align:right;font-size:12px;color:#94a3b8">' + today + '<br>' + UI.escapeHtml(periodLabel) + '</div>' +
+      '</div>' +
+
+      '<div style="font-weight:700;margin:14px 0 6px">Resumen financiero</div>' +
+      '<table style="width:100%;border-collapse:collapse;margin-bottom:16px">' +
+        '<tr><td style="padding:6px 8px;color:#64748b">Total ingresos</td><td style="text-align:right;color:#16a34a;font-weight:700">' + UI.fmtMoney(incTotal) + '</td></tr>' +
+        '<tr><td style="padding:6px 8px;color:#64748b">Gastos directos</td><td style="text-align:right;color:#dc2626;font-weight:700">−' + UI.fmtMoney(directTotal) + '</td></tr>' +
+        '<tr><td style="padding:6px 8px;color:#64748b">Gastos generales</td><td style="text-align:right;color:#dc2626;font-weight:700">−' + UI.fmtMoney(generalTotal) + '</td></tr>' +
+        '<tr><td style="padding:6px 8px;color:#64748b">Total gastos</td><td style="text-align:right;color:#dc2626;font-weight:700">−' + UI.fmtMoney(expTotal) + '</td></tr>' +
+        '<tr style="border-top:2px solid #cbd5e1"><td style="padding:9px 8px;font-weight:800">Balance neto</td><td style="text-align:right;font-weight:800;font-size:16px;color:' + (net >= 0 ? '#16a34a' : '#dc2626') + '">' + UI.fmtMoney(net) + '</td></tr>' +
+      '</table>' +
+
+      '<div style="font-weight:700;margin:14px 0 6px">Desglose de obras</div>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px">' +
+        '<tr style="background:#f1f5f9"><th style="text-align:left;padding:6px 8px;color:#64748b">Obra</th><th style="text-align:right;padding:6px 8px;color:#64748b">Presupuesto</th><th style="text-align:right;padding:6px 8px;color:#64748b">Cobrado</th><th style="text-align:right;padding:6px 8px;color:#64748b">Gastado</th></tr>' +
+        (workRows.map(r => '<tr><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">' + UI.escapeHtml(r.w.name) + '</td><td style="text-align:right;padding:6px 8px;border-bottom:1px solid #e2e8f0">' + UI.fmtMoney(r.budget) + '</td><td style="text-align:right;padding:6px 8px;border-bottom:1px solid #e2e8f0;color:#16a34a">' + UI.fmtMoney(r.inc) + '</td><td style="text-align:right;padding:6px 8px;border-bottom:1px solid #e2e8f0;color:#dc2626">' + UI.fmtMoney(r.exp) + '</td></tr>').join('') || '<tr><td colspan="4" style="padding:8px;color:#94a3b8">Sin obras.</td></tr>') +
+      '</table>' +
+
+      '<div style="font-weight:700;margin:14px 0 6px">Gastos por categoría</div>' +
+      '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px">' +
+        (catRows.map(c => '<tr><td style="padding:5px 8px;border-bottom:1px solid #e2e8f0">' + UI.escapeHtml(c[0]) + '</td><td style="text-align:right;padding:5px 8px;border-bottom:1px solid #e2e8f0">' + UI.fmtMoney(c[1]) + '</td></tr>').join('') || '<tr><td style="padding:8px;color:#94a3b8">Sin gastos.</td></tr>') +
+      '</table>' +
+
+      '<div style="font-weight:700;margin:14px 0 6px">Empleados</div>' +
+      '<table style="width:100%;border-collapse:collapse;margin-bottom:16px">' +
+        '<tr><td style="padding:6px 8px;color:#64748b">Sueldos pagados</td><td style="text-align:right;font-weight:700">' + UI.fmtMoney(sueldos) + '</td></tr>' +
+        '<tr><td style="padding:6px 8px;color:#64748b">Adelantos</td><td style="text-align:right;font-weight:700;color:#dc2626">−' + UI.fmtMoney(adelantos) + '</td></tr>' +
+      '</table>' +
+
+      '<div style="text-align:center;color:#94a3b8;font-size:12px;margin-top:22px;border-top:1px solid #e2e8f0;padding-top:12px">Generado por GADU · Tu gestión, perfecta</div>' +
+      '</div>';
+
+    const container = document.createElement('div');
+    container.style.position = 'fixed';
+    container.style.left = '0'; container.style.top = '0';
+    container.style.width = '800px'; container.style.maxWidth = '100%';
+    container.style.zIndex = '-9999'; container.style.opacity = '0'; container.style.pointerEvents = 'none';
+    container.style.background = '#ffffff'; container.style.color = '#111827';
+    container.innerHTML = html;
+    document.body.appendChild(container);
+
+    const fname = 'Reporte_Ejecutivo_' + String(periodLabel).replace(/[^a-z0-9áéíóúñ ]/gi, '').replace(/\s+/g, '_') + '.pdf';
+    await new Promise(r => setTimeout(r, 250));
+
+    try {
+      await html2pdf().from(container).set({
+        margin: 8,
+        filename: fname,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, allowTaint: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      }).save();
+      UI.toast('✅ Reporte ejecutivo descargado', 'success');
+    } catch (e) {
+      UI.toast('❌ No se pudo generar el reporte: ' + ((e && e.message) || e), 'error');
+    } finally {
+      try { document.body.removeChild(container); } catch (e) {}
+    }
+  }
+
   /* Empty state de bienvenida (usuario nuevo sin obras ni gastos) */
   function emptyStateHTML() {
     const prof = (S.data && S.data.settings && S.data.settings.profile) || {};
@@ -165,6 +263,7 @@
       '<input type="date" class="input" id="pTo" value="' + period.to + '"' + (period.preset === 'custom' ? '' : ' hidden') + '>' +
       '<span class="muted small" id="periodDesc">' + UI.escapeHtml(range.label) + '</span>' +
       '<div style="flex:1"></div>' +
+      '<button class="btn btn-soft" id="btnReport">' + UI.icon('file-text', 16) + 'Exportar Reporte Mensual</button>' +
       '<a class="btn btn-primary" href="https://wa.me/' + (G.BOT_PHONE_NUMBER || '5493547665984') + '?text=' + encodeURIComponent('Hola GADU, quiero cargar un gasto rápido.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 16) + ' Cargar por WhatsApp</a>' +
       '</div>' +
 
@@ -363,6 +462,8 @@
     });
     view.querySelector('#pFrom').addEventListener('change', e => { period.from = e.target.value; render(view); });
     view.querySelector('#pTo').addEventListener('change', e => { period.to = e.target.value; render(view); });
+    const btnReport = view.querySelector('#btnReport');
+    if (btnReport) btnReport.addEventListener('click', () => exportExecutiveReport(range, t));
     const btnAttDash = view.querySelector('#btnAttDash');
     if (btnAttDash) btnAttDash.addEventListener('click', () => G.actions.attendance());
     const btnEmpDash = view.querySelector('#btnEmpDash');
