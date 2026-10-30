@@ -56,6 +56,18 @@ import {
 } from "./core.ts";
 import { resolveIncomingText } from "./transcribe.ts";
 import { enqueueMessage, claimNext, markDone, markFailed, resetStaleProcessing } from "./queue.ts";
+import * as Sentry from "npm:@sentry/deno@^8";
+
+/* Sentry (backend): solo se activa si el secret SENTRY_DSN_BACKEND está seteado.
+   defaultIntegrations: false → solo reporta lo que capturamos explícitamente. */
+const SENTRY_DSN_BACKEND = Deno.env.get("SENTRY_DSN_BACKEND") || "";
+if (SENTRY_DSN_BACKEND) {
+  Sentry.init({
+    dsn: SENTRY_DSN_BACKEND,
+    defaultIntegrations: false,
+    tracesSampleRate: 1.0,
+  });
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -3622,6 +3634,13 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
   } catch (error) {
     console.error("[GADU-WA-QUEUE-FIX] CRITICAL ERROR en processMessage:", error);
+    /* Reportar a Sentry y esperar el flush antes de propagar (máx. 2s) */
+    try {
+      Sentry.captureException(error);
+      await Sentry.flush(2000);
+    } catch (sentryErr) {
+      console.error("[SENTRY] error al capturar/flushear:", sentryErr);
+    }
     throw error;   // ← propagar para que drainPhone lo marque como fallido y siga
   }
 }

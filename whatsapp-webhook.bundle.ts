@@ -1765,6 +1765,19 @@ export async function markFailed(
 
 import { PDFDocument, StandardFonts, rgb } from "https://esm.sh/pdf-lib@1.17.1";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
+import * as Sentry from "npm:@sentry/deno@^8";
+
+/* Sentry (backend): solo se activa si el secret SENTRY_DSN_BACKEND esta seteado.
+   defaultIntegrations: false -> solo reporta lo que capturamos explicitamente. */
+const SENTRY_DSN_BACKEND = Deno.env.get("SENTRY_DSN_BACKEND") || "";
+if (SENTRY_DSN_BACKEND) {
+  Sentry.init({
+    dsn: SENTRY_DSN_BACKEND,
+    defaultIntegrations: false,
+    tracesSampleRate: 1.0,
+  });
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -5330,6 +5343,13 @@ async function processMessage(body: unknown) {
       return json({ ok: true, from: inc.from, reply });
   } catch (error) {
     console.error("[GADU-WA-QUEUE-FIX] CRITICAL ERROR en processMessage:", error);
+    /* Reportar a Sentry y esperar el flush antes de propagar (max. 2s) */
+    try {
+      Sentry.captureException(error);
+      await Sentry.flush(2000);
+    } catch (sentryErr) {
+      console.error("[SENTRY] error al capturar/flushear:", sentryErr);
+    }
     throw error;   // \u2190 propagar para que drainPhone lo marque como fallido y siga
   }
 }
