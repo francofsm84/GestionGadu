@@ -592,6 +592,7 @@
       '<button class="btn btn-primary" id="licValidate">Validar Código</button>' +
       '<p class="form-hint" id="licMsg" style="margin:8px 0"></p>' +
       '<a class="btn" style="background:#16a34a;color:#fff" href="https://wa.me/' + (G.BOT_PHONE_NUMBER || '5493547665984') + '?text=' + encodeURIComponent('Hola, finalizó mi prueba gratuita de 45 días en GADU. Quiero adquirir un código de acceso por 90 días.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 16) + 'Comprar Pase de 90 Días por WhatsApp</a>' +
+      '<button class="btn btn-soft" id="lockFree" style="margin-top:8px">' + UI.icon('chevron-left', 15) + 'Continuar con el Plan Gratuito</button>' +
       '<button class="btn btn-ghost" id="lockLogout">Cerrar sesión</button>' +
       '</div>';
     document.body.appendChild(overlay);
@@ -621,6 +622,27 @@
       G.auth.logout();
       S.attachUser(null);
       location.reload();
+    });
+
+    overlay.querySelector('#lockFree').addEventListener('click', async () => {
+      const btn = overlay.querySelector('#lockFree');
+      btn.disabled = true;
+      btn.textContent = 'Cambiando de plan…';
+      try {
+        const res = await G.plan.continueFree();
+        if (res && res.ok) {
+          setMsg('✅ Pasaste al Plan Gratuito. Redirigiendo…', false);
+          setTimeout(() => location.reload(), 800);
+        } else {
+          setMsg((res && res.error) || 'No se pudo cambiar de plan. Reintentá.', true);
+          btn.disabled = false;
+          btn.textContent = 'Continuar con el Plan Gratuito';
+        }
+      } catch (e) {
+        setMsg('No se pudo cambiar de plan. Reintentá.', true);
+        btn.disabled = false;
+        btn.textContent = 'Continuar con el Plan Gratuito';
+      }
     });
   }
 

@@ -201,10 +201,25 @@
     }
   }
 
+  /* Degradar a Plan Gratuito (Free Básico): desbloquea la cuenta sin pagar.
+     El RPC downgrade_to_free es SECURITY DEFINER y sortea el trigger blindar_perfil. */
+  async function continueFree() {
+    try {
+      const res = await api('POST', '/rpc/downgrade_to_free');
+      if (res && res.ok) {
+        await load();   // recargar perfil para reflejar el nuevo plan
+        return { ok: true };
+      }
+      return { ok: false, error: (res && res.error) || 'No se pudo cambiar de plan' };
+    } catch (e) {
+      return { ok: false, error: 'No se pudo cambiar de plan: ' + ((e && e.message) || e) };
+    }
+  }
+
   G.api = api;
   G.plan = {
     ROLES, load, isAdmin, currentPlan, worksActive, employeesCount, limitFor, wouldExceed, canCreate, checkLimit, LIMITS, log, trialDaysLeft, trialDias, needsOnboarding, isLocked,
-    validarCodigo, canjearCodigo, diasRestantes, fechaVencimiento,
+    validarCodigo, canjearCodigo, continueFree, diasRestantes, fechaVencimiento,
     get profile() { return profile; },
     get planes() { return planes; },
   };
