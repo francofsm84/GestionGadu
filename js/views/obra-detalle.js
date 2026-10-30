@@ -198,6 +198,56 @@
     }).save().then(() => { try { document.body.removeChild(container); } catch (e) {} });
   }
 
+  /* ---------- Tareas y pendientes de la obra ---------- */
+  function tasksListHTML(workId) {
+    const tasks = (S.data.tasks || []).filter(t => t.workId === workId)
+      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    if (!tasks.length) return '<p class="form-hint">Sin tareas. Agregá la primera arriba.</p>';
+    return '<div class="stack" style="gap:6px">' + tasks.map(t =>
+      '<div class="split-row" style="align-items:center">' +
+      '<label class="form-hint" style="flex:1;display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">' +
+      '<input type="checkbox" data-task-toggle="' + t.id + '"' + (t.isDone ? ' checked' : '') + '>' +
+      '<span style="' + (t.isDone ? 'text-decoration:line-through;color:var(--muted)' : '') + '">' + UI.escapeHtml(t.title) + '</span>' +
+      '</label>' +
+      '<button class="icon-btn sm danger" data-task-del="' + t.id + '" title="Eliminar">' + UI.icon('trash', 14) + '</button>' +
+      '</div>'
+    ).join('') + '</div>';
+  }
+
+  function bindTasks(view, w) {
+    const input = view.querySelector('#taskInput');
+    const add = view.querySelector('#btnAddTask');
+    const list = view.querySelector('#tasksList');
+    if (!input || !add || !list) return;
+    const refresh = () => { list.innerHTML = tasksListHTML(w.id); bindTasksRows(list); };
+    const addTask = () => {
+      const title = input.value.trim();
+      if (!title) { UI.toast('Escribí la tarea', 'error'); return; }
+      S.add('tasks', { workId: w.id, title, isDone: false, createdAt: new Date().toISOString() });
+      input.value = '';
+      refresh();
+    };
+    add.addEventListener('click', addTask);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') addTask(); });
+    bindTasksRows(list, refresh);
+  }
+
+  function bindTasksRows(list, refresh) {
+    list.querySelectorAll('[data-task-toggle]').forEach(cb => cb.addEventListener('change', e => {
+      const id = e.target.dataset.taskToggle;
+      S.update('tasks', id, { isDone: e.target.checked });
+      if (refresh) refresh();
+    }));
+    list.querySelectorAll('[data-task-del]').forEach(b => b.addEventListener('click', async e => {
+      e.stopPropagation();
+      const id = e.target.closest('[data-task-del]').dataset.taskDel;
+      const t = (S.data.tasks || []).find(x => x.id === id);
+      if (!t) return;
+      const ok = await UI.confirm({ title: 'Eliminar tarea', message: '¿Eliminar <strong>' + UI.escapeHtml(t.title) + '</strong>?', okLabel: 'Eliminar' });
+      if (ok) { S.remove('tasks', id); if (refresh) refresh(); }
+    }));
+  }
+
   function render(view, params) {
     const w = S.data.works.find(x => x.id === params.id);
     if (!w) {
@@ -289,6 +339,15 @@
       '</div></section>' +
 
       '<section class="card">' +
+      '<div class="card-head"><h3>✅ Tareas y Pendientes</h3><p class="muted">Organizá el día a día de esta obra</p></div>' +
+      '<div class="split-row" style="gap:8px;flex-wrap:wrap">' +
+      '<input class="input" id="taskInput" placeholder="Ej.: Comprar cemento, llamar al electricista…" style="flex:1;min-width:200px">' +
+      '<button class="btn btn-primary" id="btnAddTask">' + UI.icon('plus', 15) + ' Agregar</button>' +
+      '</div>' +
+      '<div id="tasksList" style="margin-top:10px">' + tasksListHTML(w.id) + '</div>' +
+      '</section>' +
+
+      '<section class="card">' +
       '<div class="tabs">' +
       '<button class="tab ' + (state.tab === 'ingresos' ? 'active' : '') + '" data-tab="ingresos">Ingresos (' + incomes.length + ')</button>' +
       '<button class="tab ' + (state.tab === 'gastos' ? 'active' : '') + '" data-tab="gastos">Gastos directos (' + costs.length + ')</button>' +
@@ -317,6 +376,7 @@
     view.querySelector('#btnAdicional').addEventListener('click', () => openAdicionalModal(w));
     view.querySelector('#btnPdf').addEventListener('click', () => exportPDF(ctx));
     view.querySelector('#btnShare').addEventListener('click', () => shareWithClient(w));
+    bindTasks(view, w);
 
     /* Tarjetas KPI clickeables: hash → navegar · id → scroll al desglose */
     UI.on(view, '[data-nav]', 'click', e => {

@@ -109,6 +109,11 @@
     return { tone: 'danger', label: 'Riesgo de margen / Desvío de presupuesto' };
   }
 
+  /* Tareas pendientes de una obra (checklist) */
+  function pendingTasksCount(workId) {
+    return (S.data.tasks || []).filter(t => t.workId === workId && !t.isDone).length;
+  }
+
   function cardHTML(w) {
     const st = S.workStats(w.id);
     const client = S.contactById(w.clientId);
@@ -142,6 +147,9 @@
       '<span class="muted small">Presupuesto <b>' + UI.fmtMoney(w.budgetTotal) + '</b> · Ejecutado <b>' + UI.fmtMoney(c.ejecutado) + '</b></span>' +
       UI.chip(st.margin >= 0 ? 'Margen +' + UI.fmtMoney(st.margin) : 'Margen −' + UI.fmtMoney(Math.abs(st.margin)), tone) +
       '</div>' +
+      (pendingTasksCount(w.id)
+        ? '<div class="work-foot" style="justify-content:flex-start;padding-top:6px"><span class="chip chip-warning">📋 ' + pendingTasksCount(w.id) + ' tarea' + (pendingTasksCount(w.id) !== 1 ? 's' : '') + ' pendiente' + (pendingTasksCount(w.id) !== 1 ? 's' : '') + '</span></div>'
+        : '') +
       '<div class="work-foot" style="justify-content:flex-end;padding-top:0">' + UI.chip(a.label, a.tone) + '</div>' +
       '</article>';
   }

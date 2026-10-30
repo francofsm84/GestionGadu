@@ -114,6 +114,8 @@
     const range = periodRange();
     const t = S.totalsBetween(range.from, range.to);
     const works = S.data.works;
+    const pendingTasks = (S.data.tasks || []).filter(t => !t.isDone)
+      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
     const active = works.filter(w => w.status === 'activa');
     const paused = works.filter(w => w.status === 'pausada');
     const done = works.filter(w => w.status === 'finalizada');
@@ -275,6 +277,24 @@
       '<a class="btn btn-soft btn-block" href="#/socios">Ver cronograma completo</a>' +
       '</div></div>' +
       '</section>' +
+
+      (pendingTasks.length
+        ? '<section class="card">' +
+          '<div class="card-head">' +
+          '<div><h3>📋 Tareas pendientes</h3><p class="muted">' + pendingTasks.length + ' tarea' + (pendingTasks.length !== 1 ? 's' : '') + ' sin terminar en tus obras</p></div>' +
+          '<a class="link-btn" href="#/obras">Ver obras ' + UI.icon('chevron-right', 14) + '</a>' +
+          '</div>' +
+          '<div class="stack">' +
+          pendingTasks.slice(0, 5).map(t => {
+            const w = works.find(x => x.id === t.workId);
+            return '<a class="split-row" href="#/obra/' + t.workId + '">' +
+              '<div class="split-row-main"><strong>' + UI.escapeHtml(t.title) + '</strong>' +
+              '<span class="muted small">' + UI.escapeHtml(w ? (w.name || w.nombre) : 'Obra') + '</span></div>' +
+              UI.chip('Pendiente', 'warning', 'clock') +
+              '</a>';
+          }).join('') +
+          '</div></section>'
+        : '') +
 
       '<section class="card">' +
       '<div class="card-head">' +

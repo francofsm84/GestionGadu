@@ -396,7 +396,7 @@
       settings: currentSettings(),
       contacts: [], works: [], budgets: [], incomes: [], expenses: [],
       employees: [], attendance: [], assets: [], distributions: [], compromisos: [], seguros: [],
-      debts: [], crews: [],
+      debts: [], crews: [], tasks: [],
       trash: [],
     };
   }
@@ -407,7 +407,7 @@
        mantiene SIEMPRE como respaldo ante cortes de conexión. */
     if (!data.settings.cloud) data.settings.cloud = {};
     if (data.settings.cloud.autoPush === undefined) data.settings.cloud.autoPush = true;
-    ['contacts', 'works', 'budgets', 'incomes', 'expenses', 'assets', 'distributions', 'employees', 'attendance', 'seguros', 'compromisos', 'debts', 'crews', 'trash'].forEach(k => {
+    ['contacts', 'works', 'budgets', 'incomes', 'expenses', 'assets', 'distributions', 'employees', 'attendance', 'seguros', 'compromisos', 'debts', 'crews', 'tasks', 'trash'].forEach(k => {
       if (!Array.isArray(data[k])) data[k] = [];
     });
     /* Migración limpia: compromisos de la agenda (visitas/entregas/eventos) */
@@ -748,7 +748,7 @@
       expenses: 'Gasto', incomes: 'Ingreso', works: 'Obra', employees: 'Empleado',
       contacts: 'Contacto', budgets: 'Presupuesto', attendance: 'Jornada',
       assets: 'Herramienta', seguros: 'Seguro', compromisos: 'Compromiso', distributions: 'Reparto',
-      debts: 'Deuda', crews: 'Cuadrilla',
+      debts: 'Deuda', crews: 'Cuadrilla', tasks: 'Tarea',
     };
     const tipo = tipos[coll] || String(coll);
     let detalle = '';
