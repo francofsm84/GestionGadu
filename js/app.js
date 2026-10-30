@@ -692,20 +692,25 @@
 <h5>7. Seguridad y Cookies</h5>
 <p>Implementamos encriptación en tránsito y en reposo (RLS). La PWA utiliza localStorage e IndexedDB para funcionar offline. No usamos cookies de rastreo publicitario.</p>`;
 
-  const openLegalModal = (title, html) => {
+  const openLegalModal = (title, html, note) => {
     const m = UI.openModal({
       title: title,
       subtitle: 'GADU · Gestión de obras y remodelaciones',
-      body: '<div style="max-height:55vh;overflow-y:auto;font-size:13px;line-height:1.6">' + html + '</div>',
-      footer: '<button class="btn btn-primary" data-cancel>Entendido</button>',
+      body:
+        (note
+          ? '<p style="padding:8px 10px;border-radius:8px;background:#fef3c7;color:#92400e;font-size:12.5px;line-height:1.45;margin:0 0 10px">⚠️ ' + note + '</p>'
+          : '') +
+        '<div style="max-height:55vh;overflow-y:auto;font-size:13px;line-height:1.6">' + html + '</div>',
+      footer: '<button class="btn btn-soft" data-cancel>Cerrar y volver</button>',
     });
     /* El modal normal usa z-index 100; el gate de términos usa z-index 200.
        Elevamos el modal para que quede POR ENCIMA del overlay bloqueante. */
     if (m.overlay) m.overlay.style.zIndex = '300';
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
   };
-  const openTermsModal = () => openLegalModal('Términos y Condiciones', TERMS_LEGAL);
-  const openPrivacyModal = () => openLegalModal('Aviso de Privacidad', PRIVACY_LEGAL);
+  const TERMS_GATE_NOTE = 'Para aceptar los términos, cerrá esta ventana y tocá el botón amarillo <b>✅ Aceptar y continuar</b>.';
+  const openTermsModal = (note) => openLegalModal('Términos y Condiciones', TERMS_LEGAL, note);
+  const openPrivacyModal = (note) => openLegalModal('Aviso de Privacidad', PRIVACY_LEGAL, note);
 
   /* ---------- Consentimiento legal para usuarios existentes (beta) ---------- */
   function initTermsGate() {
@@ -726,7 +731,7 @@
           '<button type="button" class="btn btn-soft btn-block" id="termsReadTerms">📄 Leer Términos y Condiciones completos</button>' +
           '<button type="button" class="btn btn-soft btn-block" id="termsReadPrivacy">🔒 Leer Aviso de Privacidad completo</button>' +
           '</div>' +
-          '<button class="btn btn-primary btn-block" id="termsAccept">✅ Aceptar y continuar</button>' +
+          '<button class="btn btn-block" style="background:#f59e0b;color:#fff" id="termsAccept">✅ Aceptar y continuar</button>' +
           '<button class="btn btn-ghost btn-block" id="termsLogout">Cerrar sesión</button>' +
           '</div>';
         document.body.appendChild(overlay);
@@ -741,12 +746,12 @@
 
         bind('#termsReadTerms', () => {
           console.log('[termsGate] click · Leer Términos');
-          if (typeof openTermsModal === 'function') openTermsModal();
+          if (typeof openTermsModal === 'function') openTermsModal(TERMS_GATE_NOTE);
           else console.error('[termsGate] openTermsModal no está definida');
         });
         bind('#termsReadPrivacy', () => {
           console.log('[termsGate] click · Leer Privacidad');
-          if (typeof openPrivacyModal === 'function') openPrivacyModal();
+          if (typeof openPrivacyModal === 'function') openPrivacyModal(TERMS_GATE_NOTE);
           else console.error('[termsGate] openPrivacyModal no está definida');
         });
         bind('#termsAccept', async () => {
@@ -755,13 +760,36 @@
           btn.disabled = true;
           btn.textContent = 'Guardando…';
           try {
-            const ok = await G.auth.acceptTerms();
-            console.log('[termsGate] acceptTerms →', ok);
-            if (ok) location.reload();
-            else { btn.disabled = false; btn.textContent = '✅ Aceptar y continuar'; UI.toast('No se pudo guardar. Reintentá.', 'error'); }
-          } catch (err) {
-            console.error('[termsGate] acceptTerms error', err);
-            btn.disabled = false; btn.textContent = '✅ Aceptar y continuar'; UI.toast('Error al guardar. Reintentá.', 'error');
+            let accepted = false;
+            let errMsg = '';
+            try {
+              accepted = await G.auth.acceptTerms();
+              console.log('[termsGate] acceptTerms →', accepted);
+            } catch (e) {
+              errMsg = (e && e.message) || String(e);
+              console.error('[termsGate] acceptTerms error', e);
+            }
+            if (!accepted) {
+              /* Fallback de emergencia: PATCH directo a profiles (RLS: user_id = auth.uid()) */
+              console.warn('[termsGate] accept_terms falló' + (errMsg ? ': ' + errMsg : '') + ' · probando PATCH directo…');
+              try {
+                const uid = (G.auth.getSession() || {}).userId;
+                await G.api('PATCH', '/profiles?user_id=eq.' + encodeURIComponent(uid), {
+                  terms_accepted_at: new Date().toISOString(),
+                  terms_version: 'v1.0',
+                });
+                accepted = true;
+                console.log('[termsGate] PATCH directo OK');
+              } catch (e2) {
+                errMsg = (e2 && e2.message) || String(e2);
+                console.error('[termsGate] PATCH directo falló', e2);
+              }
+            }
+            if (accepted) { location.reload(); return; }
+            UI.toast('No se pudo guardar la aceptación: ' + errMsg, 'error');
+          } finally {
+            const b = q('#termsAccept');
+            if (b) { b.disabled = false; b.textContent = '✅ Aceptar y continuar'; }
           }
         });
         bind('#termsLogout', () => {
