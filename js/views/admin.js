@@ -754,6 +754,14 @@
       const uid = sel.dataset.uid;
       const campo = sel.dataset.sel;
       const valor = sel.value;
+      /* CANDADO: no permitir cambiar el PROPIO rol desde el panel de admin */
+      const me = (G.auth.getSession() || {}).userId;
+      if (campo === 'rol' && uid && uid === me) {
+        UI.toast('No podés cambiar tu propio rol desde acá', 'error');
+        const u = rows.find(x => x.user_id === uid);
+        if (u) sel.value = u.rol || '';   // revertir al valor original
+        return;
+      }
       updateUser(uid, { [campo]: valor });
     }));
     body.querySelectorAll('[data-trial]').forEach(b => b.addEventListener('click', async e => {
