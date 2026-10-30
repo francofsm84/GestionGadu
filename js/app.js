@@ -699,6 +699,9 @@
       body: '<div style="max-height:55vh;overflow-y:auto;font-size:13px;line-height:1.6">' + html + '</div>',
       footer: '<button class="btn btn-primary" data-cancel>Entendido</button>',
     });
+    /* El modal normal usa z-index 100; el gate de términos usa z-index 200.
+       Elevamos el modal para que quede POR ENCIMA del overlay bloqueante. */
+    if (m.overlay) m.overlay.style.zIndex = '300';
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
   };
   const openTermsModal = () => openLegalModal('Términos y Condiciones', TERMS_LEGAL);
@@ -706,43 +709,68 @@
 
   /* ---------- Consentimiento legal para usuarios existentes (beta) ---------- */
   function initTermsGate() {
-    if (document.getElementById('termsGate')) return;
+    if (document.getElementById('termsGate')) { console.log('[termsGate] ya montado, salgo'); return; }
     try {
       G.auth.getProfile().then(prof => {
-        if (prof && !prof.terms_accepted_at) {
-          const overlay = document.createElement('div');
-          overlay.id = 'termsGate';
-          overlay.className = 'lock-overlay';
-          overlay.innerHTML =
-            '<div class="lock-card">' +
-            '<img src="' + logoUrl() + '" alt="GADU" class="login-logo" style="width:110px">' +
-            '<h2>Actualización de Términos Legales</h2>' +
-            '<p>Antes de continuar, necesitamos que aceptes nuestra versión actualizada de los Términos y Condiciones y el Aviso de Privacidad. Al usar GADU, aceptás que procesemos tus audios y fotos mediante IA para extraer datos financieros.</p>' +
-            '<div class="stack" style="gap:6px;margin-bottom:12px">' +
-            '<button type="button" class="btn btn-soft btn-block" id="termsReadTerms">📄 Leer Términos y Condiciones completos</button>' +
-            '<button type="button" class="btn btn-soft btn-block" id="termsReadPrivacy">🔒 Leer Aviso de Privacidad completo</button>' +
-            '</div>' +
-            '<button class="btn btn-primary btn-block" id="termsAccept">✅ Aceptar y continuar</button>' +
-            '<button class="btn btn-ghost btn-block" id="termsLogout">Cerrar sesión</button>' +
-            '</div>';
-          document.body.appendChild(overlay);
-          overlay.querySelector('#termsReadTerms').addEventListener('click', openTermsModal);
-          overlay.querySelector('#termsReadPrivacy').addEventListener('click', openPrivacyModal);
-          overlay.querySelector('#termsAccept').addEventListener('click', async () => {
-            const btn = overlay.querySelector('#termsAccept');
-            btn.disabled = true;
-            btn.textContent = 'Guardando…';
+        if (!prof || prof.terms_accepted_at) { console.log('[termsGate] sin gate (perfil aceptado o nulo)'); return; }
+
+        const overlay = document.createElement('div');
+        overlay.id = 'termsGate';
+        overlay.className = 'lock-overlay';
+        overlay.innerHTML =
+          '<div class="lock-card">' +
+          '<img src="' + logoUrl() + '" alt="GADU" class="login-logo" style="width:110px">' +
+          '<h2>Actualización de Términos Legales</h2>' +
+          '<p>Antes de continuar, necesitamos que aceptes nuestra versión actualizada de los Términos y Condiciones y el Aviso de Privacidad. Al usar GADU, aceptás que procesemos tus audios y fotos mediante IA para extraer datos financieros.</p>' +
+          '<div class="stack" style="gap:6px;margin-bottom:12px">' +
+          '<button type="button" class="btn btn-soft btn-block" id="termsReadTerms">📄 Leer Términos y Condiciones completos</button>' +
+          '<button type="button" class="btn btn-soft btn-block" id="termsReadPrivacy">🔒 Leer Aviso de Privacidad completo</button>' +
+          '</div>' +
+          '<button class="btn btn-primary btn-block" id="termsAccept">✅ Aceptar y continuar</button>' +
+          '<button class="btn btn-ghost btn-block" id="termsLogout">Cerrar sesión</button>' +
+          '</div>';
+        document.body.appendChild(overlay);
+        console.log('[termsGate] overlay montado');
+
+        const q = sel => overlay.querySelector(sel);
+        const bind = (sel, fn) => {
+          const el = q(sel);
+          if (el) el.addEventListener('click', fn);
+          else console.warn('[termsGate] selector no encontrado: ' + sel);
+        };
+
+        bind('#termsReadTerms', () => {
+          console.log('[termsGate] click · Leer Términos');
+          if (typeof openTermsModal === 'function') openTermsModal();
+          else console.error('[termsGate] openTermsModal no está definida');
+        });
+        bind('#termsReadPrivacy', () => {
+          console.log('[termsGate] click · Leer Privacidad');
+          if (typeof openPrivacyModal === 'function') openPrivacyModal();
+          else console.error('[termsGate] openPrivacyModal no está definida');
+        });
+        bind('#termsAccept', async () => {
+          console.log('[termsGate] click · Aceptar');
+          const btn = q('#termsAccept');
+          btn.disabled = true;
+          btn.textContent = 'Guardando…';
+          try {
             const ok = await G.auth.acceptTerms();
+            console.log('[termsGate] acceptTerms →', ok);
             if (ok) location.reload();
-            else { btn.disabled = false; btn.textContent = 'Aceptar y continuar'; UI.toast('No se pudo guardar. Reintentá.', 'error'); }
-          });
-          overlay.querySelector('#termsLogout').addEventListener('click', () => {
-            G.auth.logout();
-            location.reload();
-          });
-        }
-      }).catch(() => {});
-    } catch (e) {}
+            else { btn.disabled = false; btn.textContent = '✅ Aceptar y continuar'; UI.toast('No se pudo guardar. Reintentá.', 'error'); }
+          } catch (err) {
+            console.error('[termsGate] acceptTerms error', err);
+            btn.disabled = false; btn.textContent = '✅ Aceptar y continuar'; UI.toast('Error al guardar. Reintentá.', 'error');
+          }
+        });
+        bind('#termsLogout', () => {
+          console.log('[termsGate] click · Cerrar sesión');
+          G.auth.logout();
+          location.reload();
+        });
+      }).catch(err => console.error('[termsGate] getProfile error', err));
+    } catch (e) { console.error('[termsGate] init error', e); }
   }
 
   function renderLock() {
