@@ -884,7 +884,17 @@
         '<div class="field"><label>Apellido *</label><input class="input" id="fLast" value="' + UI.escapeHtml(e ? e.lastName : '') + '" placeholder="Ej.: Quiroga"></div>' +
         '<div class="field"><label>Teléfono</label><input class="input" id="fPhone" value="' + UI.escapeHtml(e ? e.phone : '') + '" placeholder="+54 9 3547 …"></div>' +
         '<div class="field"><label>Alias / CBU / CVU de pago</label><input class="input" id="fPay" value="' + UI.escapeHtml(e ? e.paymentData : '') + '" placeholder="alias.mp o número de CBU/CVU"></div>' +
-        '<div class="field"><label>Valor hora ($)</label><input class="input" type="number" id="fRate" min="0" step="50" value="' + (e && e.hourlyRate ? e.hourlyRate : '') + '" placeholder="0"></div>' +
+        '<div class="field"><label>Valor hora ($) *</label><input class="input" type="number" id="fRate" min="0" step="50" value="' + (e && e.hourlyRate ? e.hourlyRate : '') + '" placeholder="0"></div>' +
+        '<div class="field"><label>Categoría / Oficio *</label><select class="select" id="fRole">' +
+        '<option value=""' + (!e || !e.role ? ' selected' : '') + '>— Elegir —</option>' +
+        ['Oficial', 'Medio Oficial', 'Peón', 'Ayudante', 'Capataz', 'Albañil', 'Electricista', 'Plomero', 'Pintor', 'Carpintero', 'Herrero', 'Gasista', 'Yesero', 'Tornero'].map(r => '<option value="' + r + '"' + (e && e.role === r ? ' selected' : '') + '>' + r + '</option>').join('') +
+        '</select></div>' +
+        '<div class="field"><label>Rendimiento</label><select class="select" id="fRend">' +
+        '<option value=""' + (!e || !e.rendimiento ? ' selected' : '') + '>Sin calificar</option>' +
+        '<option value="alto"' + (e && e.rendimiento === 'alto' ? ' selected' : '') + '>🟢 Alto</option>' +
+        '<option value="medio"' + (e && e.rendimiento === 'medio' ? ' selected' : '') + '>🟡 Medio</option>' +
+        '<option value="bajo"' + (e && e.rendimiento === 'bajo' ? ' selected' : '') + '>🔴 Bajo</option>' +
+        '</select></div>' +
         '<div class="field"><label>Estado</label><select class="select" id="fActive">' +
         '<option value="1"' + (!e || e.active !== false ? ' selected' : '') + '>Activo</option>' +
         '<option value="0"' + (e && e.active === false ? ' selected' : '') + '>De baja</option>' +
@@ -918,13 +928,20 @@
     m.panel.querySelector('[data-save]').addEventListener('click', () => {
       const firstName = m.panel.querySelector('#fFirst').value.trim();
       const lastName = m.panel.querySelector('#fLast').value.trim();
+      const rate = UI.readNum(m.panel.querySelector('#fRate'));
+      const role = m.panel.querySelector('#fRole').value;
       if (!firstName || !lastName) { UI.toast('Ingresá nombre y apellido', 'error'); return; }
+      /* Campos obligatorios: costo por hora + categoría/oficio */
+      if (!(rate > 0)) { UI.toast('Ingresá el valor por hora (obligatorio)', 'error'); return; }
+      if (!role) { UI.toast('Elegí la categoría / oficio (obligatorio)', 'error'); return; }
       const payload = {
         firstName,
         lastName,
         phone: m.panel.querySelector('#fPhone').value.trim(),
         paymentData: m.panel.querySelector('#fPay').value.trim(),
-        hourlyRate: UI.readNum(m.panel.querySelector('#fRate')),
+        hourlyRate: rate,
+        role,
+        rendimiento: m.panel.querySelector('#fRend').value || null,
         active: m.panel.querySelector('#fActive').value === '1',
         notes: m.panel.querySelector('#fNotes').value.trim(),
         photo: photo || null,

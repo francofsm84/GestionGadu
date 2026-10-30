@@ -281,11 +281,16 @@
     m.panel.querySelector('[data-cancel]').addEventListener('click', m.close);
     m.panel.querySelector('[data-save]').addEventListener('click', () => {
       const name = m.panel.querySelector('#fName').value.trim();
+      const clientId = m.panel.querySelector('#fClient').value || null;
+      const location = m.panel.querySelector('#fLoc').value.trim();
       if (!name) { UI.toast('Ingresá el nombre de la obra', 'error'); return; }
+      /* Obra nueva: exigir ubicación + cliente (sin obra huérfana) */
+      if (!isEdit && !location) { UI.toast('Ingresá la ubicación de la obra (obligatorio)', 'error'); return; }
+      if (!isEdit && !clientId) { UI.toast('Seleccioná el cliente (podés crearlo al vuelo con +)', 'error'); return; }
       const payload = {
         name,
-        clientId: m.panel.querySelector('#fClient').value || null,
-        location: m.panel.querySelector('#fLoc').value.trim(),
+        clientId,
+        location,
         status: m.panel.querySelector('#fStatus').value,
         budgetTotal: UI.readNum(m.panel.querySelector('#fBudget')),
         advanceFisico: Math.max(0, Math.min(100, UI.readNum(m.panel.querySelector('#fAdv')))),
