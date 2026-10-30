@@ -1,6 +1,20 @@
 <!DOCTYPE html>
 <html lang="es" data-theme="dark">
 <head>
+<script
+  src="https://js-de.sentry-cdn.com/33e55a34fa23321155f236800e3d827e.min.js"
+  crossorigin="anonymous"
+></script>
+<script>
+  Sentry.onLoad(function() {
+    Sentry.init({
+      // Integraciones opcionales de rendimiento y replay
+      tracesSampleRate: 1.0,
+      replaysSessionSampleRate: 0.1,
+      replaysOnErrorSampleRate: 1.0,
+    });
+  });
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b1020">
@@ -15,20 +29,6 @@
 <link rel="apple-touch-icon" href="logo-192.png?v=4">
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="css/styles.css">
-<script
-  src="https://js-de.sentry-cdn.com/33e55a34fa23321155f236800e3d827e.min.js"
-  crossorigin="anonymous"
-></script>
-<script>
-  Sentry.onLoad(function() {
-    Sentry.init({
-      // Aquí podemos agregar configuraciones extra si lo deseamos, pero con esto ya funciona.
-      tracesSampleRate: 1.0,
-      replaysSessionSampleRate: 0.1,
-      replaysOnErrorSampleRate: 1.0,
-    });
-  });
-</script>
 </head>
 <body>
 <div class="app">
