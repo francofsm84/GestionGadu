@@ -84,8 +84,6 @@ serve(async (req) => {
         title: itemTitle,
         unit_price: amountStr,
         quantity: 1,
-        unit_measure: "unit",
-        total_amount: amountStr,
       }],
       back_urls: {
         success: origin + "/#/planes",
