@@ -219,7 +219,7 @@
       };
       const res = await fetchT(SUPABASE_URL + '/rest/v1/profiles?on_conflict=user_id', {
         method: 'POST',
-        headers: headers(true),
+        headers: Object.assign({}, headers(true), { 'Prefer': 'resolution=merge-duplicates' }),
         body: JSON.stringify(body),
       });
       if (!res.ok) console.error('[ensureUserProfile] falló con status', res.status);
