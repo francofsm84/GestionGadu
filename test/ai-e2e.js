@@ -230,20 +230,19 @@ function fail(msg) { console.error('✘ FALLO:', msg); process.exit(1); }
   if (emp2.phone !== '+54 9 351 555-1234') fail('teléfono del empleado incorrecto');
   console.log('  ✔ empleado guardado completo (nombre + teléfono + oficio + tarifa) con tilde verde');
 
-  /* ============ FLUJO F: Contabilidad ([Ingresos][Gastos]) + Deshacer ============ */
-  console.log('== F) Menú Contabilidad + tarjeta Tap-to-Confirm con Deshacer ==');
+  /* ============ FLUJO F: Contabilidad (Resumen financiero) + Deshacer ============ */
+  console.log('== F) Resumen financiero + tarjeta Tap-to-Confirm con Deshacer ==');
   G.auth.SUPABASE_URL = 'http://localhost:9333';
   AI._pill('contabilidad');
   while (Date.now() - t6 < 3000) {
     const ult = log.children[log.children.length - 1];
-    if (ult && ult.innerHTML.indexOf('Qué querés cargar') >= 0) break;
+    if (ult && ult.innerHTML.indexOf('Resumen financiero') >= 0) break;
     await new Promise(r => setTimeout(r, 50));
   }
   const pendL = log.children[log.children.length - 1];
-  const ledgerBtns = pendL.children.reduce((acc, c) => acc.concat(c.children || []), []).filter(c => c.dataset && c.dataset.ledger);
-  if (ledgerBtns.length !== 2) fail('no aparecieron [Ingresos][Gastos], got ' + ledgerBtns.length);
-  console.log('  ✔ pill Contabilidad → botones [Ingresos] [Gastos]');
-  AI._send('gastos');   // elegir por texto
+  if (pendL.innerHTML.indexOf('Resumen financiero') < 0 || pendL.innerHTML.indexOf('Balance neto') < 0) fail('el pill Contabilidad no mostró el resumen financiero');
+  console.log('  ✔ pill Contabilidad → resumen financiero (ingresos/gastos/balance)');
+  AI._send('cargar un gasto');   // arranca el wizard de gasto por NLP (ya no existe el submenú [Ingresos][Gastos])
   if (!AI._pending() || AI._pending().modulo !== 'gasto') fail('no arrancó el wizard de gasto');
   AI._send('5000');
   AI._send('Materiales');

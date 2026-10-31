@@ -113,11 +113,12 @@
   /* Límites de referencia por plan (fallback documentado; el valor real lo manda
      la columna `limite_*` de la tabla `planes`). */
   const LIMITS = {
-    free: { obras: 1, empleados: 2 },
-    pyme: { obras: 5, empleados: 10 },
-    pro: { obras: Infinity, empleados: Infinity },
-    empresa: { obras: Infinity, empleados: Infinity },
-    trial: { obras: Infinity, empleados: Infinity },
+    free: { obras: 999, empleados: 999 },       // Trial (Prueba): ilimitado
+    free_basico: { obras: 1, empleados: 3 },    // Free Básico (post-trial)
+    pro: { obras: 2, empleados: 10 },
+    pyme: { obras: 5, empleados: 20 },
+    empresa: { obras: 999, empleados: 999 },
+    trial: { obras: 999, empleados: 999 },
   };
 
   /* Verificación PURA (sin side effects): ¿puede crear este tipo?
