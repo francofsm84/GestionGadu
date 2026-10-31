@@ -270,7 +270,10 @@
   }
 
   function renderText(reply) {
-    let txt = reply.replace(/\[\[accion:[^\]]+\]\]/g, '');
+    /* Anti-XSS: escapar TODO el HTML del texto antes de inyectar con innerHTML.
+       Luego se aplican los marcados propios (**negrita** y saltos de línea). */
+    let txt = esc(String(reply == null ? '' : reply));
+    txt = txt.replace(/\[\[accion:[^\]]+\]\]/g, '');
     txt = txt.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
     txt = txt.replace(/\n/g, '<br>');
     /* Limpieza visual: elimina puntos sueltos (" . ", líneas con solo ".")

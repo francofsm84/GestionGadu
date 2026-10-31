@@ -889,13 +889,24 @@ Deno.serve(async (req) => {
   const rawBody = await req.text().catch(() => "");
   const signature = req.headers.get("x-hub-signature-256") || "";
   const appSecret = Deno.env.get("WHATSAPP_APP_SECRET") || "";
+  const debugMode = Deno.env.get("DEBUG_MODE") === "true";
   if (appSecret) {
     if (!signature) {
-      console.warn("[whatsapp-webhook] ⚠️ falta header X-Hub-Signature-256 → se procesa igual (modo tolerante)");
+      if (debugMode) {
+        console.warn("[whatsapp-webhook] ⚠️ falta header X-Hub-Signature-256 (DEBUG_MODE: se procesa igual)");
+      } else {
+        console.warn("[whatsapp-webhook] ⚠️ falta header X-Hub-Signature-256 → 403");
+        return new Response("forbidden", { status: 403 });
+      }
     } else {
       const okSig = await verifyMetaSignature(rawBody, appSecret, signature);
       if (!okSig) {
-        console.warn("[whatsapp-webhook] ⚠️ firma inválida de Meta → se procesa igual (modo tolerante)");
+        if (debugMode) {
+          console.warn("[whatsapp-webhook] ⚠️ firma inválida de Meta (DEBUG_MODE: se procesa igual)");
+        } else {
+          console.warn("[whatsapp-webhook] ⚠️ firma inválida de Meta → 403");
+          return new Response("forbidden", { status: 403 });
+        }
       }
     }
   } else {

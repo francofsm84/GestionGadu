@@ -981,6 +981,12 @@
     const neg = (await G.api('GET', '/negocio?id=eq.1'))[0] || {};
     let mp = {};
     try { mp = (await G.api('GET', '/credenciales_pago?id=eq.1'))[0] || {}; } catch (e) {}
+    /* Enmascara el token de Mercado Pago: muestra solo los últimos 4 caracteres */
+    const maskToken = tok => {
+      if (!tok) return '';
+      const t = String(tok);
+      return t.length > 8 ? '••••••••' + t.slice(-4) : '••••••••';
+    };
     body.innerHTML =
       '<div class="card" style="max-width:620px;margin:0 auto">' +
       '<div class="grid-form">' +
@@ -1000,7 +1006,7 @@
       '<div class="card-head"><div><h3>Mercado Pago (cobro automático)</h3><p class="muted">Credenciales privadas · solo visibles para administradores</p></div></div>' +
       '<div class="grid-form">' +
       '<div class="field span-2"><label>Public Key</label><input class="input" id="mpPub" value="' + UI.escapeHtml(mp.mp_public_key || '') + '" placeholder="APP_USR-…"></div>' +
-      '<div class="field span-2"><label>Access Token</label><input class="input" type="password" id="mpTok" value="' + UI.escapeHtml(mp.mp_access_token || '') + '" placeholder="APP_USR-…"></div>' +
+      '<div class="field span-2"><label>Access Token</label><input class="input" type="password" id="mpTok" value="' + UI.escapeHtml(maskToken(mp.mp_access_token)) + '" placeholder="APP_USR-…"></div>' +
       '</div>' +
       '<button class="btn btn-soft" id="mpSave" style="margin-top:10px">' + UI.icon('check', 15) + 'Guardar credenciales</button>' +
       '</div>';
@@ -1020,10 +1026,13 @@
       UI.toast('✅ Configuración guardada', 'success');
     });
     body.querySelector('#mpSave').addEventListener('click', async () => {
-      await G.api('PATCH', '/credenciales_pago?id=eq.1', {
+      const tokVal = body.querySelector('#mpTok').value.trim();
+      const payload = {
         mp_public_key: body.querySelector('#mpPub').value.trim(),
-        mp_access_token: body.querySelector('#mpTok').value.trim(),
-      });
+      };
+      /* Solo enviar el token si el usuario escribió uno nuevo (no el enmascarado) */
+      if (tokVal && tokVal.indexOf('••••') !== 0) payload.mp_access_token = tokVal;
+      await G.api('PATCH', '/credenciales_pago?id=eq.1', payload);
       await G.plan.log('credenciales_mp', 'guardadas');
       UI.toast('✅ Credenciales de Mercado Pago guardadas', 'success');
     });
