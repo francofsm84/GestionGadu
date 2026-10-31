@@ -18,7 +18,7 @@ function okk(cond, label) { if (cond) { ok++; console.log('  ✔ ' + label); } e
 
 (async () => {
 
-S.load();
+await S.load();       // esperar la migración asíncrona (evita que pise el estado)
 S.startEmpty();
 const obra = S.add('works', { name: 'Norma Molina', code: 'OB-1', clientId: null, location: '', status: 'activa', budgetTotal: 0, advanceFisico: 0, startDate: S.todayISO(), endDate: '', description: '' });
 
