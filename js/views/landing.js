@@ -13,7 +13,7 @@
   };
   const fmt = n => Number(n).toLocaleString('es-AR');
 
-  function register() { try { if (G.app && G.app.renderLogin) G.app.renderLogin('register'); } catch (e) { location.hash = '#/login'; } }
+  function register() { location.hash = '#/login'; }
   function legal(t) { try { if (G.openLegal) G.openLegal(t); } catch (e) {} }
   function scrollToId(id) { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth' }); }
 
@@ -36,6 +36,7 @@
   function buildHTML() {
     return `
 <div class="lp">
+  <canvas id="lp-stars" aria-hidden="true"></canvas>
 
   <!-- SECCIÓN 0 · Barra sticky -->
   <nav class="lp-nav">
@@ -65,6 +66,17 @@
       </div>
     </div>
   </header>
+
+  <!-- SECCIÓN 1.5 · STORY · El problema del papel -->
+  <section class="lp-section lp-story">
+    <div class="lp-container">
+      <div class="lp-story-card lp-reveal">
+        <span class="lp-story-kicker">El problema del papel</span>
+        <p class="lp-story-text">El cuaderno de papel guarda la información, pero <b>no la conecta</b>. No te dice cuánto le debés a tus empleados esta semana. No te dice en qué obra trabajó cada uno. No te genera un libro contable automático. Y si querés buscar un gasto de hace 6 meses, <b>perdés media hora pasando páginas</b>.</p>
+        <p class="lp-story-bridge">Ahora imaginá que podés hacerle esa pregunta al WhatsApp…</p>
+      </div>
+    </div>
+  </section>
 
   <!-- SECCIÓN 2 · PAS -->
   <section class="lp-section">
@@ -227,7 +239,74 @@
     });
   }
 
+  function initStars() {
+    const canvas = document.getElementById('lp-stars');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let W = 0, H = 0, stars = [], meteors = [];
+    let scrollY = window.scrollY || 0;
+
+    function resize() {
+      W = canvas.width = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+      makeStars();
+    }
+    function makeStars() {
+      const n = Math.min(180, Math.max(60, Math.floor(W * H / 9000)));
+      stars = [];
+      for (let i = 0; i < n; i++) {
+        stars.push({
+          x: Math.random() * W, y: Math.random() * H,
+          r: Math.random() * 1.4 + 0.3,
+          a: Math.random() * 0.7 + 0.2,
+          v: Math.random() * 0.15 + 0.03,
+          orange: Math.random() < 0.25,
+        });
+      }
+    }
+    function spawnMeteor() {
+      meteors.push({ x: W * (0.4 + Math.random() * 0.6), y: Math.random() * H * 0.35, vx: -(Math.random() * 4 + 4), vy: Math.random() * 2 + 2, life: 1 });
+    }
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      const t = Date.now() / 1000;
+      for (const s of stars) {
+        let yy = (s.y - scrollY * (s.r * 0.22)) % H;
+        if (yy < 0) yy += H;
+        const tw = 0.55 + 0.45 * Math.sin(t * s.v * 6 + s.x);
+        ctx.beginPath();
+        ctx.arc(s.x, yy, s.r, 0, Math.PI * 2);
+        ctx.fillStyle = s.orange ? `rgba(249,115,22,${(s.a * tw).toFixed(3)})` : `rgba(255,255,255,${(s.a * tw).toFixed(3)})`;
+        ctx.fill();
+      }
+      for (let i = meteors.length - 1; i >= 0; i--) {
+        const m = meteors[i];
+        m.x += m.vx; m.y += m.vy; m.life -= 0.012;
+        if (m.life <= 0) { meteors.splice(i, 1); continue; }
+        const tx = m.x - m.vx * 9, ty = m.y - m.vy * 9;
+        const g = ctx.createLinearGradient(m.x, m.y, tx, ty);
+        g.addColorStop(0, `rgba(255,205,160,${m.life.toFixed(3)})`);
+        g.addColorStop(1, 'rgba(255,205,160,0)');
+        ctx.strokeStyle = g;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(m.x, m.y);
+        ctx.lineTo(tx, ty);
+        ctx.stroke();
+      }
+      requestAnimationFrame(draw);
+    }
+
+    resize();
+    window.addEventListener('resize', resize);
+    window.addEventListener('scroll', () => { scrollY = window.scrollY || 0; }, { passive: true });
+    setInterval(spawnMeteor, 3800);
+    requestAnimationFrame(draw);
+  }
+
   function initAnimations(root) {
+    initStars();
     const io = new IntersectionObserver(entries => {
       entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('lp-visible'); io.unobserve(e.target); } });
     }, { threshold: 0.12 });

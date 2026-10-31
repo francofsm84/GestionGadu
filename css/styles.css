@@ -1518,3 +1518,29 @@ body.no-session .app { display: none; }
   .lp-hero-cta .lp-btn { width: 100%; }
   .lp-nav { padding: 10px 14px; }
 }
+
+/* ============================================================
+   GADU · Landing v2.1 · Estrellas + story + glassmorphism
+   ============================================================ */
+#lp-stars { position: fixed; inset: 0; z-index: -1; width: 100%; height: 100%; pointer-events: none; }
+
+/* Story "El problema del papel" */
+.lp-story { position: relative; }
+.lp-story-card { max-width: 720px; margin: 0 auto; background: var(--lp-surface); border: 1px solid var(--lp-border); border-radius: 22px; padding: 34px 28px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.lp-story-kicker { display: inline-block; padding: 5px 14px; border-radius: 999px; background: rgba(249,115,22,.12); border: 1px solid rgba(249,115,22,.3); color: var(--lp-accent); font-size: 12.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; margin-bottom: 18px; }
+.lp-story-text { font-size: clamp(16px, 2.4vw, 19px); line-height: 1.7; color: var(--lp-text); margin: 0 0 22px; }
+.lp-story-text b { color: var(--lp-accent); }
+.lp-story-bridge { font-size: 20px; font-weight: 800; color: var(--lp-primary); margin: 0; }
+
+/* Contadores del hero: más aire para no solaparse con los botones */
+.lp-hero-stats { position: relative; z-index: 2; margin-top: 60px; gap: 44px; }
+.lp-hero-stats .lp-stat { background: var(--lp-surface); border: 1px solid var(--lp-border); border-radius: 14px; padding: 14px 22px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); min-width: 150px; }
+
+/* Glassmorphism en tarjetas */
+.lp-plan, .lp-feat, .lp-pain-card { backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+
+@media (max-width: 640px) {
+  .lp-hero-stats { gap: 12px; margin-top: 40px; }
+  .lp-hero-stats .lp-stat { min-width: 0; flex: 1 1 40%; padding: 12px 14px; }
+  .lp-story-card { padding: 26px 18px; }
+}

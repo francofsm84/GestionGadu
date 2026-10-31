@@ -3,7 +3,7 @@
    - App Shell cacheado en install (incluye CDNs de localForage y html2pdf).
    - Cache-first en fetch (excluye la API de Supabase).
    ============================================================ */
-const CACHE = 'gadu-cache-v7';
+const CACHE = 'gadu-cache-v8';
 
 const APP_SHELL = [
   './',
