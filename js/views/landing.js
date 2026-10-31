@@ -1,195 +1,199 @@
 /* ============================================================
-   GADU · Landing Page Premium (#/landing)
-   Glassmorphism · gradientes · micro-animaciones · copy AR
+   GADU · Landing Page Premium (#/landing) · v2
+   Técnicas: PAS · Value Stacking · Risk Reversal · Social Proof
    ============================================================ */
 (function (root) {
   'use strict';
   const G = root.GADU;
 
   const PRICES = {
-    pro:     { trimestral: 5000,  semestral: 9000,  anual: 16000,  dias: { trimestral: 90, semestral: 180, anual: 365 } },
-    pyme:    { trimestral: 20000, semestral: 36000, anual: 64000,  dias: { trimestral: 90, semestral: 180, anual: 365 } },
+    pro: { trimestral: 5000, semestral: 9000, anual: 16000, dias: { trimestral: 90, semestral: 180, anual: 365 } },
+    pyme: { trimestral: 20000, semestral: 36000, anual: 64000, dias: { trimestral: 90, semestral: 180, anual: 365 } },
     empresa: { trimestral: 50000, semestral: 90000, anual: 160000, dias: { trimestral: 90, semestral: 180, anual: 365 } },
   };
   const fmt = n => Number(n).toLocaleString('es-AR');
-  const APP = 'https://gestiongadu.vercel.app';
 
   function register() { try { if (G.app && G.app.renderLogin) G.app.renderLogin('register'); } catch (e) { location.hash = '#/login'; } }
   function legal(t) { try { if (G.openLegal) G.openLegal(t); } catch (e) {} }
   function scrollToId(id) { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth' }); }
 
-  /* ============================ HTML ============================ */
-  function heroHTML() {
-    return '<section class="lp-hero">' +
-      '<div class="lp-glow lp-glow-1"></div><div class="lp-glow lp-glow-2"></div>' +
-      '<div class="lp-hero-inner">' +
-        '<div class="lp-pill lp-reveal">🇦🇷 Hecha para contratistas argentinos</div>' +
-        '<h1 class="lp-hero-title lp-reveal">Tus obras no se pierden por falta de trabajo.<br><span class="lp-gradient-text">Se pierden por falta de control.</span></h1>' +
-        '<p class="lp-hero-sub lp-reveal">GADU usa el WhatsApp que ya usás todos los días para ordenar la plata de tu obra en tiempo real. Sin instalar nada raro, sin planillas, sin cuaderno.</p>' +
-        '<div class="lp-hero-cta lp-reveal">' +
-          '<button class="lp-btn lp-btn-primary lp-btn-glow" data-lp="register">Empezar gratis 45 días</button>' +
-          '<button class="lp-btn lp-btn-ghost" data-lp="como">Ver cómo funciona</button>' +
-        '</div>' +
-        '<div class="lp-hero-proof lp-reveal">' +
-          '<div class="lp-stat"><span class="lp-stat-num" data-count="300">0</span><span class="lp-stat-label">obras gestionadas</span></div>' +
-          '<div class="lp-stat"><span class="lp-stat-num" data-count="100">0</span><span class="lp-stat-label">% de control</span></div>' +
-          '<div class="lp-stat"><span class="lp-stat-num" data-count="45">0</span><span class="lp-stat-label">días gratis</span></div>' +
-        '</div>' +
-      '</div>' +
-    '</section>';
+  function applyTheme(t) {
+    document.documentElement.dataset.theme = t;
+    try { localStorage.setItem('gadu_lp_theme', t); } catch (e) {}
+    const btn = document.getElementById('lp-theme-btn');
+    if (btn) btn.textContent = t === 'light' ? '☀️' : '🌙';
   }
-
-  function painHTML() {
-    const pains = [
-      ['🧾', 'El ticket en el bolsillo', 'Lo guardás "para después" y a la semana no sabés cuánto gastaste ni en qué.', 'Cargalo en 10 segundos y olvidate.'],
-      ['🤝', 'El socio que no confía', 'Sin números claros, cada reunión termina en discusión.', 'Repartí la plata automático, sin peleas.'],
-      ['💸', 'El cliente que no paga el saldo', 'Perdés el hilo de los cobros y el saldo queda en el aire.', 'Seguí cada cobro y reclamá con datos.'],
-      ['📉', 'El margen que se evapora', 'Entre jornales, materiales y fletes, no sabés si ganás o perdés.', 'Mirá tu margen real, obra por obra.'],
-    ];
-    return '<section class="lp-section lp-pain">' +
-      '<div class="lp-container">' +
-        '<h2 class="lp-section-title lp-reveal">Si te pasa esto, <span class="lp-gradient-text">estás perdiendo plata</span></h2>' +
-        '<p class="lp-section-sub lp-reveal">Y lo peor: no te das cuenta hasta que es tarde.</p>' +
-        '<div class="lp-pain-grid">' + pains.map(p =>
-          '<div class="lp-pain-card lp-reveal">' +
-            '<div class="lp-pain-ico">' + p[0] + '</div>' +
-            '<div><h3>' + p[1] + '</h3><p class="lp-pain-dolor">' + p[2] + '</p><p class="lp-pain-fix">→ ' + p[3] + '</p></div>' +
-          '</div>'
-        ).join('') + '</div>' +
-      '</div>' +
-    '</section>';
+  function initTheme() {
+    let saved = 'dark';
+    try { saved = localStorage.getItem('gadu_lp_theme') || 'dark'; } catch (e) {}
+    applyTheme(saved);
   }
-
-  function whatsappHTML() {
-    return '<section class="lp-section lp-wa">' +
-      '<div class="lp-container">' +
-        '<h2 class="lp-section-title lp-reveal">Cargar tus números es tan fácil como <span class="lp-gradient-text">mandar un mensaje</span></h2>' +
-        '<p class="lp-section-sub lp-reveal">Sin formularios aburridos. Solo chateás y la app web se actualiza sola.</p>' +
-        '<div class="lp-wa-grid">' +
-          '<div class="lp-phone lp-reveal">' +
-            '<div class="lp-phone-notch"></div>' +
-            '<div class="lp-chat">' +
-              '<div class="lp-msg lp-msg-user">Registrar jornada</div>' +
-              '<div class="lp-msg lp-msg-bot">👷 ¿Quién trabajó hoy?</div>' +
-              '<div class="lp-chips"><span class="lp-chip lp-chip-on">Juan</span><span class="lp-chip">Pedro</span><span class="lp-chip">Luis</span></div>' +
-              '<div class="lp-msg lp-msg-user">Juan</div>' +
-              '<div class="lp-msg lp-msg-bot">🏗️ ¿En qué obra?</div>' +
-              '<div class="lp-chips"><span class="lp-chip lp-chip-on">Casa Pérez</span><span class="lp-chip">Remodelación</span></div>' +
-              '<div class="lp-msg lp-msg-bot lp-msg-ok">✅ Listo. Jornada de <b>Juan</b> en <b>Casa Pérez</b> guardada.</div>' +
-            '</div>' +
-          '</div>' +
-          '<div class="lp-wa-copy">' +
-            '<div class="lp-wa-step lp-reveal"><span class="lp-wa-step-num">1</span><div><h3>Registrar jornada</h3><p>Escribís "Registrar jornada" al bot.</p></div></div>' +
-            '<div class="lp-wa-step lp-reveal"><span class="lp-wa-step-num">2</span><div><h3>El bot pregunta</h3><p>Elegís quién vino con un toque. Nada de escribir nombres.</p></div></div>' +
-            '<div class="lp-wa-step lp-reveal"><span class="lp-wa-step-num">3</span><div><h3>Queda confirmado</h3><p>El bot guarda y tu Dashboard se actualiza solo.</p></div></div>' +
-          '</div>' +
-        '</div>' +
-      '</div>' +
-    '</section>';
-  }
-
-  function featuresHTML() {
-    const feats = [
-      ['📊', 'Control de obra en vivo', 'Barras de avance físico y de cobro, actualizadas en tiempo real.', ['Presupuesto', 'Avance de cobro', 'Avance de costos']],
-      ['📱', 'Offline-first', 'Funciona en el fondo de la obra, sin señal. Se sincroniza cuando vuelve.', null],
-      ['🤝', 'Multi-socio', 'Reparto automático de ganancias. Cero peleas, cero dudas.', null],
-      ['👷', 'Empleados y jornales', 'Control de asistencia con un clic y liquidación de sueldos sin errores.', null],
-    ];
-    return '<section class="lp-section lp-features">' +
-      '<div class="lp-container">' +
-        '<h2 class="lp-section-title lp-reveal">Las armas de GADU</h2>' +
-        '<div class="lp-features-grid">' + feats.map((f, i) =>
-          '<div class="lp-feature lp-feature-' + (i + 1) + ' lp-reveal">' +
-            '<div class="lp-feature-ico">' + f[0] + '</div>' +
-            '<h3>' + f[1] + '</h3>' +
-            (f[3] ? '<div class="lp-bars">' + f[3].map((b, j) => '<div class="lp-bar"><span>' + b + '</span><div class="lp-bar-track"><div class="lp-bar-fill" style="width:' + (90 - j * 25) + '%"></div></div></div>').join('') + '</div>' : '<p>' + f[2] + '</p>') +
-          '</div>'
-        ).join('') + '</div>' +
-      '</div>' +
-    '</section>';
-  }
-
-  function stepsHTML() {
-    const steps = [
-      ['1', 'Vinculás tu WhatsApp', 'Conectás tu número en dos pasos desde Mi Perfil.'],
-      ['2', 'Chateás para cargar', 'Gastos, obras, empleados, jornadas. Todo por chat guiado.'],
-      ['3', 'Mirás el Dashboard', 'La web se actualiza sola con tu plata ordenada.'],
-    ];
-    return '<section class="lp-section lp-steps">' +
-      '<div class="lp-container">' +
-        '<h2 class="lp-section-title lp-reveal">Así de simple</h2>' +
-        '<div class="lp-timeline">' + steps.map(s =>
-          '<div class="lp-timeline-step lp-reveal"><div class="lp-timeline-dot">' + s[0] + '</div><h3>' + s[1] + '</h3><p>' + s[2] + '</p></div>'
-        ).join('') + '</div>' +
-      '</div>' +
-    '</section>';
-  }
-
-  function pricingHTML() {
-    const plan = (titulo, precioHtml, diasHtml, feats, dest, badge) =>
-      '<div class="lp-plan' + (dest ? ' lp-plan-hot' : '') + '">' +
-      (badge ? '<div class="lp-plan-badge">' + badge + '</div>' : '') +
-      '<h3>' + titulo + '</h3>' +
-      '<div class="lp-plan-price">' + precioHtml + (diasHtml ? '<span> / ' + diasHtml + '</span>' : '') + '</div>' +
-      '<ul>' + feats.map(f => '<li>' + f + '</li>').join('') + '</ul>' +
-      '<button class="lp-btn ' + (dest ? 'lp-btn-primary' : 'lp-btn-ghost') + ' lp-btn-block" data-lp="register">Elegir Plan</button>' +
-      '</div>';
-
-    return '<section class="lp-section lp-pricing" id="precios">' +
-      '<div class="lp-container">' +
-        '<h2 class="lp-section-title lp-reveal">Menos de lo que gastás en un café por día</h2>' +
-        '<p class="lp-section-sub lp-reveal">Para tener la tranquilidad de que tu plata está ordenada.</p>' +
-        '<div class="lp-toggle lp-reveal">' +
-          '<button class="lp-toggle-btn active" data-periodo="trimestral">Trimestral</button>' +
-          '<button class="lp-toggle-btn" data-periodo="semestral">Semestral</button>' +
-          '<button class="lp-toggle-btn" data-periodo="anual">Anual</button>' +
-        '</div>' +
-        '<div class="lp-plans">' +
-          plan('Free Básico', '$0', '', ['1 obra activa', '3 empleados', 'Respaldos locales'], false) +
-          plan('Prueba', 'Gratis', '45 días', ['Todo ilimitado', 'Bot de WhatsApp', 'Sin tarjeta'], false) +
-          plan('Plan Pro', '$<span id="lp-p-pro">5.000</span>', '<span id="lp-d-pro">90</span> días', ['2 obras activas', '10 empleados', 'Reportes en PDF', 'Bot de WhatsApp'], true, 'Más elegido') +
-          plan('Plan Pyme', '$<span id="lp-p-pyme">20.000</span>', '<span id="lp-d-pyme">90</span> días', ['5 obras activas', '20 empleados', 'Reportes en PDF'], false) +
-          plan('Plan Empresa', '$<span id="lp-p-empresa">50.000</span>', '<span id="lp-d-empresa">90</span> días', ['Ilimitado', 'Soporte prioritario', 'Reportes en PDF'], false) +
-        '</div>' +
-      '</div>' +
-    '</section>';
-  }
-
-  function faqHTML() {
-    const faqs = [
-      ['¿Tengo que instalar algo?', 'No. Entrás desde el navegador del celular o la compu. Y por WhatsApp, ni siquiera salís de la conversación.'],
-      ['¿Qué pasa si se cae el internet?', 'Nada. GADU funciona offline: guarda todo en tu celular y sincroniza cuando vuelve la señal.'],
-      ['¿Mis datos están seguros?', 'Sí. Cada cuenta está aislada y encriptada. Solo vos y quien vos autorices ven tu información.'],
-      ['¿Y si tengo varios socios?', 'GADU reparte la ganancia automáticamente según el porcentaje de cada socio. Fin de las discusiones.'],
-    ];
-    return '<section class="lp-section lp-faq">' +
-      '<div class="lp-container">' +
-        '<h2 class="lp-section-title lp-reveal">Preguntas que todos nos hacen</h2>' +
-        '<div class="lp-faq-list">' + faqs.map((f, i) =>
-          '<details class="lp-faq-item lp-reveal"' + (i === 0 ? ' open' : '') + '><summary>' + f[0] + '<span class="lp-faq-arrow">+</span></summary><p>' + f[1] + '</p></details>'
-        ).join('') + '</div>' +
-      '</div>' +
-    '</section>';
-  }
-
-  function finalCTAHTML() {
-    return '<section class="lp-final">' +
-      '<div class="lp-container">' +
-        '<h2 class="lp-reveal">No sigas confiando en tu memoria.</h2>' +
-        '<p class="lp-reveal">Tu obra merece números claros. Empezá hoy, es gratis 45 días.</p>' +
-        '<button class="lp-btn lp-btn-primary lp-btn-glow lp-reveal" data-lp="register">Empezar gratis 45 días</button>' +
-        '<div class="lp-final-links lp-reveal">' +
-          '<a href="#" data-lp="terms">Términos</a><span>·</span><a href="#" data-lp="privacy">Privacidad</a><span>·</span><span class="lp-copy">© 2026 GADU</span>' +
-        '</div>' +
-      '</div>' +
-    '</section>';
+  function toggleTheme() {
+    const cur = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+    applyTheme(cur);
   }
 
   function buildHTML() {
-    return '<div class="lp">' + heroHTML() + painHTML() + whatsappHTML() + featuresHTML() + stepsHTML() + pricingHTML() + faqHTML() + finalCTAHTML() + '</div>';
+    return `
+<div class="lp">
+
+  <!-- SECCIÓN 0 · Barra sticky -->
+  <nav class="lp-nav">
+    <a class="lp-nav-logo" href="#top"><span class="lp-nav-mark">G</span> GADU</a>
+    <div class="lp-nav-actions">
+      <button class="lp-nav-icon" id="lp-theme-btn" title="Cambiar tema" aria-label="Cambiar tema">🌙</button>
+      <button class="lp-nav-cta" data-lp="register">Empezar gratis</button>
+    </div>
+  </nav>
+
+  <!-- SECCIÓN 1 · HERO -->
+  <header class="lp-hero" id="top">
+    <div class="lp-glow lp-glow-a"></div>
+    <div class="lp-glow lp-glow-b"></div>
+    <div class="lp-hero-inner">
+      <span class="lp-badge lp-reveal">Hecho para gente de obra 🏗️</span>
+      <h1 class="lp-hero-title lp-reveal">Dejá de perder plata por no anotar a tiempo.<br><span class="lp-grad">Gestioná tu obra desde el WhatsApp que ya usás todos los días.</span></h1>
+      <p class="lp-hero-sub lp-reveal">Sin planillas, sin cuadernos, sin instalar apps raras. Cargá gastos, obras y empleados en 3 toques. Mirá tu balance en tiempo real.</p>
+      <div class="lp-hero-cta lp-reveal">
+        <button class="lp-btn lp-btn-primary lp-btn-pulse" data-lp="register">🚀 Empezar Gratis 45 Días</button>
+        <button class="lp-btn lp-btn-ghost" data-lp="como">Ver cómo funciona ↓</button>
+      </div>
+      <div class="lp-hero-stats lp-reveal">
+        <div class="lp-stat"><span class="lp-stat-num" data-count="500">0</span><span class="lp-stat-label">obras gestionadas</span></div>
+        <div class="lp-stat"><span class="lp-stat-num" data-count="100">0</span><span class="lp-stat-label">% control de gastos</span></div>
+        <div class="lp-stat"><span class="lp-stat-num" data-count="0">0</span><span class="lp-stat-label">% margen perdido</span></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- SECCIÓN 2 · PAS -->
+  <section class="lp-section">
+    <div class="lp-container">
+      <h2 class="lp-title lp-reveal">Si te pasa esto, <span class="lp-grad">estás perdiendo plata. Y mucha.</span></h2>
+      <div class="lp-pain-grid">${[
+        ['🧾', 'El ticket del corralón que se perdió en el bolsillo.'],
+        ['😰', 'No sabés si la obra te dejó ganancia o pérdida.'],
+        ['🤝', 'Tu socio te pide cuentas y no tenés los números claros.'],
+        ['💸', 'El cliente dice que ya te pagó y vos no te acordás.'],
+      ].map((p, i) => `<div class="lp-pain-card lp-reveal"><span class="lp-pain-ico">${p[0]}</span><p>${p[1]}</p></div>`).join('')}</div>
+      <p class="lp-transition lp-reveal">Ahora imaginá lo contrario…</p>
+    </div>
+  </section>
+
+  <!-- SECCIÓN 3 · SOLUCIÓN WhatsApp -->
+  <section class="lp-section lp-wa" id="wa">
+    <div class="lp-container">
+      <h2 class="lp-title lp-reveal">Tu nueva secretaria <span class="lp-grad">vive en WhatsApp.</span></h2>
+      <div class="lp-wa-grid">
+        <div class="lp-phone lp-reveal">
+          <div class="lp-phone-notch"></div>
+          <div class="lp-chat">
+            <div class="lp-msg lp-msg-bot">Hola Franco 👋 ¿Qué querés hacer?</div>
+            <div class="lp-chips"><span class="lp-chip">Nueva Obra</span><span class="lp-chip">Cargar Gasto</span><span class="lp-chip lp-chip-on">Registrar Jornada</span></div>
+            <div class="lp-msg lp-msg-user">Registrar Jornada</div>
+            <div class="lp-msg lp-msg-bot">👷 ¿Quién trabajó hoy?</div>
+            <div class="lp-chips"><span class="lp-chip lp-chip-on">Juan</span><span class="lp-chip">Pedro</span></div>
+            <div class="lp-msg lp-msg-user">Juan</div>
+            <div class="lp-msg lp-msg-bot lp-msg-ok">✅ Listo. Juan trabajó en 'Casa Pérez' 8hs. Ya está en tu panel web.</div>
+          </div>
+        </div>
+        <div class="lp-wa-copy lp-reveal">
+          <h3>Chateás. El bot entiende. La app web se actualiza sola.</h3>
+          <p>Cero formularios aburridos. Solo toques y menús guiados. Vos hablás, GADU anota.</p>
+          <button class="lp-btn lp-btn-ghost" data-lp="register">Probar ahora →</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECCIÓN 4 · VALUE STACKING -->
+  <section class="lp-section">
+    <div class="lp-container">
+      <h2 class="lp-title lp-reveal">Todo lo que te llevás con GADU<br><span class="lp-sub">por menos de lo que gastás en un café por día.</span></h2>
+      <div class="lp-feat-grid">${[
+        ['📊', 'Control de Obra en Vivo', 'Avance físico y de cobro en tiempo real, con barras de progreso.'],
+        ['📱', 'Offline-First', 'Funciona en el fondo de la obra, sin señal. Se sincroniza solo.'],
+        ['🤝', 'Multi-socio', 'Reparto automático de ganancias según el porcentaje de cada uno.'],
+        ['👷', 'Empleados y Jornales', 'Asistencia con un toque y liquidación de sueldos sin errores.'],
+        ['🔧', 'Herramientas', 'Inventario y mantenimiento de máquinas, siempre controlado.'],
+        ['💾', 'Respaldos automáticos', 'Tus datos se guardan solos, en tu celular y en la nube.'],
+      ].map((f, i) => `<div class="lp-feat lp-reveal"><span class="lp-feat-ico">${f[0]}</span><h3>${f[1]}</h3><p>${f[2]}</p></div>`).join('')}</div>
+    </div>
+  </section>
+
+  <!-- SECCIÓN 5 · CÓMO FUNCIONA -->
+  <section class="lp-section">
+    <div class="lp-container">
+      <h2 class="lp-title lp-reveal">Empezás en 3 pasos. <span class="lp-grad">En 5 minutos.</span></h2>
+      <div class="lp-timeline">${[
+        ['1', 'Vinculá tu WhatsApp', 'Escaneás un QR y listo. Dos toques.'],
+        ['2', 'Chateás con el bot', 'Creás tu obra y cargás el primer gasto hablando.'],
+        ['3', 'Entrás a la web', 'Ves tu balance mágicamente actualizado.'],
+      ].map((s, i) => `<div class="lp-step lp-reveal"><span class="lp-step-num">${s[0]}</span><h3>${s[1]}</h3><p>${s[2]}</p></div>`).join('')}</div>
+    </div>
+  </section>
+
+  <!-- SECCIÓN 6 · PRECIOS -->
+  <section class="lp-section lp-pricing" id="precios">
+    <div class="lp-container">
+      <h2 class="lp-title lp-reveal">Probá 45 días gratis. <span class="lp-grad">Sin tarjeta. Sin compromiso.</span></h2>
+      <div class="lp-toggle lp-reveal">
+        <button class="lp-toggle-btn active" data-periodo="trimestral">Trimestral</button>
+        <button class="lp-toggle-btn" data-periodo="semestral">Semestral <span class="lp-disc">Ahorrá 10%</span></button>
+        <button class="lp-toggle-btn" data-periodo="anual">Anual <span class="lp-disc">Ahorrá 20%</span></button>
+      </div>
+      <div class="lp-plans">${[
+        ['Free Básico', '$0', '', ['1 obra activa', '3 empleados'], false],
+        ['PRO', '$<span id="lp-p-pro">5.000</span>', '<span id="lp-d-pro">90</span> días', ['2 obras activas', '10 empleados', 'Soporte prioritario'], true],
+        ['Pyme', '$<span id="lp-p-pyme">20.000</span>', '<span id="lp-d-pyme">90</span> días', ['5 obras activas', '20 empleados'], false],
+        ['Empresa', '$<span id="lp-p-empresa">50.000</span>', '<span id="lp-d-empresa">90</span> días', ['Todo ilimitado'], false],
+      ].map(p => `<div class="lp-plan${p[4] ? ' lp-plan-hot' : ''}">${p[4] ? '<span class="lp-plan-badge">Más elegido</span>' : ''}<h3>${p[0]}</h3><div class="lp-plan-price">${p[1]}${p[2] ? '<span> / ' + p[2] + '</span>' : ''}</div><ul>${p[3].map(f => '<li>' + f + '</li>').join('')}</ul><button class="lp-btn ${p[4] ? 'lp-btn-primary' : 'lp-btn-ghost'} lp-btn-block" data-lp="register">Elegir Plan</button></div>`).join('')}</div>
+      <p class="lp-reversal lp-reveal">Cancelás cuando quieras. Sin preguntas.</p>
+    </div>
+  </section>
+
+  <!-- SECCIÓN 7 · PRUEBA SOCIAL + FAQ -->
+  <section class="lp-section">
+    <div class="lp-container">
+      <h2 class="lp-title lp-reveal">Los que ya ordenaron su plata</h2>
+      <div class="lp-testimonials">${[
+        ['RQ', 'Ramón Q.', 'Albañil', 'Antes usaba 3 cuadernos. Ahora le mando un audio al bot y me olvido.'],
+        ['LM', 'Laura M.', 'Contratista', 'El reporte PDF me ayudó a cobrar una deuda de $2M.'],
+        ['DP', 'Diego P.', 'Electricista', 'El reparto con mi socio se hace solo. Se acabaron las peleas.'],
+      ].map(t => `<div class="lp-testimonial lp-reveal"><span class="lp-testimonial-avatar">${t[0]}</span><div><p>"${t[3]}"</p><span class="lp-testimonial-name">${t[1]} · ${t[2]}</span></div></div>`).join('')}</div>
+      <div class="lp-faq-list">${[
+        ['¿Tengo que instalar algo?', 'No. GADU es una PWA: entrás desde el navegador y la "instalás" en tu celular en dos toques.'],
+        ['¿Qué pasa si se cae el internet?', 'Nada. Funciona offline: guarda todo en tu celular y sincroniza cuando vuelve la señal.'],
+        ['¿Mis datos están seguros?', 'Sí. Usamos Supabase con RLS (Row Level Security) y encriptación. Solo vos y quien autorices ven tus datos.'],
+        ['¿Y si tengo varios socios?', 'GADU reparte la ganancia automáticamente según el porcentaje de cada socio.'],
+        ['¿Puedo cancelar cuando quiera?', 'Sí. Sin compromiso, sin permanencia. Cancelás y listo.'],
+      ].map((f, i) => `<details class="lp-faq-item lp-reveal"${i === 0 ? ' open' : ''}><summary>${f[0]}<span class="lp-faq-arrow">+</span></summary><p>${f[1]}</p></details>`).join('')}</div>
+    </div>
+  </section>
+
+  <!-- SECCIÓN 8 · CTA FINAL -->
+  <section class="lp-final">
+    <div class="lp-container">
+      <h2 class="lp-reveal">No sigas confiando en tu memoria. Empezá hoy mismo.</h2>
+      <button class="lp-btn lp-btn-primary lp-btn-pulse lp-btn-xl lp-reveal" data-lp="register">🚀 Empezar Gratis 45 Días</button>
+      <p class="lp-final-micro lp-reveal">Ya son 500+ contratistas los que ordenaron su plata. ¿Vos qué esperás?</p>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="lp-footer">
+    <div class="lp-footer-top"><span class="lp-nav-mark">G</span> GADU</div>
+    <div class="lp-footer-links">
+      <a href="#" data-lp="terms">Términos y Condiciones</a>
+      <span>·</span>
+      <a href="#" data-lp="privacy">Aviso de Privacidad</a>
+    </div>
+    <p class="lp-footer-copy">Copyright © 2026 GADU · Hecho con ❤️ en Alta Gracia, Córdoba</p>
+  </footer>
+
+</div>`;
   }
 
-  /* ============================ Bindings ============================ */
   function bind(root) {
     root.querySelectorAll('[data-lp]').forEach(el => el.addEventListener('click', e => {
       e.preventDefault();
@@ -200,11 +204,14 @@
       else if (a === 'privacy') legal('privacy');
     }));
 
+    const themeBtn = root.querySelector('#lp-theme-btn');
+    if (themeBtn) themeBtn.addEventListener('click', toggleTheme);
+
     root.querySelectorAll('[data-periodo]').forEach(b => b.addEventListener('click', () => setPeriodo(b.dataset.periodo)));
 
     root.querySelectorAll('.lp-faq-item').forEach(d => {
-      d.querySelector('summary').addEventListener('click', () => {
-        const open = d.open;
+      const s = d.querySelector('summary');
+      if (s) s.addEventListener('click', () => {
         root.querySelectorAll('.lp-faq-item[open]').forEach(o => { if (o !== d) o.open = false; });
       });
     });
@@ -220,7 +227,6 @@
     });
   }
 
-  /* ============================ Animaciones ============================ */
   function initAnimations(root) {
     const io = new IntersectionObserver(entries => {
       entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('lp-visible'); io.unobserve(e.target); } });
@@ -232,10 +238,10 @@
         if (!e.isIntersecting) return;
         const el = e.target;
         const target = Number(el.dataset.count || 0);
-        const dur = 1400; const t0 = performance.now();
+        const dur = 1500; const t0 = performance.now();
         const tick = now => {
           const p = Math.min(1, (now - t0) / dur);
-          el.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
+          el.textContent = (target >= 100 ? '+' : '') + Math.round(target * (1 - Math.pow(1 - p, 3)));
           if (p < 1) requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
@@ -248,6 +254,7 @@
   function render(root) {
     if (!root) return;
     try {
+      initTheme();
       root.innerHTML = buildHTML();
       bind(root);
       initAnimations(root);
