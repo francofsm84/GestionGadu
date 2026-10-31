@@ -185,7 +185,7 @@
       <div class="bg-ink-800 border-2 border-brand rounded-2xl p-6 flex flex-col relative">
         <span class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-brand text-white text-xs font-bold">Más elegido</span>
         <h3 class="font-semibold mb-1">Plan Pro</h3>
-        <div class="text-2xl font-extrabold mb-1">$<span id="p-pro">5.000</span><span class="text-sm font-normal text-slate-500"> / <span id="d-pro">90</span> días</span></div>
+        <div class="text-2xl font-extrabold mb-1">$<span id="p-pro">30.000</span><span class="text-sm font-normal text-slate-500"> / <span id="d-pro">90</span> días</span></div>
         <ul class="text-sm text-slate-400 space-y-2 mt-4 flex-1">
           <li>2 obras activas</li>
           <li>10 empleados</li>
@@ -198,7 +198,7 @@
       <!-- Pyme -->
       <div class="bg-ink-800 border border-ink-600 rounded-2xl p-6 flex flex-col">
         <h3 class="font-semibold mb-1">Plan Pyme</h3>
-        <div class="text-2xl font-extrabold mb-1">$<span id="p-pyme">20.000</span><span class="text-sm font-normal text-slate-500"> / <span id="d-pyme">90</span> días</span></div>
+        <div class="text-2xl font-extrabold mb-1">$<span id="p-pyme">50.000</span><span class="text-sm font-normal text-slate-500"> / <span id="d-pyme">90</span> días</span></div>
         <ul class="text-sm text-slate-400 space-y-2 mt-4 flex-1">
           <li>5 obras activas</li>
           <li>20 empleados</li>
@@ -211,7 +211,7 @@
       <!-- Empresa -->
       <div class="bg-ink-800 border border-ink-600 rounded-2xl p-6 flex flex-col">
         <h3 class="font-semibold mb-1">Plan Empresa</h3>
-        <div class="text-2xl font-extrabold mb-1">$<span id="p-empresa">50.000</span><span class="text-sm font-normal text-slate-500"> / <span id="d-empresa">90</span> días</span></div>
+        <div class="text-2xl font-extrabold mb-1">$<span id="p-empresa">150.000</span><span class="text-sm font-normal text-slate-500"> / <span id="d-empresa">90</span> días</span></div>
         <ul class="text-sm text-slate-400 space-y-2 mt-4 flex-1">
           <li>Obras ilimitadas</li>
           <li>Empleados ilimitados</li>
@@ -289,9 +289,9 @@
 
   <script>
     const PRICES = {
-      pro:      { trimestral: 5000,  semestral: 9000,  anual: 16000,  dias: { trimestral: 90, semestral: 180, anual: 365 } },
-      pyme:     { trimestral: 20000, semestral: 36000, anual: 64000,  dias: { trimestral: 90, semestral: 180, anual: 365 } },
-      empresa:  { trimestral: 50000, semestral: 90000, anual: 160000, dias: { trimestral: 90, semestral: 180, anual: 365 } },
+      pro:      { trimestral: 30000,  semestral: 50000,  anual: 100000,  dias: { trimestral: 90, semestral: 180, anual: 365 } },
+      pyme:     { trimestral: 50000, semestral: 100000, anual: 200000,  dias: { trimestral: 90, semestral: 180, anual: 365 } },
+      empresa:  { trimestral: 150000, semestral: 250000, anual: 500000, dias: { trimestral: 90, semestral: 180, anual: 365 } },
     };
 
     function fmt(n) { return Number(n).toLocaleString('es-AR'); }

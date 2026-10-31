@@ -7,9 +7,9 @@
   const G = root.GADU;
 
   const PRICES = {
-    pro: { trimestral: 5000, semestral: 9000, anual: 16000, dias: { trimestral: 90, semestral: 180, anual: 365 } },
-    pyme: { trimestral: 20000, semestral: 36000, anual: 64000, dias: { trimestral: 90, semestral: 180, anual: 365 } },
-    empresa: { trimestral: 50000, semestral: 90000, anual: 160000, dias: { trimestral: 90, semestral: 180, anual: 365 } },
+    pro: { trimestral: 30000, semestral: 50000, anual: 100000, dias: { trimestral: 90, semestral: 180, anual: 365 } },
+    pyme: { trimestral: 50000, semestral: 100000, anual: 200000, dias: { trimestral: 90, semestral: 180, anual: 365 } },
+    empresa: { trimestral: 150000, semestral: 250000, anual: 500000, dias: { trimestral: 90, semestral: 180, anual: 365 } },
   };
   const fmt = n => Number(n).toLocaleString('es-AR');
 
