@@ -82,6 +82,17 @@ serve(async (req) => {
           }
 
           if (userId && planId) {
+            // Idempotencia: si la orden ya está completed, no reprocesar (evita
+            // códigos de licencia duplicados ante reintentos de MercadoPago).
+            if (ref) {
+              const { data: ya } = await supabase.from("mercadopago_orders")
+                .select("id").eq("external_reference", ref).eq("status", "completed").limit(1);
+              if (ya && ya.length) {
+                console.log("[mercadopago-webhook] pago ya procesado (idempotente), skip:", ref);
+                return new Response("ok", { status: 200, headers: corsHeaders });
+              }
+            }
+
             const dias = diasDePeriodo(periodo);
             const vencimiento = new Date(Date.now() + dias * 86400000).toISOString();
             const code = genLicenseCode();
