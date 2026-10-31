@@ -274,9 +274,9 @@
       </div>
       <div class="lp-plans">${[
         ['Free Básico', '$0', '', ['1 obra activa', '3 empleados'], false],
-        ['PRO', '$<span id="lp-p-pro">5.000</span>', '<span id="lp-d-pro">90</span> días', ['2 obras activas', '10 empleados', 'Soporte prioritario'], true],
-        ['Pyme', '$<span id="lp-p-pyme">20.000</span>', '<span id="lp-d-pyme">90</span> días', ['5 obras activas', '20 empleados'], false],
-        ['Empresa', '$<span id="lp-p-empresa">50.000</span>', '<span id="lp-d-empresa">90</span> días', ['Todo ilimitado'], false],
+        ['PRO', '$<span id="lp-p-pro">' + fmt(PRICES.pro.trimestral) + '</span>', '<span id="lp-d-pro">90</span> días', ['2 obras activas', '10 empleados', 'Soporte prioritario'], true],
+        ['Pyme', '$<span id="lp-p-pyme">' + fmt(PRICES.pyme.trimestral) + '</span>', '<span id="lp-d-pyme">90</span> días', ['5 obras activas', '20 empleados'], false],
+        ['Empresa', '$<span id="lp-p-empresa">' + fmt(PRICES.empresa.trimestral) + '</span>', '<span id="lp-d-empresa">90</span> días', ['Todo ilimitado'], false],
       ].map(p => `<div class="lp-plan${p[4] ? ' lp-plan-hot' : ''}">${p[4] ? '<span class="lp-plan-badge">Más elegido</span>' : ''}<h3>${p[0]}</h3><div class="lp-plan-price">${p[1]}${p[2] ? '<span> / ' + p[2] + '</span>' : ''}</div><ul>${p[3].map(f => '<li>' + f + '</li>').join('')}</ul><button class="lp-btn ${p[4] ? 'lp-btn-primary' : 'lp-btn-ghost'} lp-btn-block" data-lp="register">Elegir Plan</button></div>`).join('')}</div>
       <p class="lp-reversal lp-reveal">Cancelás cuando quieras. Sin preguntas.</p>
     </div>
