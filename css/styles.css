@@ -1366,7 +1366,7 @@ body.no-session .app { display: none; }
   --lp-primary: #4f46e5; --lp-accent: #f97316; --lp-success: #10b981;
 }
 #landingRoot { min-height: 100vh; min-height: 100dvh; background: var(--lp-bg); color: var(--lp-text); overflow-x: hidden; }
-.lp { position: relative; background: var(--lp-bg); color: var(--lp-text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+.lp { position: relative; background: transparent; color: var(--lp-text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
 .lp-container { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
 .lp-section { padding: 72px 0; position: relative; }
 .lp-title { font-size: clamp(26px, 5vw, 40px); font-weight: 900; letter-spacing: -0.02em; line-height: 1.12; margin: 0 auto 16px; text-align: center; max-width: 800px; }
@@ -1451,10 +1451,10 @@ body.no-session .app { display: none; }
 .lp-step p { margin: 0; color: var(--lp-muted); font-size: 13.5px; line-height: 1.5; }
 
 /* Pricing */
-.lp-toggle { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 4px; width: fit-content; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; background: var(--lp-surface); border: 1px solid var(--lp-border); border-radius: 13px; padding: 4px; margin: 0 auto 30px; }
-.lp-toggle-btn { min-height: 40px; padding: 8px 16px; border-radius: 10px; border: none; background: transparent; color: var(--lp-muted); font-size: 13.5px; font-weight: 600; cursor: pointer; transition: background .2s, color .2s; white-space: nowrap; flex: 0 0 auto; }
+.lp-toggle { display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: 100%; box-sizing: border-box; max-width: 100%; background: var(--lp-surface); border: 1px solid var(--lp-border); border-radius: 14px; padding: 8px; margin: 0 auto 30px; }
+.lp-toggle-btn { width: 100%; min-height: 44px; padding: 10px 14px; border-radius: 10px; border: none; background: transparent; color: var(--lp-muted); font-size: 14px; font-weight: 600; cursor: pointer; text-align: center; transition: background .2s, color .2s; box-sizing: border-box; }
 .lp-toggle-btn.active { background: var(--lp-primary); color: #fff; }
-.lp-disc { display: inline-block; font-size: 10.5px; background: rgba(249,115,22,.15); color: var(--lp-accent); padding: 1px 6px; border-radius: 6px; margin-left: 4px; white-space: nowrap; }
+.lp-disc { display: inline-block; font-size: 10px; background: rgba(249,115,22,.15); color: var(--lp-accent); padding: 1px 6px; border-radius: 6px; margin-left: 4px; }
 .lp-plans { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 .lp-plan { position: relative; background: var(--lp-surface); border: 1px solid var(--lp-border); border-radius: 18px; padding: 26px 18px; text-align: left; display: flex; flex-direction: column; transition: transform .2s ease; }
 .lp-plan:hover { transform: translateY(-3px); }
@@ -1549,11 +1549,11 @@ body.no-session .app { display: none; }
   .lp-story-card { padding: 26px 18px; }
 }
 
-/* Toggle de precios: ajuste fino en móviles */
-@media (max-width: 480px) {
-  .lp-toggle { gap: 2px; padding: 3px; }
-  .lp-toggle-btn { padding: 7px 10px; font-size: 12px; min-height: 36px; }
-  .lp-disc { font-size: 9px; padding: 1px 4px; margin-left: 2px; }
+/* Toggle de precios: Desktop (fila) */
+@media (min-width: 600px) {
+  .lp-toggle { flex-direction: row; justify-content: center; align-items: center; width: auto; gap: 4px; padding: 4px; border-radius: 13px; }
+  .lp-toggle-btn { width: auto; min-height: 40px; padding: 8px 16px; font-size: 13.5px; }
+  .lp-disc { font-size: 10.5px; }
 }
 
 /* ============================================================
