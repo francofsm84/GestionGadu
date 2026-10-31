@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GADU - Gestión de Obras por WhatsApp</title>
+  <meta name="description" content="Gestión de obras, empleados y finanzas para contratistas. Creá obras y registrá asistencias con el Bot de WhatsApp. Probá gratis 45 días.">
+  <meta property="og:title" content="GADU · Tu obra. Tu plata. Sin cuaderno.">
+  <meta property="og:description" content="La app de gestión para contratistas. Gestioná tu obra por WhatsApp con menús guiados y controlá todo desde el celular.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="logo-512.png">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#4f46e5', 400: '#818cf8', 600: '#4338ca', 700: '#3730a3' },
+            ink: { 900: '#0b1020', 800: '#0f172a', 700: '#1e293b', 600: '#334155' },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    html { scroll-behavior: smooth; }
+    body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    .chat-bubble { max-width: 85%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.45; }
+    .chat-user { background: #4f46e5; color: #fff; border-bottom-right-radius: 4px; }
+    .chat-bot { background: #1e293b; color: #e2e8f0; border-bottom-left-radius: 4px; }
+    .chat-btn { display: inline-block; padding: 7px 12px; border-radius: 999px; background: #1e293b; border: 1px solid #334155; color: #cbd5e1; font-size: 12.5px; cursor: pointer; }
+    .chat-btn:hover { background: #334155; }
+    .chat-btn.active { background: #4f46e5; border-color: #4f46e5; color: #fff; }
+  </style>
+</head>
+
+<body class="bg-ink-900 text-slate-200 antialiased">
+
+  <!-- ================= NAV ================= -->
+  <nav class="max-w-6xl mx-auto px-5 py-5 flex items-center justify-between">
+    <div class="flex items-center gap-2 font-extrabold text-lg tracking-tight">
+      <span class="inline-grid place-items-center w-8 h-8 rounded-lg bg-brand text-white">G</span>
+      <span>GADU</span>
+    </div>
+    <div class="hidden sm:flex items-center gap-6 text-sm text-slate-400">
+      <a href="#features" class="hover:text-white transition">Funciones</a>
+      <a href="#precios" class="hover:text-white transition">Precios</a>
+      <a href="#pasos" class="hover:text-white transition">Cómo funciona</a>
+    </div>
+    <a href="https://gestiongadu.vercel.app/#/login" class="px-4 py-2 rounded-lg bg-brand hover:bg-brand-600 text-white text-sm font-semibold transition">Empezar gratis</a>
+  </nav>
+
+  <!-- ================= HERO ================= -->
+  <header class="max-w-6xl mx-auto px-5 pt-16 pb-20 text-center">
+    <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand/15 text-brand-400 text-xs font-semibold mb-6">
+      🇦🇷 Pensada para contratistas y oficios
+    </div>
+    <h1 class="text-4xl sm:text-6xl font-extrabold tracking-tight leading-[1.05]">
+      Tu obra. Tu plata.<br><span class="bg-gradient-to-r from-brand-400 to-brand text-transparent bg-clip-text">Sin cuaderno.</span>
+    </h1>
+    <p class="max-w-2xl mx-auto mt-5 text-lg sm:text-xl text-slate-400 leading-relaxed">
+      Gestioná tu obra con nuestro Bot de WhatsApp. Creá obras, empleados y registrá asistencias con simples toques y menús guiados.
+    </p>
+    <div class="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+      <a href="https://gestiongadu.vercel.app/#/login" class="px-6 py-3 rounded-xl bg-brand hover:bg-brand-600 text-white font-semibold text-base shadow-lg shadow-brand/20 transition">Empezar gratis 45 días</a>
+      <button onclick="scrollToPrecios()" class="px-6 py-3 rounded-xl bg-ink-700 hover:bg-ink-600 border border-ink-600 text-slate-200 font-semibold text-base transition">Ver planes</button>
+    </div>
+    <div class="mt-10 flex items-center justify-center gap-8 text-xs text-slate-500">
+      <span>✓ Sin tarjeta de crédito</span>
+      <span>✓ 45 días de prueba</span>
+      <span>✓ Funciona offline</span>
+    </div>
+  </header>
+
+  <!-- ================= FEATURES ================= -->
+  <section id="features" class="max-w-6xl mx-auto px-5 py-16">
+    <h2 class="text-3xl font-bold text-center mb-12">Todo lo que necesitás para tu obra</h2>
+    <div class="grid md:grid-cols-3 gap-5">
+      <div class="bg-ink-800 border border-ink-600 rounded-2xl p-7">
+        <div class="text-4xl mb-4">💬</div>
+        <h3 class="text-lg font-semibold mb-2">Gestión por WhatsApp</h3>
+        <p class="text-slate-400 text-sm leading-relaxed">No necesitas instalar nada. Chateá con el bot para crear obras, clientes o socios paso a paso. Llená formularios guiados y registrá la asistencia de tu equipo con un clic.</p>
+      </div>
+      <div class="bg-ink-800 border border-ink-600 rounded-2xl p-7">
+        <div class="text-4xl mb-4">📊</div>
+        <h3 class="text-lg font-semibold mb-2">Control total</h3>
+        <p class="text-slate-400 text-sm leading-relaxed">Mirá tus gastos, ingresos y margen de obra en tiempo real. Sabé exactamente cuánto entró, cuánto salió y cuánto te queda.</p>
+      </div>
+      <div class="bg-ink-800 border border-ink-600 rounded-2xl p-7">
+        <div class="text-4xl mb-4">📱</div>
+        <h3 class="text-lg font-semibold mb-2">Funciona offline</h3>
+        <p class="text-slate-400 text-sm leading-relaxed">Instalala en tu celular y usala incluso en obras sin señal. Tus datos se sincronizan cuando vuelve la conexión.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= UN DÍA CON GADU (simulación) ================= -->
+  <section class="bg-ink-800/50 border-y border-ink-600 py-16">
+    <div class="max-w-4xl mx-auto px-5">
+      <h2 class="text-3xl font-bold text-center mb-3">Un día con GADU</h2>
+      <p class="text-center text-slate-400 mb-10">Así se ve una mañana de obra con el bot de WhatsApp.</p>
+
+      <!-- Paso 7:00 -->
+      <div class="bg-ink-900 border border-ink-600 rounded-2xl p-6 mb-6">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="text-xs font-bold px-2.5 py-1 rounded-md bg-brand/15 text-brand-400">7:00</span>
+          <h3 class="font-semibold">Registrar la jornada</h3>
+        </div>
+        <div class="space-y-3">
+          <div class="flex justify-end">
+            <div class="chat-bubble chat-user">Registrar jornada</div>
+          </div>
+          <div class="flex justify-start">
+            <div class="chat-bubble chat-bot">👷 ¿Quién vino hoy? Tocá un nombre.</div>
+          </div>
+          <div class="flex flex-wrap gap-2 pl-2">
+            <span class="chat-btn active">Juan</span>
+            <span class="chat-btn">Pedro</span>
+            <span class="chat-btn">Luis</span>
+          </div>
+          <div class="flex justify-end">
+            <div class="chat-bubble chat-user">Juan</div>
+          </div>
+          <div class="flex justify-start">
+            <div class="chat-bubble chat-bot">🏗️ ¿En qué obra trabajó? Tocá una.</div>
+          </div>
+          <div class="flex flex-wrap gap-2 pl-2">
+            <span class="chat-btn active">Casa Pérez</span>
+            <span class="chat-btn">Remodelación</span>
+          </div>
+          <div class="flex justify-start">
+            <div class="chat-bubble chat-bot">✅ Listo. Registré la jornada de <b>Juan</b> en <b>Casa Pérez</b>.</div>
+          </div>
+        </div>
+        <p class="mt-5 text-sm text-slate-500 italic">Llegás a la obra y le escribís al bot: <b>"Registrar jornada"</b>. Elegís quién vino (Juan) y la obra. El bot te confirma y lo guarda.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= PRECIOS ================= -->
+  <section id="precios" class="max-w-6xl mx-auto px-5 py-20">
+    <h2 class="text-3xl font-bold text-center mb-3">Planes simples, sin sorpresas</h2>
+    <p class="text-center text-slate-400 mb-8">Elegí el período que mejor te quede.</p>
+
+    <!-- Toggle -->
+    <div class="flex justify-center mb-10">
+      <div class="inline-flex bg-ink-800 border border-ink-600 rounded-xl p-1">
+        <button data-periodo="trimestral" onclick="setPeriodo('trimestral')" class="periodo-btn px-4 py-2 rounded-lg text-sm font-semibold bg-brand text-white transition">Trimestral</button>
+        <button data-periodo="semestral" onclick="setPeriodo('semestral')" class="periodo-btn px-4 py-2 rounded-lg text-sm font-semibold text-slate-400 hover:text-white transition">Semestral</button>
+        <button data-periodo="anual" onclick="setPeriodo('anual')" class="periodo-btn px-4 py-2 rounded-lg text-sm font-semibold text-slate-400 hover:text-white transition">Anual</button>
+      </div>
+    </div>
+
+    <!-- Tarjetas -->
+    <div class="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 items-stretch">
+
+      <!-- Free Básico -->
+      <div class="bg-ink-800 border border-ink-600 rounded-2xl p-6 flex flex-col">
+        <h3 class="font-semibold mb-1">Free Básico</h3>
+        <div class="text-2xl font-extrabold mb-1">$0<span class="text-sm font-normal text-slate-500"> / siempre</span></div>
+        <ul class="text-sm text-slate-400 space-y-2 mt-4 flex-1">
+          <li>1 obra activa</li>
+          <li>3 empleados</li>
+          <li>Respaldos locales</li>
+        </ul>
+        <a href="https://gestiongadu.vercel.app/#/login" class="mt-5 w-full py-2.5 rounded-lg bg-ink-700 hover:bg-ink-600 border border-ink-600 text-center text-sm font-semibold transition">Elegir Plan</a>
+      </div>
+
+      <!-- Prueba -->
+      <div class="bg-ink-800 border border-ink-600 rounded-2xl p-6 flex flex-col">
+        <h3 class="font-semibold mb-1">Prueba</h3>
+        <div class="text-2xl font-extrabold mb-1">Gratis<span class="text-sm font-normal text-slate-500"> / 45 días</span></div>
+        <ul class="text-sm text-slate-400 space-y-2 mt-4 flex-1">
+          <li>Todo ilimitado</li>
+          <li>Bot de WhatsApp</li>
+          <li>Sin tarjeta</li>
+        </ul>
+        <a href="https://gestiongadu.vercel.app/#/login" class="mt-5 w-full py-2.5 rounded-lg bg-ink-700 hover:bg-ink-600 border border-ink-600 text-center text-sm font-semibold transition">Elegir Plan</a>
+      </div>
+
+      <!-- Pro (destacado) -->
+      <div class="bg-ink-800 border-2 border-brand rounded-2xl p-6 flex flex-col relative">
+        <span class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-brand text-white text-xs font-bold">Más elegido</span>
+        <h3 class="font-semibold mb-1">Plan Pro</h3>
+        <div class="text-2xl font-extrabold mb-1">$<span id="p-pro">5.000</span><span class="text-sm font-normal text-slate-500"> / <span id="d-pro">90</span> días</span></div>
+        <ul class="text-sm text-slate-400 space-y-2 mt-4 flex-1">
+          <li>2 obras activas</li>
+          <li>10 empleados</li>
+          <li>Reportes en PDF</li>
+          <li>Bot de WhatsApp</li>
+        </ul>
+        <a href="https://gestiongadu.vercel.app/#/login" class="mt-5 w-full py-2.5 rounded-lg bg-brand hover:bg-brand-600 text-center text-white text-sm font-semibold transition">Elegir Plan</a>
+      </div>
+
+      <!-- Pyme -->
+      <div class="bg-ink-800 border border-ink-600 rounded-2xl p-6 flex flex-col">
+        <h3 class="font-semibold mb-1">Plan Pyme</h3>
+        <div class="text-2xl font-extrabold mb-1">$<span id="p-pyme">20.000</span><span class="text-sm font-normal text-slate-500"> / <span id="d-pyme">90</span> días</span></div>
+        <ul class="text-sm text-slate-400 space-y-2 mt-4 flex-1">
+          <li>5 obras activas</li>
+          <li>20 empleados</li>
+          <li>Reportes en PDF</li>
+          <li>Todo lo de Pro</li>
+        </ul>
+        <a href="https://gestiongadu.vercel.app/#/login" class="mt-5 w-full py-2.5 rounded-lg bg-ink-700 hover:bg-ink-600 border border-ink-600 text-center text-sm font-semibold transition">Elegir Plan</a>
+      </div>
+
+      <!-- Empresa -->
+      <div class="bg-ink-800 border border-ink-600 rounded-2xl p-6 flex flex-col">
+        <h3 class="font-semibold mb-1">Plan Empresa</h3>
+        <div class="text-2xl font-extrabold mb-1">$<span id="p-empresa">50.000</span><span class="text-sm font-normal text-slate-500"> / <span id="d-empresa">90</span> días</span></div>
+        <ul class="text-sm text-slate-400 space-y-2 mt-4 flex-1">
+          <li>Obras ilimitadas</li>
+          <li>Empleados ilimitados</li>
+          <li>Reportes en PDF</li>
+          <li>Soporte prioritario</li>
+        </ul>
+        <a href="https://gestiongadu.vercel.app/#/login" class="mt-5 w-full py-2.5 rounded-lg bg-ink-700 hover:bg-ink-600 border border-ink-600 text-center text-sm font-semibold transition">Elegir Plan</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 3 PASOS ================= -->
+  <section id="pasos" class="bg-ink-800/50 border-y border-ink-600 py-16">
+    <div class="max-w-4xl mx-auto px-5">
+      <h2 class="text-3xl font-bold text-center mb-12">Empezás en 3 pasos</h2>
+      <div class="grid md:grid-cols-3 gap-6">
+        <div class="text-center">
+          <div class="w-12 h-12 mx-auto rounded-xl bg-brand/15 text-brand-400 grid place-items-center font-bold text-xl mb-4">1</div>
+          <h3 class="font-semibold mb-2">Creá tu obra</h3>
+          <p class="text-slate-400 text-sm">Con el botón <b>+</b> en la app, o charlando con el bot de WhatsApp.</p>
+        </div>
+        <div class="text-center">
+          <div class="w-12 h-12 mx-auto rounded-xl bg-brand/15 text-brand-400 grid place-items-center font-bold text-xl mb-4">2</div>
+          <h3 class="font-semibold mb-2">Cargá cobros, gastos y jornadas</h3>
+          <p class="text-slate-400 text-sm">Todo guiado, paso a paso, sin dejar nada a medias.</p>
+        </div>
+        <div class="text-center">
+          <div class="w-12 h-12 mx-auto rounded-xl bg-brand/15 text-brand-400 grid place-items-center font-bold text-xl mb-4">3</div>
+          <h3 class="font-semibold mb-2">Mirá tu balance</h3>
+          <p class="text-slate-400 text-sm">En el Panel general, con margen de ganancia en tiempo real.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 5 REGLAS DE ORO ================= -->
+  <section class="max-w-4xl mx-auto px-5 py-16">
+    <h2 class="text-3xl font-bold text-center mb-12">Las 5 Reglas de Oro</h2>
+    <div class="space-y-3">
+      <div class="flex items-start gap-3 bg-ink-800 border border-ink-600 rounded-xl p-4"><span class="text-brand-400 font-bold">1.</span><p class="text-slate-300 text-sm">Cargá todo <b>el mismo día</b>. Si lo dejás para mañana, se olvida.</p></div>
+      <div class="flex items-start gap-3 bg-ink-800 border border-ink-600 rounded-xl p-4"><span class="text-brand-400 font-bold">2.</span><p class="text-slate-300 text-sm"><b>Cada gasto va a su obra</b>. Nada de "gastos sueltos" sin dueño.</p></div>
+      <div class="flex items-start gap-3 bg-ink-800 border border-ink-600 rounded-xl p-4"><span class="text-brand-400 font-bold">3.</span><p class="text-slate-300 text-sm">Tené el <b>presupuesto claro</b> antes de arrancar. Es tu brújula.</p></div>
+      <div class="flex items-start gap-3 bg-ink-800 border border-ink-600 rounded-xl p-4"><span class="text-brand-400 font-bold">4.</span><p class="text-slate-300 text-sm"><b>Registrá la jornada</b> de tu gente ni bien llegan a la obra.</p></div>
+      <div class="flex items-start gap-3 bg-ink-800 border border-ink-600 rounded-xl p-4"><span class="text-brand-400 font-bold">5.</span><p class="text-slate-300 text-sm">Revisá tu <b>balance semanal</b>. Lo que no se mide, no se controla.</p></div>
+    </div>
+  </section>
+
+  <!-- ================= FAQ ================= -->
+  <section class="max-w-3xl mx-auto px-5 pb-20">
+    <h2 class="text-3xl font-bold text-center mb-10">Preguntas frecuentes</h2>
+    <div class="space-y-3">
+      <details class="bg-ink-800 border border-ink-600 rounded-xl p-5 group">
+        <summary class="font-semibold cursor-pointer list-none flex justify-between items-center">¿Necesito tarjeta para empezar?<span class="group-open:rotate-45 transition text-brand-400">+</span></summary>
+        <p class="text-slate-400 text-sm mt-3">No. Empezás con una prueba gratis de 45 días con todo ilimitado. Sin tarjeta.</p>
+      </details>
+      <details class="bg-ink-800 border border-ink-600 rounded-xl p-5 group">
+        <summary class="font-semibold cursor-pointer list-none flex justify-between items-center">¿Funciona sin señal?<span class="group-open:rotate-45 transition text-brand-400">+</span></summary>
+        <p class="text-slate-400 text-sm mt-3">Sí. La app guarda tus datos en el celular y los sincroniza cuando vuelve la conexión.</p>
+      </details>
+      <details class="bg-ink-800 border border-ink-600 rounded-xl p-5 group">
+        <summary class="font-semibold cursor-pointer list-none flex justify-between items-center">¿Cómo se usa con WhatsApp?<span class="group-open:rotate-45 transition text-brand-400">+</span></summary>
+        <p class="text-slate-400 text-sm mt-3">Vinculás tu número y chateás con el bot: creás obras, clientes o socios con formularios guiados y menús de botones.</p>
+      </details>
+    </div>
+  </section>
+
+  <!-- ================= FOOTER ================= -->
+  <footer class="border-t border-ink-600 py-10 text-center">
+    <div class="flex justify-center gap-6 text-sm text-slate-400 mb-4">
+      <a href="https://gestiongadu.vercel.app/#/landing" class="hover:text-white transition">Términos y Condiciones</a>
+      <a href="https://gestiongadu.vercel.app/#/landing" class="hover:text-white transition">Aviso de Privacidad</a>
+    </div>
+    <p class="text-xs text-slate-600">Copyright © 2026 GADU · Tu gestión, perfecta</p>
+  </footer>
+
+  <script>
+    const PRICES = {
+      pro:      { trimestral: 5000,  semestral: 9000,  anual: 16000,  dias: { trimestral: 90, semestral: 180, anual: 365 } },
+      pyme:     { trimestral: 20000, semestral: 36000, anual: 64000,  dias: { trimestral: 90, semestral: 180, anual: 365 } },
+      empresa:  { trimestral: 50000, semestral: 90000, anual: 160000, dias: { trimestral: 90, semestral: 180, anual: 365 } },
+    };
+
+    function fmt(n) { return Number(n).toLocaleString('es-AR'); }
+
+    function setPeriodo(p) {
+      document.querySelectorAll('.periodo-btn').forEach(b => {
+        const active = b.dataset.periodo === p;
+        b.className = 'periodo-btn px-4 py-2 rounded-lg text-sm font-semibold transition ' + (active ? 'bg-brand text-white' : 'text-slate-400 hover:text-white');
+      });
+      ['pro', 'pyme', 'empresa'].forEach(plan => {
+        const el = document.getElementById('p-' + plan);
+        const d = document.getElementById('d-' + plan);
+        if (el) el.textContent = fmt(PRICES[plan][p]);
+        if (d) d.textContent = PRICES[plan].dias[p];
+      });
+    }
+
+    function scrollToPrecios() {
+      const sec = document.getElementById('precios');
+      if (sec) sec.scrollIntoView({ behavior: 'smooth' });
+    }
+  </script>
+</body>
+</html>
