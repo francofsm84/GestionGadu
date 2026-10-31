@@ -102,7 +102,7 @@
           '<div class="lp-feature lp-feature-' + (i + 1) + ' lp-reveal">' +
             '<div class="lp-feature-ico">' + f[0] + '</div>' +
             '<h3>' + f[1] + '</h3>' +
-            (f[2] ? '<div class="lp-bars">' + f[2].map((b, j) => '<div class="lp-bar"><span>' + b + '</span><div class="lp-bar-track"><div class="lp-bar-fill" style="width:' + (90 - j * 25) + '%"></div></div></div>').join('') + '</div>' : '<p>' + (['Funciona en el fondo de la obra, sin señal.', 'Repartí la plata automático.', 'Asistencia con un toque.'][i - 1] || '') + '</p>') +
+            (f[3] ? '<div class="lp-bars">' + f[3].map((b, j) => '<div class="lp-bar"><span>' + b + '</span><div class="lp-bar-track"><div class="lp-bar-fill" style="width:' + (90 - j * 25) + '%"></div></div></div>').join('') + '</div>' : '<p>' + f[2] + '</p>') +
           '</div>'
         ).join('') + '</div>' +
       '</div>' +
@@ -247,9 +247,14 @@
 
   function render(root) {
     if (!root) return;
-    root.innerHTML = buildHTML();
-    bind(root);
-    initAnimations(root);
+    try {
+      root.innerHTML = buildHTML();
+      bind(root);
+      initAnimations(root);
+    } catch (e) {
+      console.error('Error en Landing:', e);
+      root.innerHTML = '<div style="padding:60px 20px;text-align:center;color:#e2e8f0;font-family:sans-serif"><p>Error al cargar la página. Revisá la consola.</p></div>';
+    }
   }
 
   G.landing = { render };

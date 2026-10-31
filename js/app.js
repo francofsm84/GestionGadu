@@ -1071,7 +1071,13 @@
       root.id = 'landingRoot';
       document.body.appendChild(root);
     }
-    try { if (G.landing) G.landing.render(root); } catch (e) { console.error('[landing] error render:', e); }
+    try {
+      if (G.landing && G.landing.render) G.landing.render(root);
+      else throw new Error('G.landing no está definido');
+    } catch (e) {
+      console.error('[landing] error render:', e);
+      root.innerHTML = '<div style="padding:60px 20px;text-align:center;color:#e2e8f0;font-family:sans-serif"><p>Error al cargar la página. Revisá la consola.</p></div>';
+    }
   }
 
   /* Abre los modales legales desde la landing (terms | privacy) */
