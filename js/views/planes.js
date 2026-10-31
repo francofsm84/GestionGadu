@@ -61,11 +61,13 @@
   }
 
   function fallbackHTML(periodo) {
+    /* Fallback con los precios REALES de los 4 planes (evita que al volver de
+       MercadoPago, con G.plan.planes aún vacío, se muestren botones genéricos). */
     const cards = [
       { id: 'free', nombre: 'Prueba', precio_mensual: 0, precio_semestral: 0, precio_anual: 0, limite_obras_activas: 999, limite_empleados: 999 },
-      { id: 'pyme', nombre: 'PYME', precio_mensual: 0, precio_semestral: 0, precio_anual: 0, limite_obras_activas: 5, limite_empleados: 10 },
-      { id: 'pro', nombre: 'PRO', precio_mensual: 0, precio_semestral: 0, precio_anual: 0, limite_obras_activas: 999, limite_empleados: 999 },
-      { id: 'empresa', nombre: 'Empresa', precio_mensual: 0, precio_semestral: 0, precio_anual: 0, limite_obras_activas: 999, limite_empleados: 999 },
+      { id: 'pro', nombre: 'PRO', precio_mensual: 5000, precio_semestral: 9000, precio_anual: 16000, limite_obras_activas: 2, limite_empleados: 10, destacado: true },
+      { id: 'pyme', nombre: 'PYME', precio_mensual: 20000, precio_semestral: 36000, precio_anual: 64000, limite_obras_activas: 5, limite_empleados: 20 },
+      { id: 'empresa', nombre: 'Empresa', precio_mensual: 50000, precio_semestral: 90000, precio_anual: 160000, limite_obras_activas: 999, limite_empleados: 999 },
     ];
     return '<div class="plans-grid">' + cards.map(p => cardHTML(p, '', periodo)).join('') + '</div>';
   }
