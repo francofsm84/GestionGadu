@@ -1060,12 +1060,31 @@
     });
   }
 
+  /* ---------- Landing page pública (#/landing, sin sesión) ---------- */
+  function showLanding() {
+    document.body.classList.add('no-session');
+    const lr = document.getElementById('loginRoot');
+    if (lr) lr.remove();
+    let root = document.getElementById('landingRoot');
+    if (!root) {
+      root = document.createElement('div');
+      root.id = 'landingRoot';
+      document.body.appendChild(root);
+    }
+    try { if (G.landing) G.landing.render(root); } catch (e) { console.error('[landing] error render:', e); }
+  }
+
+  /* Abre los modales legales desde la landing (terms | privacy) */
+  G.openLegal = (t) => { if (t === 'privacy') openPrivacyModal(); else openTermsModal(); };
+
   function renderLogin(mode) {
     /* Login en fondo oscuro (tema por defecto): logo blanco con alto contraste */
     try { document.documentElement.dataset.theme = 'dark'; } catch (e) {}
     document.body.classList.add('no-session');
     const prev = document.getElementById('loginRoot');
     if (prev) prev.remove();
+    const land = document.getElementById('landingRoot');
+    if (land) land.remove();   // quitar la landing si veníamos de #/landing
     const host = document.createElement('div');
     host.id = 'loginRoot';
     host.innerHTML =
@@ -1738,7 +1757,20 @@
           openGlobalSearch();
         }
       });
-      window.addEventListener('hashchange', renderNow);
+      window.addEventListener('hashchange', () => {
+        const h = location.hash || '';
+        /* Landing pública: sin sesión la muestra; logueado redirige a dashboard */
+        if (h.indexOf('#/landing') === 0) {
+          if (G.auth.getSession()) { location.hash = '#/dashboard'; return; }
+          showLanding();
+          return;
+        }
+        /* Portal de cliente: público (ya renderizado en el boot) */
+        if (h.indexOf('#/portal/') === 0) return;
+        /* Sin sesión → login (no renderizar la app) */
+        if (!G.auth.getSession()) { renderLogin('login'); return; }
+        renderNow();
+      });
       let lastWidth = window.innerWidth;
       window.addEventListener('resize', () => {
         clearTimeout(resizeTimer);
@@ -1770,6 +1802,13 @@
           }
         });
       } catch (e) {}
+
+      /* Ruta pública (landing page): no requiere sesión. Logueado → dashboard */
+      if (location.hash.indexOf('#/landing') === 0) {
+        if (G.auth.load()) { location.hash = '#/dashboard'; return; }
+        showLanding();
+        return;
+      }
 
       /* Ruta pública (portal de cliente): no requiere sesión */
       if (location.hash.indexOf('#/portal/') === 0) {
