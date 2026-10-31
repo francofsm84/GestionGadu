@@ -1120,6 +1120,7 @@ body.no-session .app { display: none; }
 /* ============================================================
    Landing page pública (#/landing)
    ============================================================ */
+.btn-lg { padding: 13px 24px; font-size: 16px; }
 #landingRoot { min-height: 100vh; min-height: 100dvh; background: var(--bg, #0b1020); color: var(--text, #e2e8f0); }
 .landing { max-width: 1000px; margin: 0 auto; padding: 24px 16px; text-align: center; }
 .landing-hero { padding: 64px 0 36px; }
