@@ -1302,9 +1302,6 @@ body.no-session .app { display: none; }
 
 /* PRICING */
 .lp-pricing { position: relative; }
-.lp-toggle { display: inline-flex; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); border-radius: 13px; padding: 4px; margin: 0 auto 30px; position: relative; left: 50%; transform: translateX(-50%); }
-.lp-toggle-btn { padding: 9px 18px; border-radius: 10px; border: none; background: transparent; color: var(--muted, #94a3b8); font-size: 14px; font-weight: 600; cursor: pointer; transition: background .2s, color .2s; }
-.lp-toggle-btn.active { background: #4f46e5; color: #fff; }
 .lp-plans { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
 .lp-plan { position: relative; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); border-radius: 18px; padding: 26px 18px; text-align: left; display: flex; flex-direction: column; transition: transform .22s ease, border-color .22s ease; }
 .lp-plan:hover { transform: translateY(-3px); }
