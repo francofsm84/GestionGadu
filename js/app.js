@@ -1183,6 +1183,19 @@
         if (!nombre) { setMsg('Ingresá tu nombre.', true); return; }
         if (!apellido) { setMsg('Ingresá tu apellido.', true); return; }
         if (tel.replace(/\D/g, '').length < 6) { setMsg('Ingresá un teléfono válido (al menos 6 números).', true); return; }
+        /* Unicidad del teléfono: si ya está en otra cuenta, rechazar el alta */
+        try {
+          const chk = await fetch(G.auth.SUPABASE_URL + '/rest/v1/rpc/telefono_registrado', {
+            method: 'POST',
+            headers: { 'apikey': G.auth.SUPABASE_ANON_KEY, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ p_telefono: tel }),
+          });
+          const chkJson = await chk.json();
+          if (chkJson === true) {
+            setMsg('Este número de teléfono ya está registrado en otra cuenta. ¿Deseas recuperar tu acceso?', true);
+            return;
+          }
+        } catch (e) { /* si la validación falla, el índice único en DB es el respaldo */ }
         if (!dir) { setMsg('Buscá y seleccioná tu dirección en el mapa.', true); return; }
         if (mapsKey && (!placeData.lat || !placeData.lng)) { setMsg('Seleccioná una dirección sugerida por Google Maps.', true); return; }
         meta = {
