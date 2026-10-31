@@ -47,7 +47,7 @@
       '</section>' +
 
       /* ===== Pricing (breve) ===== */
-      '<section class="landing-pricing">' +
+      '<section class="landing-pricing" id="precios">' +
         '<h2>Planes simples, sin sorpresas</h2>' +
         '<div class="landing-plans">' +
           '<div class="landing-plan">' +
@@ -81,7 +81,10 @@
         e.preventDefault();
         const a = el.dataset.landing;
         if (a === 'register') register();
-        else if (a === 'planes') go('#/planes');
+        else if (a === 'planes') {
+          const sec = document.getElementById('precios');
+          if (sec) sec.scrollIntoView({ behavior: 'smooth' });
+        }
         else if (a === 'terms') legal('terms');
         else if (a === 'privacy') legal('privacy');
       });
