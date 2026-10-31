@@ -1525,7 +1525,8 @@ body.no-session .app { display: none; }
 /* ============================================================
    GADU · Landing v2.1 · Estrellas + story + glassmorphism
    ============================================================ */
-#lp-stars { position: fixed; inset: 0; z-index: -1; width: 100%; height: 100%; pointer-events: none; }
+#lp-stars { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 0; pointer-events: none; background: transparent; }
+.lp-nav, .lp-hero, .lp-section, .lp-final, .lp-footer { position: relative; z-index: 1; }
 
 /* Story "El problema del papel" */
 .lp-story { position: relative; }
@@ -1568,3 +1569,32 @@ body.no-session .app { display: none; }
 .ob-action { width: 100%; }
 .ob-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; }
 .ob-footer-nav { display: flex; gap: 8px; }
+
+/* ============================================================
+   Modal futurista de registro/login (.lp-auth-*) + hero glow
+   ============================================================ */
+.lp-hero-title { text-shadow: 0 0 44px rgba(249,115,22,.22); }
+.lp-grad { filter: drop-shadow(0 0 22px rgba(249,115,22,.3)); }
+
+.lp-auth-overlay { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: rgba(5,8,18,.55); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); animation: lp-fade-in .28s ease; }
+.lp-auth-card { position: relative; width: 100%; max-width: 400px; background: rgba(15,23,42,.6); border: 1px solid rgba(255,255,255,.12); border-radius: 22px; padding: 28px 24px; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 30px 80px rgba(0,0,0,.5); animation: lp-scale-up .32s cubic-bezier(.16,1,.3,1); }
+.lp-auth-close { position: absolute; top: 14px; right: 14px; width: 34px; height: 34px; border-radius: 50%; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); color: var(--lp-text); font-size: 18px; cursor: pointer; line-height: 1; }
+.lp-auth-close:hover { background: rgba(255,255,255,.12); }
+.lp-auth-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.lp-auth-head h3 { margin: 0; font-size: 20px; font-weight: 800; }
+.lp-auth-sub { margin: 0 0 18px; color: var(--lp-muted); font-size: 13.5px; }
+.lp-auth-google { width: 100%; min-height: 44px; border-radius: 12px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); color: var(--lp-text); font-weight: 600; cursor: pointer; margin-bottom: 16px; }
+.lp-auth-google:hover { background: rgba(255,255,255,.12); }
+.lp-auth-sep { display: flex; align-items: center; gap: 10px; color: var(--lp-muted); font-size: 12px; margin-bottom: 14px; }
+.lp-auth-sep::before, .lp-auth-sep::after { content: ''; flex: 1; height: 1px; background: var(--lp-border); }
+.lp-auth-input { width: 100%; min-height: 44px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); color: var(--lp-text); padding: 0 14px; font-size: 14px; margin-bottom: 10px; }
+.lp-auth-input:focus { outline: none; border-color: var(--lp-primary); }
+.lp-auth-submit { width: 100%; min-height: 46px; border-radius: 12px; background: linear-gradient(135deg, var(--lp-accent), #f97316); color: #0b1020; font-weight: 700; font-size: 15px; border: none; cursor: pointer; margin-top: 4px; }
+.lp-auth-submit:disabled { opacity: .6; cursor: not-allowed; }
+.lp-auth-err { margin: 12px 0 0; color: #f87171; font-size: 12.5px; text-align: center; }
+.lp-auth-toggle { margin: 12px 0 0; color: var(--lp-muted); font-size: 13px; text-align: center; }
+.lp-auth-toggle a { color: var(--lp-primary); text-decoration: none; font-weight: 600; }
+.lp-auth-toggle a:hover { text-decoration: underline; }
+
+@keyframes lp-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lp-scale-up { from { opacity: 0; transform: scale(.92) translateY(14px); } to { opacity: 1; transform: none; } }

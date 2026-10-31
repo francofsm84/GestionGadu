@@ -13,9 +13,90 @@
   };
   const fmt = n => Number(n).toLocaleString('es-AR');
 
-  function register() { location.hash = '#/login'; }
+  function register() { openAuthModal(); }
   function legal(t) { try { if (G.openLegal) G.openLegal(t); } catch (e) {} }
   function scrollToId(id) { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth' }); }
+
+  /* ---------- Modal futurista de registro/login ---------- */
+  let authMode = 'signup';
+  function closeAuthModal() {
+    const ov = document.getElementById('lp-auth-overlay');
+    if (ov) ov.remove();
+  }
+  function openAuthModal() {
+    const existing = document.getElementById('lp-auth-overlay');
+    if (existing) existing.remove();
+    authMode = 'signup';
+    const overlay = document.createElement('div');
+    overlay.id = 'lp-auth-overlay';
+    overlay.className = 'lp-auth-overlay';
+    overlay.innerHTML =
+      '<div class="lp-auth-card" role="dialog" aria-modal="true">' +
+        '<button class="lp-auth-close" aria-label="Cerrar" title="Cerrar">×</button>' +
+        '<div class="lp-auth-head"><span class="lp-nav-mark">G</span><h3>Empezá gratis</h3></div>' +
+        '<p class="lp-auth-sub">45 días gratis · sin tarjeta · sin compromiso</p>' +
+        '<button class="lp-auth-google" id="lp-auth-google">🔵 Continuar con Google</button>' +
+        '<div class="lp-auth-sep"><span>o con tu email</span></div>' +
+        '<input class="lp-auth-input" id="lp-auth-email" type="email" placeholder="tu@email.com" autocomplete="email" inputmode="email">' +
+        '<input class="lp-auth-input" id="lp-auth-pass" type="password" placeholder="Contraseña (mín. 6 caracteres)" autocomplete="current-password">' +
+        '<button class="lp-auth-submit" id="lp-auth-submit">Registrarse</button>' +
+        '<p class="lp-auth-err" id="lp-auth-err" hidden></p>' +
+        '<p class="lp-auth-toggle">¿Ya tenés cuenta? <a href="#" id="lp-auth-switch">Iniciar sesión</a></p>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('.lp-auth-close').addEventListener('click', closeAuthModal);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeAuthModal(); });
+    overlay.querySelector('#lp-auth-google').addEventListener('click', () => {
+      try { if (G.auth && G.auth.signInWithGoogle) G.auth.signInWithGoogle(); } catch (e) {}
+    });
+    overlay.querySelector('#lp-auth-switch').addEventListener('click', e => {
+      e.preventDefault();
+      authMode = authMode === 'signup' ? 'login' : 'signup';
+      const sub = overlay.querySelector('#lp-auth-submit');
+      const tog = overlay.querySelector('#lp-auth-switch');
+      const title = overlay.querySelector('.lp-auth-head h3');
+      if (authMode === 'login') {
+        sub.textContent = 'Iniciar sesión';
+        tog.innerHTML = '¿No tenés cuenta? <a href="#" id="lp-auth-switch">Registrate</a>';
+        title.textContent = 'Bienvenido de nuevo';
+      } else {
+        sub.textContent = 'Registrarse';
+        tog.innerHTML = '¿Ya tenés cuenta? <a href="#" id="lp-auth-switch">Iniciar sesión</a>';
+        title.textContent = 'Empezá gratis';
+      }
+      overlay.querySelector('#lp-auth-err').hidden = true;
+    });
+    overlay.querySelector('#lp-auth-submit').addEventListener('click', doAuth);
+  }
+  async function doAuth() {
+    const emailEl = document.getElementById('lp-auth-email');
+    const passEl = document.getElementById('lp-auth-pass');
+    const sub = document.getElementById('lp-auth-submit');
+    const err = document.getElementById('lp-auth-err');
+    const email = (emailEl.value || '').trim();
+    const pass = passEl.value || '';
+    if (!email || !pass) { err.textContent = 'Completá tu email y contraseña.'; err.hidden = false; return; }
+    if (pass.length < 6) { err.textContent = 'La contraseña debe tener al menos 6 caracteres.'; err.hidden = false; return; }
+    sub.disabled = true; sub.textContent = 'Procesando…'; err.hidden = true;
+    try {
+      if (authMode === 'signup') await G.auth.signup(email, pass);
+      else await G.auth.login(email, pass);
+      closeAuthModal();
+      const landRoot = document.getElementById('landingRoot');
+      if (landRoot) landRoot.remove();
+      location.hash = '#/dashboard';
+      try { if (G.app && G.app.startApp) G.app.startApp(); } catch (e) {}
+    } catch (e) {
+      const m = String(e && e.message || e);
+      if (m === 'CONFIRMA_EMAIL') err.textContent = 'Te enviamos un mail para confirmar tu cuenta. Revisá tu bandeja.';
+      else if (m === 'DB_ERROR') err.textContent = 'Hubo un problema creando tu cuenta. Probá de nuevo.';
+      else err.textContent = m;
+      err.hidden = false;
+      sub.disabled = false;
+      sub.textContent = authMode === 'signup' ? 'Registrarse' : 'Iniciar sesión';
+    }
+  }
 
   function applyTheme(t) {
     document.documentElement.dataset.theme = t;
@@ -272,15 +353,39 @@
     function draw() {
       ctx.clearRect(0, 0, W, H);
       const t = Date.now() / 1000;
-      for (const s of stars) {
+      /* Posiciones con parallax */
+      const pts = stars.map(s => {
         let yy = (s.y - scrollY * (s.r * 0.22)) % H;
         if (yy < 0) yy += H;
+        return { ...s, yy };
+      });
+      /* Constelación: líneas sutiles entre estrellas cercanas */
+      const LINK = 110;
+      ctx.lineWidth = 0.5;
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          const dx = pts[i].x - pts[j].x;
+          const dy = pts[i].yy - pts[j].yy;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < LINK * LINK) {
+            const alpha = (1 - Math.sqrt(d2) / LINK) * 0.12;
+            ctx.strokeStyle = `rgba(148,163,184,${alpha.toFixed(3)})`;
+            ctx.beginPath();
+            ctx.moveTo(pts[i].x, pts[i].yy);
+            ctx.lineTo(pts[j].x, pts[j].yy);
+            ctx.stroke();
+          }
+        }
+      }
+      /* Estrellas */
+      for (const s of pts) {
         const tw = 0.55 + 0.45 * Math.sin(t * s.v * 6 + s.x);
         ctx.beginPath();
-        ctx.arc(s.x, yy, s.r, 0, Math.PI * 2);
+        ctx.arc(s.x, s.yy, s.r, 0, Math.PI * 2);
         ctx.fillStyle = s.orange ? `rgba(249,115,22,${(s.a * tw).toFixed(3)})` : `rgba(255,255,255,${(s.a * tw).toFixed(3)})`;
         ctx.fill();
       }
+      /* Estrellas fugaces */
       for (let i = meteors.length - 1; i >= 0; i--) {
         const m = meteors[i];
         m.x += m.vx; m.y += m.vy; m.life -= 0.012;
