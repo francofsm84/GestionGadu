@@ -1217,6 +1217,7 @@ body.no-session .app { display: none; }
 .lp { position: relative; }
 .lp-container { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
 .lp-section { padding: 76px 0; position: relative; }
+.lp-wa, .lp-features, .lp-steps, .lp-faq { position: relative; }
 .lp-section-title { font-size: clamp(28px, 5vw, 42px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.12; margin: 0 auto 14px; text-align: center; max-width: 760px; }
 .lp-section-sub { font-size: 17px; color: var(--muted, #94a3b8); text-align: center; max-width: 600px; margin: 0 auto 40px; line-height: 1.6; }
 .lp-gradient-text { background: linear-gradient(90deg, #f59e0b, #fb7185, #818cf8); -webkit-background-clip: text; background-clip: text; color: transparent; }
