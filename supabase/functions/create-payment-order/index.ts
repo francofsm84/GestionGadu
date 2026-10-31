@@ -75,6 +75,7 @@ serve(async (req) => {
         currency_id: "ARS",
       }],
       payer: { email: payerEmail },
+      metadata: { user_id: userId },
       back_urls: {
         success: origin + "/#/planes",
         failure: origin + "/#/planes",

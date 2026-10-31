@@ -39,66 +39,85 @@ serve(async (req) => {
       const dataId = body.data ? String(body.data.id || "") : "";
 
       if (dataId) {
-        // 1) Consultar el estado del recurso a MercadoPago
-        let status = "";
-        let externalRef = "";
-        let isOrder = false;
-        if (type === "order" || type === "merchant_order" || type === "order.update") {
-          isOrder = true;
-          const r = await fetch("https://api.mercadopago.com/v1/orders/" + dataId, {
-            headers: { Authorization: "Bearer " + MP_ACCESS_TOKEN },
-          });
-          const j = await r.json().catch(() => ({}));
-          status = String(j.status || "");
-          externalRef = String(j.external_reference || "");
-        } else {
-          // payment (API clásica)
-          const r = await fetch("https://api.mercadopago.com/v1/payments/" + dataId, {
-            headers: { Authorization: "Bearer " + MP_ACCESS_TOKEN },
-          });
-          const j = await r.json().catch(() => ({}));
-          status = String(j.status || "");
-          externalRef = String(j.external_reference || "");
-        }
+        // 1) Consultar el estado del recurso a MercadoPago (order o payment)
+        const isOrder = type === "order" || type === "merchant_order" || type === "order.update";
+        const mpUrl = "https://api.mercadopago.com" + (isOrder ? "/v1/orders/" : "/v1/payments/") + dataId;
+        const j = await fetch(mpUrl, {
+          headers: { Authorization: "Bearer " + MP_ACCESS_TOKEN },
+        }).then(r => r.json()).catch(() => ({}));
 
-        // 2) Aprobado: status "approved" (payment) o "paid"/"completed" (order)
+        const status = String(j.status || "");
+        const externalRef = String(j.external_reference || "");
+        const metaUserId = (j.metadata && j.metadata.user_id) ? String(j.metadata.user_id) : "";
+
+        // 2) Aprobado: "approved" (payment) | "paid"/"completed" (order)
         const approved = status === "approved" || status === "paid" || status === "completed";
-        if (approved && externalRef && externalRef.includes("_")) {
-          const parts = externalRef.split("_");
-          const userId = String(parts[0] || "");
-          const planId = String(parts[1] || "");
-          const periodo = String(parts[2] || "trimestral");
-          const dias = diasDePeriodo(periodo);
-          const vencimiento = new Date(Date.now() + dias * 86400000).toISOString();
-          const code = genLicenseCode();
-
+        if (approved) {
           const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-          // 3) Insertar el código de licencia
-          const { error: licErr } = await supabase.from("license_codes").insert({
-            code,
-            plan_id: planId,
-            duration_days: dias,
-            is_used: false,
-          });
-          if (licErr) console.error("[mercadopago-webhook] error insert license_codes:", licErr.message);
+          // Extraer userId|planId|periodo de external_reference (primario)
+          let userId = "";
+          let planId = "";
+          let periodo = "trimestral";
+          if (externalRef && externalRef.includes("_")) {
+            const parts = externalRef.split("_");
+            userId = String(parts[0] || "");
+            planId = String(parts[1] || "");
+            periodo = String(parts[2] || "trimestral");
+          }
 
-          // 4) Activar el plan en profiles (service role → salta blindar_perfil)
-          const { error: profErr } = await supabase.from("profiles").update({
-            plan_id: planId,
-            trial_ends_at: vencimiento,
-            trial_end: vencimiento,
-            paid_until: vencimiento,
-            subscription_status: "active",
-            estado_cuenta: "activo",
-          }).eq("user_id", userId);
-          if (profErr) console.error("[mercadopago-webhook] error update profiles:", profErr.message);
+          // Fallback robusto: metadata.user_id + lookup en mercadopago_orders
+          let ref = externalRef;
+          if (!userId && metaUserId) {
+            userId = metaUserId;
+            const { data: ord } = await supabase.from("mercadopago_orders")
+              .select("plan_id,periodo,external_reference")
+              .eq("user_id", metaUserId).eq("status", "pending")
+              .order("created_at", { ascending: false }).limit(1);
+            if (ord && ord[0]) {
+              planId = String(ord[0].plan_id || planId);
+              periodo = String(ord[0].periodo || "trimestral");
+              ref = String(ord[0].external_reference || ref);
+            }
+          }
 
-          // 5) Marcar la orden como completed
-          await supabase.from("mercadopago_orders").update({ status: "completed" })
-            .eq("external_reference", externalRef);
+          if (userId && planId) {
+            const dias = diasDePeriodo(periodo);
+            const vencimiento = new Date(Date.now() + dias * 86400000).toISOString();
+            const code = genLicenseCode();
 
-          console.log("[mercadopago-webhook] pago aprobado:", userId, planId, periodo, "· código:", code);
+            // 3) Insertar el código de licencia como USADO (Plan B: queda registrado)
+            const { error: licErr } = await supabase.from("license_codes").insert({
+              code,
+              plan_id: planId,
+              duration_days: dias,
+              is_used: true,
+              used_by_user_id: userId,
+              used_at: new Date().toISOString(),
+            });
+            if (licErr) console.error("[mercadopago-webhook] error insert license_codes:", licErr.message);
+
+            // 4) Activar el plan en profiles (service role → salta blindar_perfil)
+            const { error: profErr } = await supabase.from("profiles").update({
+              plan_id: planId,
+              trial_ends_at: vencimiento,
+              trial_end: vencimiento,
+              paid_until: vencimiento,
+              subscription_status: "active",
+              estado_cuenta: "activo",
+            }).eq("user_id", userId);
+            if (profErr) console.error("[mercadopago-webhook] error update profiles:", profErr.message);
+
+            // 5) Marcar la orden como completed
+            if (ref) {
+              await supabase.from("mercadopago_orders").update({ status: "completed" })
+                .eq("external_reference", ref);
+            }
+
+            console.log("[mercadopago-webhook] pago aprobado:", userId, planId, periodo, "· código:", code);
+          } else {
+            console.warn("[mercadopago-webhook] no se pudo extraer user_id/plan del pago aprobado");
+          }
         } else {
           console.log("[mercadopago-webhook] notificación ignorada · type:", type, "status:", status, "· isOrder:", isOrder);
         }
