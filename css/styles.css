@@ -1494,6 +1494,9 @@ body.no-session .app { display: none; }
 .lp-footer-links a { color: var(--lp-muted); text-decoration: none; }
 .lp-footer-links a:hover { color: var(--lp-text); }
 .lp-footer-copy { margin: 0; color: var(--lp-muted); font-size: 12.5px; }
+.lp-footer-credit { margin: 6px 0 0; color: var(--lp-muted); font-size: 12px; }
+.lp-footer-credit a { color: var(--lp-muted); text-decoration: none; transition: color .2s ease; }
+.lp-footer-credit a:hover { color: var(--lp-accent); }
 
 /* Animaciones */
 @keyframes lp-float { 0%, 100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-18px); } }
