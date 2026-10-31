@@ -289,45 +289,79 @@
 
   /* ---------- Tutorial de bienvenida (3 pasos) ---------- */
   const TUTORIAL_STEPS = [
-    { icon: 'whatsapp', title: 'Vinculá tu WhatsApp', text: '¡Bienvenido a GADU! Vinculá tu WhatsApp desde "Mi Perfil" para cargar gastos por audio.' },
-    { icon: 'hard-hat', title: 'Creá tu primera obra', text: 'Creá tu primera obra para empezar a controlar tus costos.' },
-    { icon: 'zap', title: 'Usá el asistente', text: 'Usá el asistente (el robot del costado) para pedir presupuestos o consultar saldos en segundos.' },
+    { emoji: '📱', title: 'Vinculá tu WhatsApp', text: 'Cargá gastos y registrá asistencias en segundos mandándole un mensaje al bot.', action: 'Ir a Mi Perfil' },
+    { emoji: '🏗️', title: 'Creá tu primera Obra', text: 'Organizá tus trabajos y controlá el margen de cada uno.', action: 'Crear Obra' },
+    { emoji: '💬', title: 'Probá el Bot', text: 'Mandale un mensaje al bot de WhatsApp para ver la magia.', action: 'Abrir WhatsApp' },
   ];
 
   function showTutorial() {
     const UI = G.ui;
     if (!UI || !UI.openModal) return;
     let step = 0;
+    const done = () => { try { localStorage.setItem('gadu_onboarding_done', 'true'); } catch (e) {} };
+
     const m = UI.openModal({
       title: '👋 Bienvenido a GADU',
       subtitle: 'Tres pasos para sacarle el máximo provecho',
-      body: '<div id="tutBody"></div>',
-      footer: '<button class="btn btn-ghost" data-cancel>Saltar</button><button class="btn btn-primary" data-next>Siguiente</button>',
+      body: '<div id="obTut" class="ob-tutorial"></div>',
+      footer:
+        '<div class="ob-footer">' +
+          '<button class="btn btn-ghost" data-ob-skip>Saltar tutorial</button>' +
+          '<div class="ob-footer-nav">' +
+            '<button class="btn btn-ghost" data-ob-prev style="display:none">Anterior</button>' +
+            '<button class="btn btn-primary" data-ob-next>Siguiente</button>' +
+          '</div>' +
+        '</div>',
     });
+
+    const runAction = (i) => {
+      done();
+      m.close();
+      try {
+        if (i === 0) { if (G.onboarding && G.onboarding.open) G.onboarding.open(); }
+        else if (i === 1) { if (G.actions && G.actions.work) G.actions.work(); }
+        else if (i === 2) { window.open('https://wa.me/' + BOT_WHATSAPP_NUMBER, '_blank', 'noopener'); }
+      } catch (e) {}
+    };
+
     const renderStep = () => {
       const s = TUTORIAL_STEPS[step];
-      m.panel.querySelector('#tutBody').innerHTML =
-        '<div style="text-align:center;padding:6px 0">' +
-        '<div style="margin-bottom:10px">' + UI.icon(s.icon, 44) + '</div>' +
-        '<strong style="font-size:16px;display:block;margin-bottom:8px">' + s.title + '</strong>' +
-        '<p class="muted" style="margin:0">' + s.text + '</p>' +
-        '<div style="margin-top:16px">' +
-        TUTORIAL_STEPS.map((_, i) => '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + (i === step ? 'var(--primary)' : 'var(--muted)') + ';margin:0 4px"></span>').join('') +
-        '</div></div>';
-      m.panel.querySelector('[data-next]').textContent = step === TUTORIAL_STEPS.length - 1 ? 'Finalizar' : 'Siguiente';
+      const panel = m.panel.querySelector('#obTut');
+      if (!panel) return;
+      panel.innerHTML =
+        '<div class="ob-dots">' + TUTORIAL_STEPS.map((_, i) => '<span class="ob-dot' + (i === step ? ' active' : '') + '"></span>').join('') + '</div>' +
+        '<div class="ob-icon">' + s.emoji + '</div>' +
+        '<h3 class="ob-title">' + s.title + '</h3>' +
+        '<p class="ob-text">' + s.text + '</p>' +
+        '<button class="btn btn-primary ob-action" data-ob-action>' + s.action + '</button>';
+
+      const next = m.panel.querySelector('[data-ob-next]');
+      const prev = m.panel.querySelector('[data-ob-prev]');
+      if (next) next.textContent = step === TUTORIAL_STEPS.length - 1 ? 'Finalizar' : 'Siguiente';
+      if (prev) prev.style.display = step === 0 ? 'none' : '';
     };
+
     renderStep();
-    const done = () => { try { localStorage.setItem('gadu_onboarding_done', 'true'); } catch (e) {} };
-    m.panel.querySelector('[data-next]').addEventListener('click', () => {
+
+    m.panel.querySelector('[data-ob-action]').addEventListener('click', () => runAction(step));
+    m.panel.querySelector('[data-ob-next]').addEventListener('click', () => {
       if (step < TUTORIAL_STEPS.length - 1) { step++; renderStep(); }
       else { done(); m.close(); }
     });
-    m.panel.querySelector('[data-cancel]').addEventListener('click', () => { done(); m.close(); });
+    m.panel.querySelector('[data-ob-prev]').addEventListener('click', () => {
+      if (step > 0) { step--; renderStep(); }
+    });
+    m.panel.querySelector('[data-ob-skip]').addEventListener('click', () => { done(); m.close(); });
   }
 
   function maybeTutorial() {
     try {
       if (localStorage.getItem('gadu_onboarding_done')) return;
+      const S = G.store;
+      if (!S || !S.data) return;
+      /* Solo usuarios nuevos: sin obras, gastos ni ingresos cargados */
+      const empty = !(S.data.works || []).length && !(S.data.expenses || []).length && !(S.data.incomes || []).length;
+      if (!empty) { try { localStorage.setItem('gadu_onboarding_done', 'true'); } catch (e) {} return; }
       showTutorial();
     } catch (e) { /* nunca bloquear */ }
   }

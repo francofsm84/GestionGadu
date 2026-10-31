@@ -1554,3 +1554,17 @@ body.no-session .app { display: none; }
   .lp-toggle-btn { padding: 7px 10px; font-size: 12px; min-height: 36px; }
   .lp-disc { font-size: 9px; padding: 1px 4px; margin-left: 2px; }
 }
+
+/* ============================================================
+   Onboarding tutorial (.ob-*)
+   ============================================================ */
+.ob-tutorial { text-align: center; padding: 6px 0 4px; }
+.ob-dots { display: flex; justify-content: center; gap: 8px; margin-bottom: 18px; }
+.ob-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border, #334155); transition: background .2s ease, transform .2s ease; }
+.ob-dot.active { background: var(--primary, #4f46e5); transform: scale(1.35); }
+.ob-icon { font-size: 46px; line-height: 1; margin-bottom: 12px; }
+.ob-title { font-size: 18px; font-weight: 700; margin: 0 0 8px; }
+.ob-text { color: var(--muted, #94a3b8); font-size: 14px; line-height: 1.6; margin: 0 0 20px; }
+.ob-action { width: 100%; }
+.ob-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; }
+.ob-footer-nav { display: flex; gap: 8px; }
