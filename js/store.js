@@ -22,11 +22,24 @@
   const todayISO = () => toISO(new Date());
   const daysAgo = n => { const d = new Date(); d.setDate(d.getDate() - n); return toISO(d); };
   const daysAhead = n => { const d = new Date(); d.setDate(d.getDate() + n); return toISO(d); };
-  const uid = () => 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  /* Bytes aleatorios criptográficos (CSPRNG) con fallback seguro a Math.random */
+  const randomBytes = n => {
+    const buf = new Uint8Array(n);
+    try {
+      const c = (typeof crypto !== 'undefined' && crypto.getRandomValues) ? crypto
+        : (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) ? window.crypto
+        : null;
+      if (c) { c.getRandomValues(buf); return buf; }
+    } catch (e) {}
+    for (let i = 0; i < n; i++) buf[i] = Math.floor(Math.random() * 256);
+    return buf;
+  };
+  const uid = () => 'x' + Date.now().toString(36) + Array.from(randomBytes(4), b => b.toString(16).padStart(2, '0')).join('');
   const publicToken = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const b = randomBytes(20);
     let out = '';
-    for (let i = 0; i < 20; i++) out += chars[Math.floor(Math.random() * chars.length)];
+    for (let i = 0; i < 20; i++) out += chars[b[i] % chars.length];
     return out;
   };
   const parseISO = s => { const p = String(s || '').split('-'); return new Date(+p[0], (+p[1] || 1) - 1, +p[2] || 1); };
