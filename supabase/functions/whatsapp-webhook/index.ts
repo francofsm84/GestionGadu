@@ -899,7 +899,9 @@ Deno.serve(async (req) => {
         return new Response("forbidden", { status: 403 });
       }
     } else {
-      const okSig = await verifyMetaSignature(rawBody, appSecret, signature);
+      let okSig = false;
+      try { okSig = await verifyMetaSignature(rawBody, appSecret, signature); }
+      catch (e) { console.error("[whatsapp-webhook] error verificando firma HMAC:", e); }
       if (!okSig) {
         if (debugMode) {
           console.warn("[whatsapp-webhook] ⚠️ firma inválida de Meta (DEBUG_MODE: se procesa igual)");
@@ -916,9 +918,16 @@ Deno.serve(async (req) => {
   let body: Record<string, any> = {};
   try { body = JSON.parse(rawBody || "{}"); } catch (e) { body = {}; }
 
-  const messageId = extractMessageId(body);
-  const fromQuick = extractFrom(body);
-  const phoneQuick = fromQuick ? normalizePhone(fromQuick) : "desconocido";
+  let messageId = "";
+  let fromQuick = "";
+  let phoneQuick = "desconocido";
+  try {
+    messageId = extractMessageId(body);
+    fromQuick = extractFrom(body);
+    phoneQuick = fromQuick ? normalizePhone(fromQuick) : "desconocido";
+  } catch (e) {
+    console.error("[whatsapp-webhook] error extrayendo campos del payload:", e);
+  }
 
   /* Diagnóstico: cuerpo crudo en formato legible (2 espacios) para identificar
      exactamente la estructura que envía el Sandbox de Meta. */
