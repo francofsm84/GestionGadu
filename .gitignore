@@ -13,3 +13,40 @@ logo png gadu.png
 logo gadu (1000 x 500 px).png
 logo gadu png (1000 x 500 px).png
 logo blanco gadu png (1000 x 500 px).png
+
+# rsc local state (hooks, seals, logs) and managed skill links — machine-local
+.rsc/
+.worktrees/
+.dsh/skills/analyze
+.dsh/skills/automation-strategy
+.dsh/skills/clarify
+.dsh/skills/connect-tool
+.dsh/skills/constitution
+.dsh/skills/debug
+.dsh/skills/decision-challenge
+.dsh/skills/deprecation
+.dsh/skills/design
+.dsh/skills/fable-operator
+.dsh/skills/ftd
+.dsh/skills/harness
+.dsh/skills/idea-refinement
+.dsh/skills/implement
+.dsh/skills/init
+.dsh/skills/orient
+.dsh/skills/parallel
+.dsh/skills/plan
+.dsh/skills/review
+.dsh/skills/sdd
+.dsh/skills/sdd-init
+.dsh/skills/ship
+.dsh/skills/simplify-code
+.dsh/skills/source-grounded-development
+.dsh/skills/specify
+.dsh/skills/suggest
+.dsh/skills/tasks
+.dsh/skills/tidy
+.dsh/skills/unslop
+.dsh/skills/ux
+.dsh/skills/verify
+.dsh/skills/worktrees
+.dsh/skills/.rsc-state.json
