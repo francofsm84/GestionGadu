@@ -58,12 +58,13 @@
     w.document.close();
   }
 
-  function render(view) {
+  async function render(view) {
     currentView = view;
-    /* Guard estricto: solo admin / super_admin. Los demás vuelven a su dashboard. */
-    if (!G.plan.isAdmin()) {
-      view.innerHTML = '<div class="card">' + UI.emptyState('lock', 'Sin permisos', 'Este panel es exclusivo para administradores. Redirigiendo…') + '</div>';
-      try { UI.toast('No tenés permisos de administrador', 'error'); } catch (e) {}
+    /* Guard estricto: SOLO super_admin, validado fresco contra la DB (fail-closed). */
+    const ok = await (G.plan && G.plan.verifySuperAdmin ? G.plan.verifySuperAdmin() : Promise.resolve(false));
+    if (!ok) {
+      view.innerHTML = '<div class="card">' + UI.emptyState('lock', 'Sin permisos', 'Este panel es exclusivo del Super Admin. Redirigiendo…') + '</div>';
+      try { UI.toast('Acceso restringido: solo Super Admin', 'error'); } catch (e) {}
       setTimeout(() => { if (!location.hash || location.hash.indexOf('#/admin') === 0) location.hash = '#/dashboard'; }, 1200);
       return;
     }

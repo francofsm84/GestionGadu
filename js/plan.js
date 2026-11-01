@@ -87,6 +87,25 @@
 
   function isAdmin() { return !!(profile && (profile.rol === 'admin' || profile.rol === 'super_admin')); }
 
+  /* Chequeo sincrónico sobre el perfil cacheado: SOLO super_admin */
+  function esSuperAdmin() { return !!(profile && profile.rol === 'super_admin'); }
+
+  /* Chequeo estricto contra la DB (fresco, no confía en la sesión cacheada).
+     Fail-closed: si la consulta falla o el rol no es super_admin → false. */
+  async function verifySuperAdmin() {
+    try {
+      const sess = G.auth.getSession();
+      const uid = sess ? sess.userId : null;
+      if (!uid) return false;
+      const rows = await api('GET', '/profiles?select=rol&user_id=eq.' + encodeURIComponent(uid));
+      const rol = rows && rows[0] ? String(rows[0].rol || '') : '';
+      if (rol === 'super_admin') { if (profile) profile.rol = 'super_admin'; return true; }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
   function currentPlan() {
     if (planes.length && profile) {
       const p = planes.find(x => x.id === profile.plan_id);
@@ -219,7 +238,7 @@
 
   G.api = api;
   G.plan = {
-    ROLES, load, isAdmin, currentPlan, worksActive, employeesCount, limitFor, wouldExceed, canCreate, checkLimit, LIMITS, log, trialDaysLeft, trialDias, needsOnboarding, isLocked,
+    ROLES, load, isAdmin, esSuperAdmin, verifySuperAdmin, currentPlan, worksActive, employeesCount, limitFor, wouldExceed, canCreate, checkLimit, LIMITS, log, trialDaysLeft, trialDias, needsOnboarding, isLocked,
     validarCodigo, canjearCodigo, continueFree, diasRestantes, fechaVencimiento,
     get profile() { return profile; },
     get planes() { return planes; },
