@@ -882,37 +882,25 @@ Deno.serve(async (req) => {
   }
 
   /* ===== Validación de firma de Meta (X-Hub-Signature-256) =====
-     Verifica el HMAC-SHA256 con WHATSAPP_APP_SECRET. En MODO TOLERANTE:
-     si la firma falta o no coincide (común en el Sandbox de Meta durante
-     pruebas), se registra un warning y se procesa IGUAL para no perder
-     mensajes. El webhook siempre devuelve 200 OK. */
+     ESTRICTO: toda petición debe traer la firma HMAC-SHA256 válida con
+     WHATSAPP_APP_SECRET. Firma ausente, inválida o secreto sin configurar → 403. */
   const rawBody = await req.text().catch(() => "");
   const signature = req.headers.get("x-hub-signature-256") || "";
   const appSecret = Deno.env.get("WHATSAPP_APP_SECRET") || "";
-  const debugMode = Deno.env.get("DEBUG_MODE") === "true";
-  if (appSecret) {
-    if (!signature) {
-      if (debugMode) {
-        console.warn("[whatsapp-webhook] ⚠️ falta header X-Hub-Signature-256 (DEBUG_MODE: se procesa igual)");
-      } else {
-        console.warn("[whatsapp-webhook] ⚠️ falta header X-Hub-Signature-256 → 403");
-        return new Response("forbidden", { status: 403 });
-      }
-    } else {
-      let okSig = false;
-      try { okSig = await verifyMetaSignature(rawBody, appSecret, signature); }
-      catch (e) { console.error("[whatsapp-webhook] error verificando firma HMAC:", e); }
-      if (!okSig) {
-        if (debugMode) {
-          console.warn("[whatsapp-webhook] ⚠️ firma inválida de Meta (DEBUG_MODE: se procesa igual)");
-        } else {
-          console.warn("[whatsapp-webhook] ⚠️ firma inválida de Meta → 403");
-          return new Response("forbidden", { status: 403 });
-        }
-      }
-    }
-  } else {
-    console.warn("[whatsapp-webhook] WHATSAPP_APP_SECRET no configurado: no se valida firma");
+  if (!appSecret) {
+    console.error("[whatsapp-webhook] WHATSAPP_APP_SECRET no configurado → 403");
+    return new Response("forbidden", { status: 403 });
+  }
+  if (!signature) {
+    console.warn("[whatsapp-webhook] falta header X-Hub-Signature-256 → 403");
+    return new Response("forbidden", { status: 403 });
+  }
+  let okSig = false;
+  try { okSig = await verifyMetaSignature(rawBody, appSecret, signature); }
+  catch (e) { console.error("[whatsapp-webhook] error verificando firma HMAC:", e); }
+  if (!okSig) {
+    console.warn("[whatsapp-webhook] firma inválida de Meta → 403");
+    return new Response("forbidden", { status: 403 });
   }
 
   let body: Record<string, any> = {};
