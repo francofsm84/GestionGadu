@@ -1,0 +1,26 @@
+name: keep-alive
+
+# Evita la suspensión por inactividad del proyecto Supabase gratuito (7 días)
+# y mantiene caliente el frontend de Vercel. Solo pings de lectura, sin escritura.
+# Credenciales vía GitHub Secrets (nunca en texto plano).
+
+on:
+  schedule:
+    - cron: '0 0 */3 * *'   # cada 3 días a las 00:00 UTC
+  workflow_dispatch: {}      # permite correrlo manualmente desde Actions
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase (read-only, anon key)
+        run: |
+          curl -sS -o /dev/null -w "Supabase HTTP %{http_code}\n" \
+            "https://kalqvykomlfwxmsdaipf.supabase.co/rest/v1/planes?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
+
+      - name: Ping Vercel (frontend)
+        run: |
+          curl -sS -o /dev/null -w "Vercel HTTP %{http_code}\n" \
+            "https://gestiongadu.vercel.app/"
