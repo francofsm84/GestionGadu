@@ -178,7 +178,7 @@
       inc('w5', 22, 375000, 'Saldo final', 'Transferencia', ''),
       inc('w6', 135, 472000, 'Anticipo 40%', 'Transferencia', ''),
       inc('w6', 65, 708000, 'Saldo', 'Transferencia', ''),
-      inc('w1', 3, 500000, 'Certificación N°3', 'Transferencia', ''),
+      inc('w1', 0, 500000, 'Certificación N°3', 'Transferencia', ''),
     ];
     /* Los anticipos del cliente quedan marcados como adelantos */
     incomes.forEach(x => { if (/^Anticipo/.test(x.concept || '')) x.incomeKind = 'adelanto'; });
@@ -189,8 +189,8 @@
       invoiceNumber: invoice || '', paymentMethod: method || 'Efectivo',
     });
     const wageRows = [
-      ['e1', 14, 200000], ['e2', 14, 160000], ['e3', 14, 152000],
-      ['e1', 7, 200000], ['e2', 7, 160000], ['e3', 7, 152000],
+      ['e1', 0, 200000], ['e2', 0, 160000], ['e3', 0, 152000],
+      ['e1', 0, 200000], ['e2', 0, 160000], ['e3', 0, 152000],
     ];
     const empRef = id => employees.find(x => x.id === id);
     const wageExpenses = wageRows.map(wx => ({
@@ -200,8 +200,8 @@
       invoiceNumber: '', paymentMethod: 'Transferencia',
     }));
     const advanceRows = [
-      ['e2', 4, 50000, 'w1'],
-      ['e3', 2, 40000, 'w2'],
+      ['e2', 0, 50000, 'w1'],
+      ['e3', 0, 40000, 'w2'],
     ];
     const advanceExpenses = advanceRows.map(ax => ({
       id: uid(), type: 'obra', workId: ax[3], date: daysAgo(ax[1]),
