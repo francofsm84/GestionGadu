@@ -60,9 +60,11 @@
 
   function render(view) {
     currentView = view;
+    /* Guard estricto: solo admin / super_admin. Los demás vuelven a su dashboard. */
     if (!G.plan.isAdmin()) {
-      view.innerHTML = '<div class="card">' + UI.emptyState('lock', 'Sin permisos', 'Este panel es exclusivo para administradores.') +
-        '<p style="text-align:center"><a class="btn btn-primary" href="#/dashboard">Volver al panel</a></p></div>';
+      view.innerHTML = '<div class="card">' + UI.emptyState('lock', 'Sin permisos', 'Este panel es exclusivo para administradores. Redirigiendo…') + '</div>';
+      try { UI.toast('No tenés permisos de administrador', 'error'); } catch (e) {}
+      setTimeout(() => { if (!location.hash || location.hash.indexOf('#/admin') === 0) location.hash = '#/dashboard'; }, 1200);
       return;
     }
     view.innerHTML =
