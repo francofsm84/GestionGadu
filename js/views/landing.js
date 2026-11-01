@@ -319,7 +319,7 @@
       <a href="#" data-lp="privacy">Aviso de Privacidad</a>
     </div>
     <p class="lp-footer-copy">Copyright © 2026 GADU · Hecho en Alta Gracia, Córdoba</p>
-    <p class="lp-footer-credit">desarrollado por <a href="https://www.instagram.com/jacinto.cards" target="_blank" rel="noopener noreferrer">@Jacinto.Cars</a></p>
+    <p class="lp-footer-credit">desarrollado por <a href="https://www.instagram.com/jacinto.cards" target="_blank" rel="noopener noreferrer">@Jacinto.Cards</a></p>
   </footer>
 
 </div>`;
