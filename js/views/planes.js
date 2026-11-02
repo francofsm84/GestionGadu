@@ -80,6 +80,43 @@
       '</div></div>';
   }
 
+  /* Canje de código prepago (visible para usuarios; la GENERACIÓN sigue siendo /admin) */
+  function redeemHTML() {
+    return '<div class="card" style="margin-bottom:14px">' +
+      '<div class="card-head"><div><h3>¿Tenés un código de activación?</h3><p class="muted">Canjealo acá para activar tu plan al instante.</p></div></div>' +
+      '<div class="split-row" style="gap:8px;flex-wrap:wrap">' +
+      '<input class="input" id="codeInput" placeholder="Ej: GADU-8X2K9P" autocomplete="off" spellcheck="false" style="flex:1;min-width:200px;font-family:monospace;letter-spacing:0.5px">' +
+      '<button class="btn btn-primary" id="btnRedeem">' + UI.icon('check', 15) + 'Canjear</button>' +
+      '</div></div>';
+  }
+
+  function bindRedeem(view) {
+    const input = view.querySelector('#codeInput');
+    const btn = view.querySelector('#btnRedeem');
+    if (!input || !btn) return;
+    const doRedeem = async () => {
+      const code = input.value.trim();
+      if (!code) { UI.toast('Ingresá el código', 'error'); return; }
+      btn.disabled = true;
+      try {
+        const res = await G.api('POST', '/rpc/canjear_licencia', { p_code: code });
+        if (res && res.ok) {
+          UI.toast('¡Felicidades! Plan activado hasta el ' + UI.fmtDate(res.vencimiento), 'success');
+          try { await G.plan.load(); } catch (e) {}
+          render(view);
+        } else {
+          UI.toast((res && res.error) || 'Código inválido', 'error');
+        }
+      } catch (e) {
+        UI.toast('Código inválido', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    };
+    btn.addEventListener('click', doRedeem);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') doRedeem(); });
+  }
+
   /* Compra con MercadoPago: crea la preferencia de pago y redirige al checkout */
   async function buyWithCard(planId, periodo) {
     const plan = ((G.plan && G.plan.planes) || []).find(p => p.id === planId);
@@ -120,10 +157,11 @@
     if (st === 'trialing' && days != null) banner = bannerHTML(days);
     else if (expired) banner = bannerHTML(0);
 
-    view.innerHTML = banner + periodoToggleHTML() +
+    view.innerHTML = redeemHTML() + banner + periodoToggleHTML() +
       (planes.length
         ? '<div class="plans-grid">' + planes.map(p => cardHTML(p, actual.id, state.periodo)).join('') + '</div>'
         : fallbackHTML(state.periodo));
+    bindRedeem(view);
     /* Compra con tarjeta (MercadoPago) */
     view.querySelectorAll('[data-buy]').forEach(b => b.addEventListener('click', () => {
       buyWithCard(b.dataset.buy, b.dataset.periodo || state.periodo);
