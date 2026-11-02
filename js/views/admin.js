@@ -58,6 +58,50 @@
     w.document.close();
   }
 
+  /* ---------- Segundo factor: llave de acceso (30 min de validez) ---------- */
+  const VERIFY_KEY = 'admin_verified';
+  const VERIFY_TTL = 30 * 60 * 1000; /* 30 minutos */
+  function isAdminVerified() {
+    try {
+      const ts = Number(sessionStorage.getItem(VERIFY_KEY) || 0);
+      return ts > 0 && (Date.now() - ts) < VERIFY_TTL;
+    } catch (e) { return false; }
+  }
+  function renderVerify(view) {
+    view.innerHTML =
+      '<div class="card" style="max-width:420px;margin:40px auto">' +
+        '<div class="card-head"><div><h3>Verificación de acceso</h3><p class="muted">Ingresá la llave de administrador (25 caracteres).</p></div></div>' +
+        '<div class="field"><input class="input" id="admCode" placeholder="Llave de acceso" autocomplete="off" spellcheck="false" style="font-family:monospace;letter-spacing:0.5px"></div>' +
+        '<button class="btn btn-primary btn-block" id="admVerify" style="margin-top:10px">' + UI.icon('lock', 15) + ' Verificar</button>' +
+        '<p class="form-hint" id="admMsg" style="margin-top:8px"></p>' +
+      '</div>';
+    const input = view.querySelector('#admCode');
+    const btn = view.querySelector('#admVerify');
+    const msg = view.querySelector('#admMsg');
+    const doVerify = async () => {
+      const code = (input.value || '').trim();
+      if (!code) { msg.textContent = 'Ingresá la llave.'; msg.style.color = 'var(--danger)'; return; }
+      btn.disabled = true; btn.textContent = 'Verificando…'; msg.textContent = '';
+      try {
+        const res = await G.api('POST', '/rpc/verify_admin_code', { p_code: code });
+        if (res && res.ok) {
+          try { sessionStorage.setItem(VERIFY_KEY, String(Date.now())); } catch (e) {}
+          render(view);
+        } else {
+          msg.textContent = (res && res.error) || 'Llave incorrecta.';
+          msg.style.color = 'var(--danger)';
+          btn.disabled = false; btn.innerHTML = UI.icon('lock', 15) + ' Verificar';
+        }
+      } catch (e) {
+        msg.textContent = 'No se pudo verificar. Intentá de nuevo.';
+        msg.style.color = 'var(--danger)';
+        btn.disabled = false; btn.innerHTML = UI.icon('lock', 15) + ' Verificar';
+      }
+    };
+    btn.addEventListener('click', doVerify);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') doVerify(); });
+  }
+
   async function render(view) {
     currentView = view;
     /* Guard estricto: SOLO super_admin, validado fresco contra la DB (fail-closed). */
@@ -68,6 +112,8 @@
       setTimeout(() => { if (!location.hash || location.hash.indexOf('#/admin') === 0) location.hash = '#/dashboard'; }, 1200);
       return;
     }
+    /* Segundo factor: llave de acceso de 25 chars (30 minutos de validez) */
+    if (!isAdminVerified()) { renderVerify(view); return; }
     view.innerHTML =
       '<div class="tabs admin-tabs">' +
       tabBtn('usuarios', '👥 Usuarios') + tabBtn('planes', '💳 Planes') + tabBtn('licencias', '🎫 Licencias') + tabBtn('soporte', '📞 Soporte') + tabBtn('anuncios', '📢 Anuncios') + tabBtn('feedback', '🐞 Feedback') + tabBtn('salud', '🩺 Salud') + tabBtn('config', '⚙️ Configuración') + tabBtn('metricas', '📊 Métricas') + tabBtn('auditoria', '🧾 Auditoría') +
