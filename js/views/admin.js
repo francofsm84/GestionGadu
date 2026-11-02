@@ -93,7 +93,7 @@
           btn.disabled = false; btn.innerHTML = UI.icon('lock', 15) + ' Verificar';
         }
       } catch (e) {
-        msg.textContent = 'No se pudo verificar. Intentá de nuevo.';
+        msg.textContent = 'Error: ' + ((e && e.message) || 'no se pudo verificar') + ' — revisá que hayas aplicado migrations/admin-access-code.sql en Supabase.';
         msg.style.color = 'var(--danger)';
         btn.disabled = false; btn.innerHTML = UI.icon('lock', 15) + ' Verificar';
       }
@@ -129,16 +129,22 @@
     const body = view.querySelector('#adminBody');
     body.innerHTML = '<div class="card">' + UI.emptyState('activity', 'Cargando…', '') + '</div>';
     try {
-      if (tab === 'usuarios') await tabUsuarios(body);
-      else if (tab === 'planes') await tabPlanes(body);
-      else if (tab === 'licencias') await tabLicencias(body);
-      else if (tab === 'soporte') await tabSoporte(body);
-      else if (tab === 'anuncios') await tabAnuncios(body);
-      else if (tab === 'feedback') await tabFeedback(body);
-      else if (tab === 'salud') await tabSalud(body);
-      else if (tab === 'config') await tabConfig(body);
-      else if (tab === 'metricas') await tabMetricas(body);
-      else await tabAuditoria(body);
+      const job = (async () => {
+        if (tab === 'usuarios') await tabUsuarios(body);
+        else if (tab === 'planes') await tabPlanes(body);
+        else if (tab === 'licencias') await tabLicencias(body);
+        else if (tab === 'soporte') await tabSoporte(body);
+        else if (tab === 'anuncios') await tabAnuncios(body);
+        else if (tab === 'feedback') await tabFeedback(body);
+        else if (tab === 'salud') await tabSalud(body);
+        else if (tab === 'config') await tabConfig(body);
+        else if (tab === 'metricas') await tabMetricas(body);
+        else await tabAuditoria(body);
+      })();
+      await Promise.race([
+        job,
+        new Promise((_, rej) => setTimeout(() => rej(new Error('Tiempo de espera agotado (15s)')), 15000)),
+      ]);
     } catch (err) {
       /* Quitar el "Cargando…" y mostrar error con botón Reintentar */
       body.innerHTML = '<div class="card">' +
