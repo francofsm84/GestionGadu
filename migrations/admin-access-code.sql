@@ -3,9 +3,13 @@
 -- Guarda el hash SHA-256 de la llave (nunca en texto plano) y expone
 -- un RPC SECURITY DEFINER que la valida del lado del servidor.
 -- El cliente solo recibe { ok: true/false }.
+--
+-- NOTA Supabase: pgcrypto se instala en el schema `extensions`, no en
+-- `public`. Por eso las llamadas usan `extensions.digest(...)` explícito
+-- (el search_path de la función es `public`).
 -- ============================================================
 
-create extension if not exists pgcrypto;
+create extension if not exists pgcrypto with schema extensions;
 
 create table if not exists public.admin_config (
   id int primary key default 1,
@@ -41,7 +45,7 @@ begin
   if v_hash is null or v_hash = '' then
     return jsonb_build_object('ok', false, 'error', 'Llave no configurada');
   end if;
-  if encode(digest(trim(coalesce(p_code, '')), 'sha256'), 'hex') = v_hash then
+  if encode(extensions.digest(trim(coalesce(p_code, '')), 'sha256'), 'hex') = v_hash then
     return jsonb_build_object('ok', true);
   end if;
   return jsonb_build_object('ok', false, 'error', 'Llave incorrecta');
@@ -50,11 +54,14 @@ end $$;
 grant execute on function public.verify_admin_code(text) to authenticated;
 
 -- ─────────────────────────────────────────────────────────────
--- CONFIGURAR LA LLAVE (reemplazá MI-LLAVE-DE-25-CHARS por la real,
--- exactamente 25 caracteres, y corré este UPDATE una sola vez):
+-- CONFIGURAR LA LLAVE (hash SHA-256 de 25 caracteres).
+-- La de ejemplo A7#k9-Xm2P!qZ8#v4Lw-3Yx$p ya tiene su hash calculado:
 --
 -- update public.admin_config
---   set access_code_hash = encode(digest('MI-LLAVE-DE-25-CHARS', 'sha256'), 'hex'),
+--   set access_code_hash = '7b744a81011d3838c24284fa25fcc8bdbefa9cb827d2ac1b900d10167ae233c4',
 --       updated_at = now()
 --   where id = 1;
+--
+-- Para otra llave, calculá el hash con:
+--   select encode(extensions.digest('TU-LLAVE-DE-25-CHARS', 'sha256'), 'hex');
 -- ─────────────────────────────────────────────────────────────
