@@ -391,10 +391,10 @@
 
   /* ---------- Licencias (códigos prepagos) ---------- */
   function randomCode() {
-    /* 25 caracteres, charset mixto (mayúsculas, minúsculas, números y símbolos),
-       generados con CSPRNG. Sin prefijo predecible. */
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&*+,-./:;<=>?@[]^_{|}~';
-    const LEN = 25;
+    /* Formato clásico: GADU- + 6 alfanuméricos MAYÚSCULAS (sin ambiguos I/O/1/0),
+       generados con CSPRNG. */
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const LEN = 6;
     const buf = new Uint8Array(LEN);
     try {
       if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(buf);
@@ -402,7 +402,7 @@
     } catch (e) {
       for (let i = 0; i < LEN; i++) buf[i] = Math.floor(Math.random() * 256);
     }
-    let out = '';
+    let out = 'GADU-';
     for (let i = 0; i < LEN; i++) out += chars[buf[i] % chars.length];
     return out;
   }
@@ -442,7 +442,9 @@
         '<td>' + (c.is_used ? UI.chip('Usado', 'danger') : UI.chip('Disponible', 'success')) + '</td>' +
         '<td class="muted small">' + (c.used_by_user_id ? UI.escapeHtml(String(c.used_by_user_id).slice(0, 8)) + '…' : '—') + '</td>' +
         '<td class="muted small">' + (c.used_at ? UI.fmtDate(c.used_at) : '—') + '</td>' +
-        '<td>' + (!c.is_used ? '<a class="btn btn-soft-success btn-sm" href="' + waLink + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 14) + ' Enviar</a>' : '') + '</td>' +
+        '<td>' + (!c.is_used ? '<a class="btn btn-soft-success btn-sm" href="' + waLink + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 14) + ' Enviar</a> ' : '') +
+          '<button class="btn btn-soft-danger btn-sm" data-revoke="' + UI.escapeHtml(c.code) + '" title="Revocar código">' + UI.icon('trash', 14) + ' Revocar</button>' +
+        '</td>' +
         '</tr>';
       }).join('') || '<tr><td colspan="7">' + UI.emptyState('inbox', 'Sin códigos', 'Generá el primero desde el formulario de arriba.') + '</td></tr>') +
       '</tbody></table></div></div>';
@@ -469,6 +471,23 @@
         UI.toast('❌ No se pudo generar: ' + ((err && err.message) || err), 'error');
       }
     });
+
+    /* Revocar (eliminar) un código de licencia */
+    body.querySelectorAll('[data-revoke]').forEach(btn => btn.addEventListener('click', async () => {
+      const code = btn.dataset.revoke;
+      if (!code) return;
+      if (!confirm('¿Revocar el código ' + code + '? No se podrá usar más.')) return;
+      btn.disabled = true;
+      try {
+        await G.api('DELETE', '/license_codes?code=eq.' + encodeURIComponent(code));
+        await G.plan.log('licencia_revocada', code);
+        UI.toast('✅ Código revocado: ' + code);
+        tabLicencias(body);
+      } catch (err) {
+        UI.toast('❌ No se pudo revocar: ' + ((err && err.message) || err), 'error');
+        btn.disabled = false;
+      }
+    }));
   }
 
   /* ---------- Soporte (tickets "hablar con un humano") ---------- */
