@@ -339,9 +339,19 @@
 
   /* ---------- Licencias (códigos prepagos) ---------- */
   function randomCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let out = 'GADU-';
-    for (let i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
+    /* 25 caracteres, charset mixto (mayúsculas, minúsculas, números y símbolos),
+       generados con CSPRNG. Sin prefijo predecible. */
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&*+,-./:;<=>?@[]^_{|}~';
+    const LEN = 25;
+    const buf = new Uint8Array(LEN);
+    try {
+      if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(buf);
+      else for (let i = 0; i < LEN; i++) buf[i] = Math.floor(Math.random() * 256);
+    } catch (e) {
+      for (let i = 0; i < LEN; i++) buf[i] = Math.floor(Math.random() * 256);
+    }
+    let out = '';
+    for (let i = 0; i < LEN; i++) out += chars[buf[i] % chars.length];
     return out;
   }
 

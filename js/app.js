@@ -810,7 +810,7 @@
       '<img src="' + logoUrl() + '" alt="GADU" class="login-logo" style="width:120px">' +
       '<h2>' + (pi.label === 'Suspendido' ? 'Tu cuenta está suspendida' : 'Tu prueba gratuita ha finalizado') + '</h2>' +
       '<p>Has disfrutado de tus 45 días de acceso gratuito a GADU. Para continuar gestionando tus obras y finanzas, solicita un código de acceso por 90 días.</p>' +
-      '<div class="field" style="text-align:left"><input class="input" id="licCode" placeholder="Código (ej: GADU-90D-XXXX)" autocomplete="off" spellcheck="false"></div>' +
+      '<div class="field" style="text-align:left"><input class="input" id="licCode" placeholder="Código de 25 caracteres" autocomplete="off" spellcheck="false" style="font-family:monospace;letter-spacing:0.5px"></div>' +
       '<button class="btn btn-primary" id="licValidate">Validar Código</button>' +
       '<p class="form-hint" id="licMsg" style="margin:8px 0"></p>' +
       '<a class="btn" style="background:#16a34a;color:#fff" href="https://wa.me/' + (G.BOT_PHONE_NUMBER || '5493547665984') + '?text=' + encodeURIComponent('Hola, finalizó mi prueba gratuita de 45 días en GADU. Quiero adquirir un código de acceso por 90 días.') + '" target="_blank" rel="noopener">' + UI.icon('whatsapp', 16) + 'Comprar Pase de 90 Días por WhatsApp</a>' +
